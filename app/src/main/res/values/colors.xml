@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background">#0D0D17</color>
+    <color name="gamebex_void_black">#0D0D17</color>
+    <color name="gamebex_pixel_cream">#FFF6E9</color>
+    <color name="gamebex_vivid_pink">#FF4D8D</color>
+    <color name="gamebex_pixel_shade">#A91E5C</color>
+    <color name="gamebex_sparkle_white">#FFFFFF</color>
+    <color name="gamebex_steel_shadow">#2A2A3A</color>
+    <color name="gamebex_surface_dark">#141423</color>
+</resources>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup rules: the credential store is device-bound (Keystore keys don't
+  travel), so restoring its ciphertext elsewhere is useless at best.
+  The library database stays backed up (titles, prep, favorites);
+  short-lived download cookies are cleared at terminal job states.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="ss_creds_enc.xml" />
+    <exclude domain="sharedpref" path="screenscraper.xml" />
+    <exclude domain="sharedpref" path="together.xml" />
+</full-backup-content>

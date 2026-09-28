@@ -1,0 +1,182 @@
+{
+  "schemaVersion": 1,
+  "id": "synthshop",
+  "name": "Synth Shop",
+  "author": "tests",
+  "version": "1.0.0",
+  "requires": ["http-v1", "expressions-v1", "catalog-v1"],
+  "origins": {
+    "catalog": ["https://catalog.synth.test"],
+    "download": ["https://dl.synth.test"],
+    "artwork": ["https://art.synth.test"]
+  },
+  "defaults": {"headers": {}, "preferIpv4": false},
+  "platforms": {"q-games": "gb", "s-games": "snes"},
+  "assist": {"enabled": false, "triggerStatuses": [], "javascript": false, "domStorage": false},
+  "operations": {
+    "consoles": {
+      "inputs": [],
+      "steps": [
+        {"name": "response", "request": {
+          "method": "GET", "purpose": "catalog",
+          "url": {"op": "literal", "value": "https://catalog.synth.test/v1/systems"},
+          "query": {}, "form": {}, "headers": {}
+        }},
+        {"name": "parsed", "value": {"op": "json", "value": {"op": "ref", "path": ["steps", "response"]}}}
+      ],
+      "result": {"op": "map", "value": {"op": "ref", "path": ["steps", "parsed"]}, "as": "c", "body": {
+        "op": "object", "fields": {
+          "id": {"op": "get", "value": {"op": "ref", "path": ["c"]}, "path": ["id"]},
+          "name": {"op": "get", "value": {"op": "ref", "path": ["c"]}, "path": ["name"]},
+          "platformId": {"op": "platform", "value": {"op": "get", "value": {"op": "ref", "path": ["c"]}, "path": ["slug"]}},
+          "count": {"op": "coalesce", "values": [
+            {"op": "get", "value": {"op": "ref", "path": ["c"]}, "path": ["count"]},
+            {"op": "literal", "value": 0}
+          ]}
+        }
+      }}
+    },
+    "types": {
+      "inputs": [],
+      "steps": [],
+      "result": {"op": "literal", "value": []}
+    },
+    "mapGames": {
+      "inputs": ["doc"],
+      "steps": [],
+      "result": {"op": "object", "fields": {
+        "items": {"op": "map", "value": {"op": "get", "value": {"op": "ref", "path": ["input", "doc"]}, "path": ["games"]}, "as": "g", "body": {
+          "op": "object", "fields": {
+            "ref": {"op": "object", "fields": {
+              "sourceId": {"op": "ref", "path": ["source", "id"]},
+              "itemKey": {"op": "get", "value": {"op": "ref", "path": ["g"]}, "path": ["id"]},
+              "pageUrl": {"op": "get", "value": {"op": "ref", "path": ["g"]}, "path": ["url"]},
+              "data": {"op": "object", "fields": {}}
+            }},
+            "title": {"op": "get", "value": {"op": "ref", "path": ["g"]}, "path": ["title"]},
+            "platformId": {"op": "platform", "value": {"op": "get", "value": {"op": "ref", "path": ["g"]}, "path": ["system"]}},
+            "consoleName": {"op": "literal", "value": null},
+            "coverUrl": {"op": "get", "value": {"op": "ref", "path": ["g"]}, "path": ["cover"]}
+          }
+        }},
+        "next": {"op": "get", "value": {"op": "ref", "path": ["input", "doc"]}, "path": ["nextPage"]}
+      }}
+    },
+    "latest": {
+      "inputs": ["cursor"],
+      "steps": [
+        {"name": "response", "request": {
+          "method": "GET", "purpose": "catalog",
+          "url": {"op": "literal", "value": "https://catalog.synth.test/v1/games"},
+          "query": {"page": {"op": "coalesce", "values": [
+            {"op": "ref", "path": ["input", "cursor"]},
+            {"op": "literal", "value": "1"}
+          ]}}, "form": {}, "headers": {}
+        }}
+      ],
+      "result": {"op": "invoke", "operation": "mapGames", "input": {
+        "op": "object", "fields": {
+          "doc": {"op": "json", "value": {"op": "ref", "path": ["steps", "response"]}}
+        }
+      }}
+    },
+    "browse": {
+      "inputs": ["consoleId", "cursor", "typeId"],
+      "steps": [
+        {"name": "response", "request": {
+          "method": "GET", "purpose": "catalog",
+          "url": {"op": "literal", "value": "https://catalog.synth.test/v1/games"},
+          "query": {
+            "page": {"op": "coalesce", "values": [
+              {"op": "ref", "path": ["input", "cursor"]},
+              {"op": "literal", "value": "1"}
+            ]},
+            "system": {"op": "ref", "path": ["input", "consoleId"]}
+          }, "form": {}, "headers": {}
+        }}
+      ],
+      "result": {"op": "invoke", "operation": "mapGames", "input": {
+        "op": "object", "fields": {
+          "doc": {"op": "json", "value": {"op": "ref", "path": ["steps", "response"]}}
+        }
+      }}
+    },
+    "search": {
+      "inputs": ["cursor", "platformId", "query"],
+      "steps": [
+        {"name": "response", "request": {
+          "method": "GET", "purpose": "catalog",
+          "url": {"op": "literal", "value": "https://catalog.synth.test/v1/games"},
+          "query": {"q": {"op": "ref", "path": ["input", "query"]}}, "form": {}, "headers": {}
+        }}
+      ],
+      "result": {"op": "invoke", "operation": "mapGames", "input": {
+        "op": "object", "fields": {
+          "doc": {"op": "json", "value": {"op": "ref", "path": ["steps", "response"]}}
+        }
+      }}
+    },
+    "detail": {
+      "inputs": ["ref"],
+      "steps": [
+        {"name": "response", "request": {
+          "method": "GET", "purpose": "catalog",
+          "url": {"op": "get", "value": {"op": "ref", "path": ["input", "ref"]}, "path": ["pageUrl"]},
+          "query": {}, "form": {}, "headers": {}
+        }},
+        {"name": "doc", "value": {"op": "json", "value": {"op": "ref", "path": ["steps", "response"]}}}
+      ],
+      "result": {"op": "object", "fields": {
+        "entry": {"op": "object", "fields": {
+          "ref": {"op": "ref", "path": ["input", "ref"]},
+          "title": {"op": "get", "value": {"op": "ref", "path": ["steps", "doc"]}, "path": ["title"]},
+          "platformId": {"op": "platform", "value": {"op": "get", "value": {"op": "ref", "path": ["steps", "doc"]}, "path": ["system"]}},
+          "consoleName": {"op": "literal", "value": null},
+          "coverUrl": {"op": "get", "value": {"op": "ref", "path": ["steps", "doc"]}, "path": ["cover"]}
+        }},
+        "rating": {"op": "get", "value": {"op": "ref", "path": ["steps", "doc"]}, "path": ["rating"]},
+        "description": {"op": "get", "value": {"op": "ref", "path": ["steps", "doc"]}, "path": ["description"]},
+        "screenshots": {"op": "get", "value": {"op": "ref", "path": ["steps", "doc"]}, "path": ["shots"]}
+      }}
+    },
+    "variants": {
+      "inputs": ["ref"],
+      "steps": [
+        {"name": "response", "request": {
+          "method": "GET", "purpose": "catalog",
+          "url": {"op": "concat", "values": [
+            {"op": "get", "value": {"op": "ref", "path": ["input", "ref"]}, "path": ["pageUrl"]},
+            {"op": "literal", "value": "/files"}
+          ]},
+          "query": {}, "form": {}, "headers": {}
+        }},
+        {"name": "doc", "value": {"op": "json", "value": {"op": "ref", "path": ["steps", "response"]}}}
+      ],
+      "result": {"op": "map", "value": {"op": "get", "value": {"op": "ref", "path": ["steps", "doc"]}, "path": ["files"]}, "as": "f", "body": {
+        "op": "object", "fields": {
+          "ref": {"op": "ref", "path": ["input", "ref"]},
+          "variantKey": {"op": "get", "value": {"op": "ref", "path": ["f"]}, "path": ["key"]},
+          "name": {"op": "get", "value": {"op": "ref", "path": ["f"]}, "path": ["name"]},
+          "kind": {"op": "get", "value": {"op": "ref", "path": ["f"]}, "path": ["kind"]},
+          "size": {"op": "get", "value": {"op": "ref", "path": ["f"]}, "path": ["size"]},
+          "pageUrl": {"op": "get", "value": {"op": "ref", "path": ["f"]}, "path": ["page"]},
+          "data": {"op": "object", "fields": {}}
+        }
+      }}
+    },
+    "resolveDownload": {
+      "inputs": ["file"],
+      "steps": [],
+      "result": {"op": "object", "fields": {
+        "url": {"op": "concat", "values": [
+          {"op": "literal", "value": "https://dl.synth.test/files/"},
+          {"op": "get", "value": {"op": "ref", "path": ["input", "file"]}, "path": ["variantKey"]},
+          {"op": "literal", "value": ".zip"}
+        ]},
+        "headers": {"op": "object", "fields": {}},
+        "freshConnection": {"op": "literal", "value": false},
+        "preferIpv4": {"op": "literal", "value": false}
+      }}
+    }
+  }
+}

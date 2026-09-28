@@ -1,0 +1,1115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gamebex.example/source.schema.json",
+  "title": "GameBEX ROM source definition",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "author",
+    "version",
+    "requires",
+    "origins",
+    "platforms",
+    "operations"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "author": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "requires": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "origins": {
+      "$ref": "#/$defs/origins"
+    },
+    "defaults": {
+      "$ref": "#/$defs/defaults"
+    },
+    "platforms": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "assist": {
+      "$ref": "#/$defs/assist"
+    },
+    "operations": {
+      "type": "object",
+      "minProperties": 9,
+      "additionalProperties": {
+        "$ref": "#/$defs/workflow"
+      }
+    }
+  },
+  "$defs": {
+    "origins": {
+      "type": "object",
+      "required": [
+        "catalog",
+        "download",
+        "artwork"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "catalog": {
+          "$ref": "#/$defs/originSet"
+        },
+        "download": {
+          "$ref": "#/$defs/originSet"
+        },
+        "artwork": {
+          "$ref": "#/$defs/originSet"
+        },
+        "assist": {
+          "$ref": "#/$defs/originSet"
+        }
+      }
+    },
+    "originSet": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "preferIpv4": {
+          "type": "boolean"
+        }
+      }
+    },
+    "assist": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "triggerStatuses": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "uniqueItems": true
+        },
+        "javascript": {
+          "type": "boolean"
+        },
+        "domStorage": {
+          "type": "boolean"
+        },
+        "userAgent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "required": [
+        "inputs",
+        "steps",
+        "result"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        },
+        "result": {
+          "$ref": "#/$defs/expr"
+        },
+        "fallback": {
+          "$ref": "#/$defs/fallback"
+        },
+        "cache": {
+          "type": "boolean"
+        }
+      }
+    },
+    "step": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "request": {
+          "$ref": "#/$defs/request"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "purpose": {
+          "type": "string"
+        },
+        "url": {
+          "$ref": "#/$defs/expr"
+        },
+        "query": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/expr"
+          }
+        },
+        "form": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/expr"
+          }
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/expr"
+          }
+        }
+      }
+    },
+    "fallback": {
+      "type": "object",
+      "required": [
+        "operation"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "onEmpty": {
+          "type": "boolean"
+        },
+        "onFailures": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "pathSegments": {
+      "type": "array",
+      "items": {
+        "type": [
+          "string",
+          "integer"
+        ],
+        "minimum": 0
+      }
+    },
+    "expr": {
+      "type": "object",
+      "required": [
+        "op"
+      ],
+      "properties": {
+        "op": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/$defs/exprShape"
+        }
+      ]
+    },
+    "exprShape": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/opLiteral"
+        },
+        {
+          "$ref": "#/$defs/opRef"
+        },
+        {
+          "$ref": "#/$defs/opObject"
+        },
+        {
+          "$ref": "#/$defs/opArray"
+        },
+        {
+          "$ref": "#/$defs/opJson"
+        },
+        {
+          "$ref": "#/$defs/opGet"
+        },
+        {
+          "$ref": "#/$defs/opHtml"
+        },
+        {
+          "$ref": "#/$defs/opSelect"
+        },
+        {
+          "$ref": "#/$defs/opText"
+        },
+        {
+          "$ref": "#/$defs/opAttr"
+        },
+        {
+          "$ref": "#/$defs/opMap"
+        },
+        {
+          "$ref": "#/$defs/opFilter"
+        },
+        {
+          "$ref": "#/$defs/opFirst"
+        },
+        {
+          "$ref": "#/$defs/opCoalesce"
+        },
+        {
+          "$ref": "#/$defs/opIf"
+        },
+        {
+          "$ref": "#/$defs/opEq"
+        },
+        {
+          "$ref": "#/$defs/opLt"
+        },
+        {
+          "$ref": "#/$defs/opNot"
+        },
+        {
+          "$ref": "#/$defs/opContains"
+        },
+        {
+          "$ref": "#/$defs/opConcat"
+        },
+        {
+          "$ref": "#/$defs/opTrim"
+        },
+        {
+          "$ref": "#/$defs/opTrimEnd"
+        },
+        {
+          "$ref": "#/$defs/opHtmlDecode"
+        },
+        {
+          "$ref": "#/$defs/opReplace"
+        },
+        {
+          "$ref": "#/$defs/opBefore"
+        },
+        {
+          "$ref": "#/$defs/opAfter"
+        },
+        {
+          "$ref": "#/$defs/opBeforeLast"
+        },
+        {
+          "$ref": "#/$defs/opAfterLast"
+        },
+        {
+          "$ref": "#/$defs/opInt"
+        },
+        {
+          "$ref": "#/$defs/opDouble"
+        },
+        {
+          "$ref": "#/$defs/opDigits"
+        },
+        {
+          "$ref": "#/$defs/opAdd"
+        },
+        {
+          "$ref": "#/$defs/opSize"
+        },
+        {
+          "$ref": "#/$defs/opDistinct"
+        },
+        {
+          "$ref": "#/$defs/opSort"
+        },
+        {
+          "$ref": "#/$defs/opPlatform"
+        },
+        {
+          "$ref": "#/$defs/opLookup"
+        },
+        {
+          "$ref": "#/$defs/opInvoke"
+        },
+        {
+          "$ref": "#/$defs/opPathSegment"
+        }
+      ]
+    },
+    "opLiteral": {
+      "required": [
+        "op",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "literal"
+        },
+        "value": true
+      },
+      "additionalProperties": false
+    },
+    "opRef": {
+      "required": [
+        "op",
+        "path"
+      ],
+      "properties": {
+        "op": {
+          "const": "ref"
+        },
+        "path": {
+          "$ref": "#/$defs/pathSegments"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opObject": {
+      "required": [
+        "op",
+        "fields"
+      ],
+      "properties": {
+        "op": {
+          "const": "object"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/expr"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "opArray": {
+      "required": [
+        "op",
+        "items"
+      ],
+      "properties": {
+        "op": {
+          "const": "array"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/expr"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "opJson": {
+      "required": [
+        "op",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "json"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opGet": {
+      "required": [
+        "op",
+        "value",
+        "path"
+      ],
+      "properties": {
+        "op": {
+          "const": "get"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        },
+        "path": {
+          "$ref": "#/$defs/pathSegments"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opHtml": {
+      "required": [
+        "op",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "html"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opSelect": {
+      "required": [
+        "op",
+        "value",
+        "css"
+      ],
+      "properties": {
+        "op": {
+          "const": "select"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        },
+        "css": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "opText": {
+      "required": [
+        "op",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "text"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opAttr": {
+      "required": [
+        "op",
+        "value",
+        "name",
+        "absolute"
+      ],
+      "properties": {
+        "op": {
+          "const": "attr"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        },
+        "name": {
+          "type": "string"
+        },
+        "absolute": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opMap": {
+      "required": [
+        "op",
+        "value",
+        "as",
+        "body"
+      ],
+      "properties": {
+        "op": {
+          "const": "map"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        },
+        "as": {
+          "type": "string",
+          "minLength": 1
+        },
+        "body": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opFilter": {
+      "required": [
+        "op",
+        "value",
+        "as",
+        "predicate"
+      ],
+      "properties": {
+        "op": {
+          "const": "filter"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        },
+        "as": {
+          "type": "string",
+          "minLength": 1
+        },
+        "predicate": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opFirst": {
+      "required": [
+        "op",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "first"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opCoalesce": {
+      "required": [
+        "op",
+        "values"
+      ],
+      "properties": {
+        "op": {
+          "const": "coalesce"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/expr"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "opIf": {
+      "required": [
+        "op",
+        "condition",
+        "then",
+        "else"
+      ],
+      "properties": {
+        "op": {
+          "const": "if"
+        },
+        "condition": {
+          "$ref": "#/$defs/expr"
+        },
+        "then": {
+          "$ref": "#/$defs/expr"
+        },
+        "else": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opEq": {
+      "required": [
+        "op",
+        "left",
+        "right"
+      ],
+      "properties": {
+        "op": {
+          "const": "eq"
+        },
+        "left": {
+          "$ref": "#/$defs/expr"
+        },
+        "right": {
+          "$ref": "#/$defs/expr"
+        },
+        "ignoreCase": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opLt": {
+      "required": [
+        "op",
+        "left",
+        "right"
+      ],
+      "properties": {
+        "op": {
+          "const": "lt"
+        },
+        "left": {
+          "$ref": "#/$defs/expr"
+        },
+        "right": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opNot": {
+      "required": [
+        "op",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "not"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opContains": {
+      "required": [
+        "op",
+        "value",
+        "needle",
+        "ignoreCase"
+      ],
+      "properties": {
+        "op": {
+          "const": "contains"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        },
+        "needle": {
+          "$ref": "#/$defs/expr"
+        },
+        "ignoreCase": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opConcat": {
+      "required": [
+        "op",
+        "values"
+      ],
+      "properties": {
+        "op": {
+          "const": "concat"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/expr"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "opTrim": {
+      "required": [
+        "op",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "trim"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opTrimEnd": {
+      "required": [
+        "op",
+        "value",
+        "chars"
+      ],
+      "properties": {
+        "op": {
+          "const": "trimEnd"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        },
+        "chars": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opHtmlDecode": {
+      "required": [
+        "op",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "htmlDecode"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opReplace": {
+      "required": [
+        "op",
+        "value",
+        "old",
+        "new"
+      ],
+      "properties": {
+        "op": {
+          "const": "replace"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        },
+        "old": {
+          "type": "string"
+        },
+        "new": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opBefore": {
+      "required": [
+        "op",
+        "value",
+        "delimiter"
+      ],
+      "properties": {
+        "op": {
+          "const": "before"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        },
+        "delimiter": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "opAfter": {
+      "required": [
+        "op",
+        "value",
+        "delimiter"
+      ],
+      "properties": {
+        "op": {
+          "const": "after"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        },
+        "delimiter": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "opBeforeLast": {
+      "required": [
+        "op",
+        "value",
+        "delimiter"
+      ],
+      "properties": {
+        "op": {
+          "const": "beforeLast"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        },
+        "delimiter": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "opAfterLast": {
+      "required": [
+        "op",
+        "value",
+        "delimiter"
+      ],
+      "properties": {
+        "op": {
+          "const": "afterLast"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        },
+        "delimiter": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "opInt": {
+      "required": [
+        "op",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "int"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opDouble": {
+      "required": [
+        "op",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "double"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opDigits": {
+      "required": [
+        "op",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "digits"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opAdd": {
+      "required": [
+        "op",
+        "left",
+        "right"
+      ],
+      "properties": {
+        "op": {
+          "const": "add"
+        },
+        "left": {
+          "$ref": "#/$defs/expr"
+        },
+        "right": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opSize": {
+      "required": [
+        "op",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "size"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opDistinct": {
+      "required": [
+        "op",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "distinct"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opSort": {
+      "required": [
+        "op",
+        "value",
+        "field",
+        "descending"
+      ],
+      "properties": {
+        "op": {
+          "const": "sort"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        },
+        "field": {
+          "type": "string"
+        },
+        "descending": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opPlatform": {
+      "required": [
+        "op",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "platform"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opLookup": {
+      "required": [
+        "op",
+        "value",
+        "field",
+        "key"
+      ],
+      "properties": {
+        "op": {
+          "const": "lookup"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        },
+        "field": {
+          "type": "string"
+        },
+        "key": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opInvoke": {
+      "required": [
+        "op",
+        "operation",
+        "input"
+      ],
+      "properties": {
+        "op": {
+          "const": "invoke"
+        },
+        "operation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "opPathSegment": {
+      "required": [
+        "op",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "pathSegment"
+        },
+        "value": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GameBEX</string>
+    <!-- Download foreground notification (tappable → Downloads). -->
+    <string name="dl_channel">Downloads</string>
+    <string name="dl_notif_title">GameBEX downloads</string>
+    <string name="dl_notif_idle">Keeping active transfers running…</string>
+    <string name="dl_notif_preparing">Preparing downloads…</string>
+    <string name="dl_notif_multi">%1$d downloads · %2$d%%</string>
+    <string name="dl_notif_one">%1$s · %2$d%%</string>
+    <!-- "Ready to play" notification (tap → game detail, Play action). -->
+    <string name="ready_channel">Ready to play</string>
+    <string name="ready_notif_title">%1$s is ready</string>
+    <string name="ready_notif_text">Downloaded and set up. Tap for details.</string>
+    <string name="ready_action_play">Play</string>
+    <!-- Storage grant surfacing (Home banner, System header). -->
+    <string name="storage_hidden_banner">SD card hidden — tap to grant file access.</string>
+    <string name="storage_files_ok">FILES: OK</string>
+    <string name="storage_files_grant">FILES: GRANT</string>
+    <!-- Catalog pagination footer. -->
+    <string name="catalog_page_scroll_retry">%1$s — scroll to retry.</string>
+    <!-- Challenge assist. -->
+    <string name="assist_blocked_redirect">Blocked a redirect outside the file host.</string>
+</resources>

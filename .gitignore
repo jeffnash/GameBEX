@@ -1,0 +1,44 @@
+*.iml
+.gradle/
+.kotlin/
+/build/
+app/build/
+source-runtime/build/
+local.properties
+.idea/
+*.hprof
+.development/
+*.jks
+*.keystore
+.env
+
+# Local-only material: never published (public docs are whitelisted)
+docs/*
+!docs/architecture.md
+!docs/FORMATS.md
+!docs/LEGAL.md
+!docs/source-schema.md
+tools/
+provision/
+screenshots/
+# ...except the README's app screenshots
+!docs/screenshots/
+UI_SPEC.md
+
+# The website lives outside the repo; it's built locally and published to gh-pages
+site/
+
+# Agent and tool working folders
+.claude/
+.codex/
+.muse/
+.delta/
+.reasonix/
+.worktrees/
+
+# moto g 2025 debloat run records (scripts/moto-g-2025/debloat.sh)
+debloat-*.txt
+debloat-*.log
+
+# Stray adb lock files from the old device-lock setup
+device.lock
