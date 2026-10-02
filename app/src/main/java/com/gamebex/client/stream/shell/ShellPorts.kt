@@ -1,5 +1,6 @@
 package com.gamebex.client.stream.shell
 
+import android.view.Surface
 import com.gamebex.client.stream.StreamConfig
 import com.gamebex.client.stream.StreamError
 import com.gamebex.client.stream.StreamProbe
@@ -51,6 +52,12 @@ interface VideoControl {
     fun changeLevel(level: VideoLevel, bitrate: Int)
 }
 
+/** App capture: where the encoder's input surface goes instead of a display mirror. */
+fun interface CaptureTarget {
+    /** The encoder's current input surface at [width]x[height], or null when it goes away. */
+    fun onSurface(surface: Surface?, width: Int, height: Int)
+}
+
 /** Display capture plus H.264 encoder. */
 interface VideoSource : VideoControl {
     val level: VideoLevel
@@ -62,6 +69,39 @@ interface VideoSource : VideoControl {
     fun start(level: VideoLevel, bitrate: Int, sink: VideoSink)
 
     fun stop()
+
+    /** Before [start]: hand each encoder surface to [target] instead of mirroring the display. */
+    fun captureInto(target: CaptureTarget) {}
+
+    /** App capture was declined: mirror the whole display from now on. */
+    fun useMirror() {}
+}
+
+/**
+ * Keeps the latest encoder surface for app capture until the app's listener arrives (the app
+ * registers after start() returns), then forwards every later one.
+ */
+class CaptureRelay : CaptureTarget {
+    private var received = false
+    private var surface: Surface? = null
+    private var width = 0
+    private var height = 0
+    private var listener: CaptureTarget? = null
+
+    @Synchronized
+    override fun onSurface(surface: Surface?, width: Int, height: Int) {
+        received = true
+        this.surface = surface
+        this.width = width
+        this.height = height
+        listener?.onSurface(surface, width, height)
+    }
+
+    @Synchronized
+    fun setListener(next: CaptureTarget?) {
+        listener = next
+        if (next != null && received) next.onSurface(surface, width, height)
+    }
 }
 
 /** 16-bit PCM captured from the host's game audio. */

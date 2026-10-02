@@ -11,8 +11,11 @@ import androidx.core.app.ServiceCompat
 class TogetherService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private var text = ""
+
     override fun onCreate() {
         super.onCreate()
+        current = this
         runCatching { promote("") }
     }
 
@@ -40,18 +43,23 @@ class TogetherService : Service() {
 
     override fun onDestroy() {
         promoted = false
+        sharing = false
+        if (current === this) current = null
         super.onDestroy()
     }
 
     private fun promote(text: String) {
+        this.text = text
         TogetherPlatformImpl.ensureChannels(this)
         val notification = TogetherPlatformImpl.buildOngoing(this, text)
         if (Build.VERSION.SDK_INT >= 29) {
+            // Stream's app-only capture needs the mediaProjection type before getMediaProjection (Android 14).
+            val projection = if (sharing) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION else 0
             ServiceCompat.startForeground(
                 this,
                 TogetherPlatformImpl.NOTIF_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or projection,
             )
         } else {
             @Suppress("DEPRECATION")
@@ -69,6 +77,23 @@ class TogetherService : Service() {
         private const val TAG = "GameBEXTogether"
         @Volatile internal var promoted = false
         @Volatile internal var stopRequested = false
+        @Volatile private var current: TogetherService? = null
+        @Volatile private var sharing = false
+
+        /**
+         * Adds (or drops) the mediaProjection foreground type for Stream's app-only capture. False when
+         * the service isn't running or Android refuses; call on the main thread.
+         */
+        fun shareScreen(on: Boolean): Boolean {
+            val service = current ?: return false
+            sharing = on
+            return runCatching { service.promote(service.text) }
+                .onFailure {
+                    sharing = false
+                    runCatching { android.util.Log.w(TAG, "Unable to change the screen-sharing service type", it) }
+                }
+                .isSuccess
+        }
 
         fun requestStop() {
             stopRequested = true

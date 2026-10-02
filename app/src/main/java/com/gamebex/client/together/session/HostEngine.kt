@@ -1025,6 +1025,8 @@ internal class HostEngine(
             if (started != null) {
                 stream = started
                 startStreamPoll(input.round)
+ // The game is in front now: capture only its app (the host picks it in Android's share prompt).
+                launchSession { runCatching { withContext(ioDispatcher) { streamHost.attachCapture() } }.onFailure(::log) }
             }
             val name = _view.value?.guestName ?: TogetherCopy.otherPhone
             platform.updateService(TogetherCopy.ongoingPlaying(name, game?.title ?: ""))

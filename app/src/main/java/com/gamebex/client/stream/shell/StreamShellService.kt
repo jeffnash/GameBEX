@@ -84,6 +84,19 @@ class StreamShellService() : IStreamShell.Stub() {
 
     override fun uid(): Int = Process.myUid()
 
+    override fun setCaptureListener(listener: IStreamCapture?) {
+        val target = listener?.let { l ->
+            CaptureTarget { surface, width, height ->
+                runCatching { l.onSurface(surface, width, height) }.onFailure { Log.w(TAG, "capture listener gone", it) }
+            }
+        }
+        synchronized(lock) { session }?.setCaptureListener(target)
+    }
+
+    override fun useMirror() {
+        synchronized(lock) { session }?.useMirror()
+    }
+
     private fun stopSession() {
         val current = synchronized(lock) { session.also { session = null } }
         current?.stop()

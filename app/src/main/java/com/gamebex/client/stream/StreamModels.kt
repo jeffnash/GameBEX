@@ -20,6 +20,11 @@ data class StreamConfig(
  /** Index into [StreamCaps.LEVELS] to start at: level 1 on these phones (early check V-2). */
     val level: Int = 1,
     val audio: Boolean = true,
+ /**
+ * Capture only the game's app (Android 14+ single-app MediaProjection, run by the app) instead of
+ * mirroring the whole display: the shell hands its encoder surface to the app and waits.
+ */
+    val appCapture: Boolean = false,
 )
 
 /** Result of IStreamShell.start. Ports are the ones really bound (the preferred ones may be taken). */

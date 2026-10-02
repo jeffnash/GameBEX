@@ -9,6 +9,7 @@ import android.os.HandlerThread
 import android.util.Log
 import android.view.Surface
 import com.gamebex.client.stream.StreamCaps
+import com.gamebex.client.stream.StreamDebug
 import com.gamebex.client.stream.proto.AnnexB
 import com.gamebex.client.stream.proto.MediaFrame
 import java.nio.ByteBuffer
@@ -233,6 +234,7 @@ class VideoDecoder(
 
  /** A hardware AVC decoder when there is one (API 29 tells us), else null for the default. */
     private fun pickDecoder(): String? {
+        StreamDebug.prop("decoder")?.let { return it }
         if (Build.VERSION.SDK_INT < 29) return null
         return MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
             .filter { !it.isEncoder && it.supportedTypes.any { t -> t.equals(MIME, ignoreCase = true) } }

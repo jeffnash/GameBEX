@@ -12,7 +12,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Display capture into a MediaCodec H.264 encoder. The
- * encoder's input surface is the mirror's target, so frames never touch the
+ * encoder's input surface is the target of a display mirror or, with app
+ * capture, of the app's single-app MediaProjection, so frames never touch the
  * CPU; one drain thread hands each access unit to the sink.
  *
  * Control calls ([requestKeyframe], [setBitrate], [changeLevel]) come from
@@ -25,6 +26,8 @@ class AvcScreenSource(
     private var codec: MediaCodec? = null
     private var surface: Surface? = null
     private var mirror: ScreenMirror? = null
+    /** App capture: the app renders the game's window into our surface, so no display mirror. */
+    private var appTarget: CaptureTarget? = null
     private var drain: Thread? = null
     private var generation = 0
     private var restarts = 0
@@ -95,6 +98,28 @@ class AvcScreenSource(
         }
     }
 
+    override fun captureInto(target: CaptureTarget) {
+        synchronized(lock) { appTarget = target }
+    }
+
+    override fun useMirror() {
+        synchronized(lock) {
+            if (appTarget == null) return
+            appTarget = null
+            val s = surface
+            if (!running || s == null) return
+            try {
+                val m = ScreenMirror.open(level.width, level.height, s)
+                mirror = m
+                captureApi = m.api
+                Log.i(TAG, "video: app capture declined, mirroring the display via ${m.api}")
+            } catch (f: StreamFailure) {
+                running = false
+                sink?.onFailure("mirror: ${f.message}")
+            }
+        }
+    }
+
     /** Configures the first encoder that accepts [level], then starts capture into it. */
     private fun openLocked(level: VideoLevel, bitrate: Int) {
         val candidates = AvcEncoders.rank(encoders(), level)
@@ -124,19 +149,24 @@ class AvcScreenSource(
                     runCatching { c.release() }
                     continue
                 }
-                val m = try {
-                    ScreenMirror.open(level.width, level.height, input)
-                } catch (f: StreamFailure) {
-                    runCatching { c.stop() }
-                    runCatching { c.release() }
-                    runCatching { input.release() }
-                    throw f
+                val target = appTarget
+                val m = if (target != null) {
+                    null
+                } else {
+                    try {
+                        ScreenMirror.open(level.width, level.height, input)
+                    } catch (f: StreamFailure) {
+                        runCatching { c.stop() }
+                        runCatching { c.release() }
+                        runCatching { input.release() }
+                        throw f
+                    }
                 }
                 codec = c
                 surface = input
                 mirror = m
                 encoderName = info.name
-                captureApi = m.api
+                captureApi = m?.api ?: API_APP
                 this.level = level
                 this.bitrate = bitrate
                 configSent = false
@@ -147,7 +177,8 @@ class AvcScreenSource(
                     priority = Thread.MAX_PRIORITY
                     start()
                 }
-                Log.i(TAG, "video: ${info.name} ${level.width}x${level.height}@${level.fps} ${bitrate}bps strict=$strict via ${m.api}")
+                Log.i(TAG, "video: ${info.name} ${level.width}x${level.height}@${level.fps} ${bitrate}bps strict=$strict via $captureApi")
+                target?.onSurface(input, level.width, level.height)
                 return
             }
         }
@@ -157,6 +188,7 @@ class AvcScreenSource(
     /** Stops capture and the encoder; returns the drain thread to join outside the lock. */
     private fun closeLocked(): Thread? {
         generation += 1
+        if (surface != null) runCatching { appTarget?.onSurface(null, 0, 0) }
         runCatching { mirror?.close() }
         runCatching { codec?.stop() }
         runCatching { codec?.release() }
@@ -251,6 +283,8 @@ class AvcScreenSource(
     private fun currentGeneration(): Int = synchronized(lock) { generation }
 
     companion object {
+        /** [captureApi] while the app's single-app projection feeds the encoder. */
+        const val API_APP: String = "app-projection"
         private const val TAG = "GameBEXStream"
         private const val DEQUEUE_TIMEOUT_US = 100_000L
         private const val JOIN_MS = 1_000L

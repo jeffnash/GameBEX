@@ -17,6 +17,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.gamebex.client.stream.StreamCaps
+import com.gamebex.client.stream.StreamDebug
 import com.gamebex.client.stream.StreamEndpoint
 import com.gamebex.client.stream.StreamJson
 import com.gamebex.client.ui.GameBexTheme
@@ -57,6 +58,7 @@ class StreamViewerActivity : ComponentActivity() {
         }
         val s = StreamGuestRuntime.attach(endpoint, loopback)
         session = s
+        if (StreamDebug.prop("tdls") == "1") setTdls(endpoint.host, true)
         setContent {
             GameBexTheme {
                 val ui by s.ui.collectAsState()
@@ -158,7 +160,28 @@ class StreamViewerActivity : ComponentActivity() {
         wifi.createWifiLock(mode, "GameBEX:stream").apply { setReferenceCounted(false) }
     }.getOrNull()
 
+    /** StreamDebug "tdls": a direct Wi-Fi link to the host while both stay on the AP. */
+    private fun setTdls(host: String, on: Boolean) {
+        tdlsHost = if (on) host else null
+        runCatching {
+            val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val peer = java.net.InetAddress.getByName(host)
+            if (Build.VERSION.SDK_INT >= 34) {
+                wifi.setTdlsEnabled(peer, on, mainExecutor) { ok ->
+                    runCatching { Log.i(TAG, "tdls $host on=$on accepted=$ok supported=${wifi.isTdlsSupported}") }
+                }
+                wifi.getNumberOfEnabledTdlsSessions(mainExecutor) { n -> runCatching { Log.i(TAG, "tdls sessions=$n") } }
+            } else {
+                @Suppress("DEPRECATION") wifi.setTdlsEnabled(peer, on)
+                Log.i(TAG, "tdls $host on=$on supported=${wifi.isTdlsSupported}")
+            }
+        }.onFailure { Log.w(TAG, "tdls failed", it) }
+    }
+
+    private var tdlsHost: String? = null
+
     override fun onDestroy() {
+        tdlsHost?.let { setTdls(it, false) }
         super.onDestroy()
         scope.cancel()
         if (isFinishing) session?.let { if (it.ui.value.status != ViewerStatus.ENDED) it.leave() }

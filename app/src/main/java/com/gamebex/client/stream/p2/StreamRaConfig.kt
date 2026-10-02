@@ -3,6 +3,7 @@ package com.gamebex.client.stream.p2
 import com.gamebex.client.launch.GraphicsTuner
 import com.gamebex.client.launch.RetroArchTuner
 import com.gamebex.client.stream.StreamCaps
+import com.gamebex.client.stream.StreamDebug
 import java.io.File
 import java.io.IOException
 import java.util.LinkedHashMap
@@ -55,6 +56,12 @@ object StreamRaConfig {
  // OpenSL ES output goes through AudioFlinger's mixer, which playback capture can see.
         put("audio_driver", "opensl")
         put("audio_latency", "32")
+ // StreamDebug "ra_audio": RetroArch's RSound driver sends PCM to 127.0.0.1:12345,
+ // skipping AudioFlinger and the remote-submix pipe.
+        if (StreamDebug.prop("ra_audio") == "rsound") {
+            put("audio_driver", "rsound")
+            put("audio_device", "127.0.0.1")
+        }
     }
 
  /** The whole file: the managed config (with save-state resume, as a normal Play) plus [overrides]. */

@@ -150,6 +150,23 @@ class HostEngineStreamTest {
     }
 
     @Test
+    fun onlyTheGamesAppIsCapturedOnceTheGameIsInFront() = runTest {
+        val h = harness(this)
+        h.startGame(this)
+        runCurrent()
+        assertEquals(listOf("stream", "launch"), h.events)
+        assertEquals(1, h.stream.captureAttaches)
+    }
+
+    @Test
+    fun aStreamThatWontStartAsksForNoCapture() = runTest {
+        val h = harness(this, stream = FakeStreamHost(startValue = StreamStarted(ok = false, error = StreamError.UHID)))
+        h.startGame(this)
+        runCurrent()
+        assertEquals(0, h.stream.captureAttaches)
+    }
+
+    @Test
     fun aGuestWithoutTheStreamProtocolIsTurnedAway() = runTest {
         val h = harness(this)
         h.engine.hostGame(1)

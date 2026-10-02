@@ -9,6 +9,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.view.Surface
 import com.gamebex.client.launch.ShizukuFiles
 import com.gamebex.client.stream.StreamCaps
 import com.gamebex.client.stream.StreamConfig
@@ -18,6 +19,7 @@ import com.gamebex.client.stream.StreamJson
 import com.gamebex.client.stream.StreamProbe
 import com.gamebex.client.stream.StreamStarted
 import com.gamebex.client.stream.StreamStatus
+import com.gamebex.client.stream.shell.IStreamCapture
 import com.gamebex.client.stream.shell.IStreamShell
 import com.gamebex.client.stream.shell.StreamShellService
 import java.util.concurrent.CountDownLatch
@@ -39,7 +41,15 @@ class StreamShellClient private constructor(ctx: Context) : StreamHost {
     @Volatile private var remote: IStreamShell? = null
     private var pending: CountDownLatch? = null
     @Volatile private var streaming = false
+    @Volatile private var appCapture = false
     @Volatile private var unboundAtMs = 0L
+
+    /** The shell hands its encoder surfaces here; StreamAppCapture renders the shared app into them. */
+    private val captureListener = object : IStreamCapture.Stub() {
+        override fun onSurface(surface: Surface?, width: Int, height: Int) {
+            StreamAppCapture.onSurface(surface, width, height)
+        }
+    }
 
     private val args: Shizuku.UserServiceArgs by lazy {
         val debuggable = (app.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
@@ -80,13 +90,31 @@ class StreamShellClient private constructor(ctx: Context) : StreamHost {
             return@withContext StreamStarted(ok = false, error = StreamError.SHELL_UNAVAILABLE)
         }
         val svc = bind() ?: return@withContext StreamStarted(ok = false, error = StreamError.SHELL_UNAVAILABLE)
-        val json = StreamJson.json.encodeToString(StreamConfig.serializer(), config)
+        // Only the game's app is streamed where Android can share a single app (14+); the shell waits
+        // for attachCapture() to point the share at its encoder.
+        val wanted = config.copy(appCapture = StreamAppCapture.supported())
+        val json = StreamJson.json.encodeToString(StreamConfig.serializer(), wanted)
         val started = runCatching { StreamJson.json.decodeFromString(StreamStarted.serializer(), svc.start(json)) }
             .onFailure { Log.w(TAG, "start failed", it) }
             .getOrDefault(StreamStarted(ok = false, error = StreamError.SHELL_UNAVAILABLE))
         streaming = started.ok
+        appCapture = started.ok && wanted.appCapture
+        if (appCapture) {
+            StreamAppCapture.onEnded = { runCatching { remote?.stop() } }
+            runCatching { svc.setCaptureListener(captureListener) }.onFailure { Log.w(TAG, "capture listener failed", it) }
+        }
         if (!started.ok) unbind()
         started
+    }
+
+    override suspend fun attachCapture() {
+        if (!appCapture) return
+        val shared = runCatching { StreamAppCapture.start(app) }
+            .onFailure { Log.w(TAG, "app capture failed", it) }
+            .getOrDefault(false)
+        if (!shared) {
+            withContext(Dispatchers.IO) { runCatching { remote?.useMirror() }.onFailure { Log.w(TAG, "mirror fallback failed", it) } }
+        }
     }
 
     override suspend fun status(): StreamStatus? = withContext(Dispatchers.IO) {
@@ -98,6 +126,11 @@ class StreamShellClient private constructor(ctx: Context) : StreamHost {
 
     override suspend fun stop() = withContext(Dispatchers.IO) {
         streaming = false
+        if (appCapture) {
+            appCapture = false
+            StreamAppCapture.onEnded = null
+            withContext(Dispatchers.Main) { StreamAppCapture.stop() }
+        }
         remote?.let { svc -> runCatching { svc.stop() }.onFailure { Log.w(TAG, "stop failed", it) } }
         unbind()
     }

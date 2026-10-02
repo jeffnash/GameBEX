@@ -30,6 +30,7 @@ class StreamHostSession(
     private var video: VideoSource? = null
     private var audio: AudioSource? = null
     private var watchdog: Thread? = null
+    private val capture = CaptureRelay()
     @Volatile private var startedNs = 0L
     @Volatile private var lastPollNs = 0L
     @Volatile private var stopError: StreamError? = null
@@ -54,6 +55,7 @@ class StreamHostSession(
             receiver.open(config.inputPort)
             val source = components.videoSource()
             video = source
+            if (config.appCapture) source.captureInto(capture)
             source.start(level, level.maxBitrate, channel)
             // Audio rides UDP to the guest's input address when it has one (no waiting behind video on TCP),
             // else the media connection.
@@ -108,6 +110,16 @@ class StreamHostSession(
 
     fun stop() {
         stopInternal(null)
+    }
+
+    /** App capture: the app's listener for encoder surfaces (it registers after [start] returns). */
+    fun setCaptureListener(listener: CaptureTarget?) {
+        capture.setListener(listener)
+    }
+
+    /** App capture was declined or failed on the host: mirror the whole display instead. */
+    fun useMirror() {
+        if (!stopping.get()) video?.useMirror()
     }
 
     private fun stopInternal(error: StreamError?) {

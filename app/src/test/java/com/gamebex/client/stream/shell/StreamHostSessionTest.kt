@@ -82,6 +82,53 @@ class StreamHostSessionTest {
     }
 
     @Test
+    fun appCaptureHandsTheEncoderSurfaceToTheAppsListenerEvenWhenItRegistersAfterStart() {
+        val c = FakeShellComponents()
+        val s = session(c, config(level = 1).copy(appCapture = true))
+        assertTrue(s.start().ok)
+        val got = mutableListOf<Pair<Int, Int>>()
+        s.setCaptureListener { _, w, h -> got += w to h }
+        assertEquals(listOf(1280 to 576), got)
+        c.video.captureTarget?.onSurface(null, 1600, 720)
+        assertEquals(listOf(1280 to 576, 1600 to 720), got)
+    }
+
+    @Test
+    fun aDetachedCaptureListenerGetsNothingMore() {
+        val c = FakeShellComponents()
+        val s = session(c, config().copy(appCapture = true))
+        assertTrue(s.start().ok)
+        var calls = 0
+        s.setCaptureListener { _, _, _ -> calls += 1 }
+        s.setCaptureListener(null)
+        c.video.captureTarget?.onSurface(null, 1280, 576)
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun theWholeDisplayIsMirroredWithoutAppCaptureOrWhenTheHostDeclinesIt() {
+        val plain = FakeShellComponents()
+        assertTrue(session(plain).start().ok)
+        assertNull(plain.video.captureTarget)
+
+        val declined = FakeShellComponents()
+        val s = session(declined, config().copy(appCapture = true))
+        assertTrue(s.start().ok)
+        s.useMirror()
+        assertEquals(1, declined.video.mirrorRequests)
+    }
+
+    @Test
+    fun aStoppedSessionIgnoresALateMirrorRequest() {
+        val c = FakeShellComponents()
+        val s = session(c, config().copy(appCapture = true))
+        assertTrue(s.start().ok)
+        s.stop()
+        s.useMirror()
+        assertEquals(0, c.video.mirrorRequests)
+    }
+
+    @Test
     fun runsWithoutSoundWhenAudioIsRefused() {
         val c = FakeShellComponents(audio = FakeAudioSource(works = false))
         val started = session(c).start()

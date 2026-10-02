@@ -14,6 +14,7 @@ import com.gamebex.client.stream.VideoLevel
 import com.gamebex.client.stream.proto.PadState
 import com.gamebex.client.stream.shell.AudioSink
 import com.gamebex.client.stream.shell.AudioSource
+import com.gamebex.client.stream.shell.CaptureTarget
 import com.gamebex.client.stream.shell.EncodedFrame
 import com.gamebex.client.stream.shell.MediaChannel
 import com.gamebex.client.stream.shell.MediaStats
@@ -35,6 +36,7 @@ class FakeStreamHost(
     @Volatile var probes = 0
     @Volatile var stops = 0
     @Volatile var statusCalls = 0
+    @Volatile var captureAttaches = 0
 
     override suspend fun probe(): StreamProbe {
         probes += 1
@@ -44,6 +46,10 @@ class FakeStreamHost(
     override suspend fun start(config: StreamConfig): StreamStarted {
         configs += config
         return startValue
+    }
+
+    override suspend fun attachCapture() {
+        captureAttaches += 1
     }
 
     override suspend fun status(): StreamStatus? {
@@ -95,11 +101,23 @@ class FakeVideoSource(initial: VideoLevel) : VideoSource {
     @Volatile var keyframeRequests = 0
     @Volatile var levelChanges = 0
     @Volatile var stopped = false
+    @Volatile var captureTarget: CaptureTarget? = null
+    @Volatile var mirrorRequests = 0
 
     override fun start(level: VideoLevel, bitrate: Int, sink: VideoSink) {
         this.level = level
         currentBitrate = bitrate
         this.sink = sink
+        // A real encoder hands its new input surface over here; JVM tests can't make a Surface.
+        captureTarget?.onSurface(null, level.width, level.height)
+    }
+
+    override fun captureInto(target: CaptureTarget) {
+        captureTarget = target
+    }
+
+    override fun useMirror() {
+        mirrorRequests += 1
     }
 
     override fun requestKeyframe() {

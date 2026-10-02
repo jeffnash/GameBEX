@@ -1,5 +1,7 @@
 package com.gamebex.client.stream.shell;
 
+import com.gamebex.client.stream.shell.IStreamCapture;
+
 /**
  * Stream service run by Shizuku as the shell uid (StreamShellService).
  * Arguments and results are JSON (com.gamebex.client.stream.StreamJson) so
@@ -19,4 +21,8 @@ interface IStreamShell {
     void stop() = 4;
     /** The service process uid (2000 when Shizuku runs through adb). */
     int uid() = 5;
+    /** App capture streams only: where the encoder's input surfaces go (null detaches). */
+    void setCaptureListener(IStreamCapture listener) = 6;
+    /** App capture streams only: the host declined app capture, so mirror the whole display. */
+    void useMirror() = 7;
 }
