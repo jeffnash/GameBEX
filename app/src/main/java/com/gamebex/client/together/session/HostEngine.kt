@@ -31,6 +31,18 @@ import com.gamebex.client.together.TogetherTiming
 import com.gamebex.client.together.TogetherCaps
 import com.gamebex.client.together.TOGETHER_PROTO
 import com.gamebex.client.together.net.JoinLink
+import com.gamebex.client.stream.NoStreamHost
+import com.gamebex.client.stream.NoStreamPlayer2
+import com.gamebex.client.stream.P2Prep
+import com.gamebex.client.stream.StreamCaps
+import com.gamebex.client.stream.StreamConfig
+import com.gamebex.client.stream.StreamEmus
+import com.gamebex.client.stream.StreamHost
+import com.gamebex.client.stream.StreamPlayer2
+import com.gamebex.client.stream.StreamStarted
+import com.gamebex.client.stream.StreamStatus
+import com.gamebex.client.stream.StreamToken
+import com.gamebex.client.stream.proto.StreamWire
 import java.util.Collections
 import java.security.SecureRandom
 import java.util.concurrent.atomic.AtomicLong
@@ -55,6 +67,9 @@ import kotlinx.coroutines.launch
 
 private const val CONSUMER_FAILURE = "Something went wrong."
 
+/** STREAM: status polls (2 s apart) with no new guest input before the host is warned the guest went quiet. */
+private const val SILENT_POLLS = 2
+
 /** The host half of the Play together session actor. */
 internal class HostEngine(
     private val transport: LinkTransport,
@@ -65,10 +80,18 @@ internal class HostEngine(
     private val timing: TogetherTiming,
     private val scope: CoroutineScope,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+ /** STREAM: the shell-uid stream process. */
+    private val streamHost: StreamHost = NoStreamHost,
+ /** STREAM: player 2's binding in the host's emulator. */
+    private val player2: StreamPlayer2 = NoStreamPlayer2,
+ /** a game's modes, best first. Tests pass their own. */
+    private val modesFor: (GameEntity) -> List<TogetherMode> = TogetherSupport::modesFor,
 ) {
     private sealed interface Input {
         data class HostGame(
             val gameId: Long,
+ /** A mode the host switched to; null picks the best one. */
+            val forcedMode: TogetherMode? = null,
             val beforeStart: suspend () -> Unit,
         ) : Input
         data object Start : Input
@@ -84,6 +107,8 @@ internal class HostEngine(
             val core: String?,
             val readiness: Readiness?,
             val token: Long,
+ /** The game's other modes, best first. */
+            val altModes: List<TogetherMode> = emptyList(),
         ) : Input
         data class SetupDone(
             val epoch: Int,
@@ -106,9 +131,27 @@ internal class HostEngine(
             val epoch: Int,
             val round: Int,
             val outcome: EmuRouter.Outcome,
+ /** STREAM: the stream started for this round. */
+            val stream: StreamRound? = null,
+ /** STREAM: player-2 steps to show once the game runs. */
+            val guide: String? = null,
         ) : Input
         data class HeadStart(val epoch: Int, val round: Int) : Input
+        data class SwitchMode(val mode: TogetherMode) : Input
+        data class StreamPolled(val epoch: Int, val round: Int, val status: StreamStatus?) : Input
+        data class StreamGraceOver(val epoch: Int, val round: Int) : Input
     }
+
+ /** A stream the shell runs for one round, with the token the guest needs. */
+    private class StreamRound(val token: String, val started: StreamStarted)
+
+ /** What STREAM prepares before the host's emulator starts. */
+    private class StreamPrep(
+        val round: StreamRound? = null,
+        val p2Config: java.io.File? = null,
+        val guide: String? = null,
+        val failure: EmuRouter.Outcome? = null,
+    )
 
     private val inputs = Channel<Input>(Channel.UNLIMITED)
     private val _view = MutableStateFlow<HostView?>(null)
@@ -145,6 +188,17 @@ internal class HostEngine(
     private var coreFetchRunning = false
     private var resources: SessionResources? = null
     private var headStartJob: Job? = null
+    private var forcedMode: TogetherMode? = null
+ /** STREAM: the stream of the current round, or null. */
+    private var stream: StreamRound? = null
+    private var streamPoll: Job? = null
+ /** STREAM: the guest's link dropped and the stream is being kept for [TogetherTiming.streamLinkGraceMs]. */
+    private var streamGrace: Job? = null
+    private var streamGuestName: String? = null
+    private var streamGuestConnected = false
+    private var lastInputPackets = -1L
+    private var silentPolls = 0
+    private var peerSilent = false
 
     init {
         refreshPlayerName()
@@ -162,7 +216,7 @@ internal class HostEngine(
         }
     }
 
-    /** Refreshes the cached player name without doing Settings/network work on the caller. */
+ /** Refreshes the cached player name without doing Settings/network work on the caller. */
     internal fun refreshPlayerName() {
         scope.launch {
             try {
@@ -180,13 +234,13 @@ internal class HostEngine(
         commitHostGame(gameId)
     }
 
-    /** Sets CHECKING on the caller thread without entering the actor. */
+ /** Sets CHECKING on the caller thread without entering the actor. */
     internal fun prepareHostGame(gameId: Long) {
         val token = sessionToken.incrementAndGet()
         replaceView(token, HostView(HostStep.CHECKING, gameId, "", "", null, myName))
     }
 
-    /** Starts the session after the other engine has finished ending. */
+ /** Starts the session after the other engine has finished ending. */
     internal fun commitHostGame(gameId: Long) {
         inputs.trySend(Input.HostGame(gameId) {})
     }
@@ -203,6 +257,11 @@ internal class HostEngine(
         inputs.trySend(Input.PlayAgain)
     }
 
+ /** Host the same game in [mode] instead; only before a guest joins. */
+    fun switchMode(mode: TogetherMode) {
+        inputs.trySend(Input.SwitchMode(mode))
+    }
+
     fun act(action: TogetherAction) {
         inputs.trySend(Input.Act(action))
     }
@@ -211,7 +270,7 @@ internal class HostEngine(
         inputs.trySend(Input.End(publishedToken(), null))
     }
 
-    /** Completes only after this engine has run its ordered end cleanup. */
+ /** Completes only after this engine has run its ordered end cleanup. */
     internal suspend fun endAndAwait() {
         val done = CompletableDeferred<Unit>()
         inputs.send(Input.End(publishedToken(), done))
@@ -246,6 +305,9 @@ internal class HostEngine(
             is Input.CoreFetch -> handleCoreFetch(input)
             is Input.HostLaunched -> handleHostLaunched(input)
             is Input.HeadStart -> handleHeadStart(input)
+            is Input.SwitchMode -> handleSwitchMode(input.mode)
+            is Input.StreamPolled -> handleStreamPolled(input)
+            is Input.StreamGraceOver -> handleStreamGraceOver(input)
         }
     }
 
@@ -275,12 +337,19 @@ internal class HostEngine(
         resources = SessionResources()
         headStartJob?.cancel()
         headStartJob = null
+        forcedMode = input.forcedMode
+        stream = null
+        streamPoll?.cancel()
+        streamPoll = null
+        streamGrace?.cancel()
+        streamGrace = null
         refreshPlayerName()
         replaceView(token, HostView(HostStep.CHECKING, input.gameId, "", "", null, myName))
         beginReadiness(input.gameId, epoch, token)
     }
 
     private fun beginReadiness(id: Long, startedEpoch: Int, token: Long) {
+        val forced = forcedMode
         launchStep {
             try {
                 val found = withContext(ioDispatcher) { library.game(id) }
@@ -288,7 +357,9 @@ internal class HostEngine(
                     post(Input.ReadinessDone(startedEpoch, null, null, null, null, token))
                     return@launchStep
                 }
-                val foundMode = TogetherSupport.modeFor(found)
+ // The best mode first; a switch picks another listed one.
+                val modes = modesFor(found)
+                val foundMode = forced?.takeIf { it in modes } ?: modes.firstOrNull()
                 if (foundMode == null) {
                     post(Input.ReadinessDone(startedEpoch, found, null, null, null, token))
                     return@launchStep
@@ -297,7 +368,7 @@ internal class HostEngine(
                 val readiness = withContext(ioDispatcher) {
                     emulators.readiness(foundMode, Role.HOST, found, foundCore)
                 }
-                post(Input.ReadinessDone(startedEpoch, found, foundMode, foundCore, readiness, token))
+                post(Input.ReadinessDone(startedEpoch, found, foundMode, foundCore, readiness, token, modes - foundMode))
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (t: Throwable) {
@@ -349,6 +420,7 @@ internal class HostEngine(
                     folder = input.game.folder,
                     mode = input.mode,
                     problem = TogetherCopy.problemFor(readiness),
+                    altModes = input.altModes,
                 )
             }
             else -> {
@@ -358,6 +430,7 @@ internal class HostEngine(
                     mode = input.mode,
                     problem = null,
                     message = null,
+                    altModes = input.altModes,
                 )
                 beginSetup(input.epoch, input.game, input.mode, input.core, sessionId ?: return, input.token)
             }
@@ -375,7 +448,9 @@ internal class HostEngine(
         val sessionResources = resources ?: return
         launchStep {
             try {
+ // The core follows the chosen mode: a STREAM offer carries none.
                 val setupOffer = withContext(ioDispatcher) { library.offer(setupGame.id) }
+                    ?.copy(core = TogetherSupport.coreFor(setupGame, setupMode))
                 if (setupOffer == null) {
                     post(
                         Input.SetupFailed(
@@ -543,6 +618,11 @@ internal class HostEngine(
             sendByeAndClose(input.link, com.gamebex.client.together.ByeReason.VERSION)
             return
         }
+ // A STREAM guest must speak this host's stream protocol.
+        if (mode == TogetherMode.STREAM && input.hello.streamProto != StreamWire.VERSION) {
+            sendByeAndClose(input.link, com.gamebex.client.together.ByeReason.VERSION)
+            return
+        }
 
         val currentSession = sessionId ?: return
         val currentOffer = offer ?: return
@@ -581,6 +661,7 @@ internal class HostEngine(
                     ppssppVersion = withContext(ioDispatcher) {
                         platform.packageVersion("org.ppsspp.ppsspp")
                     },
+                    streamProto = StreamWire.VERSION,
                 )
                 withContext(ioDispatcher) {
                     input.link.send(hello)
@@ -650,6 +731,7 @@ internal class HostEngine(
     private fun guestLeft(reason: com.gamebex.client.together.ByeReason, link: Link) {
         val name = _view.value?.guestName ?: guestHello?.name ?: TogetherCopy.otherPhone
         val currentStep = _view.value?.step
+        stopStream()
         guest = null
         guestHello = null
         clearGuestFields()
@@ -677,6 +759,11 @@ internal class HostEngine(
     private fun guestClosed(link: Link) {
         val name = _view.value?.guestName ?: guestHello?.name ?: TogetherCopy.otherPhone
         val currentStep = _view.value?.step
+        if (currentStep == HostStep.IN_GAME && stream != null) {
+            keepStreamAfterLinkLoss(name)
+            return
+        }
+        stopStream()
         guest = null
         guestHello = null
         clearGuestFields()
@@ -698,6 +785,41 @@ internal class HostEngine(
                 advertiseAgain()
             }
             else -> Unit
+        }
+    }
+
+ /**
+ * STREAM, link dropped without a Bye (a Wi-Fi blip, say): warn at once, but keep the stream and
+ * player 2's pad for [TogetherTiming.streamLinkGraceMs] so the viewer's own reconnect can heal it.
+ * An explicit Bye (guestLeft) still stops everything immediately.
+ */
+    private fun keepStreamAfterLinkLoss(name: String) {
+        guest = null
+        guestHello = null
+        clearGuestFields()
+        streamGuestName = name
+        val seconds = (timing.streamLinkGraceMs / 1_000L).toInt().coerceAtLeast(1)
+        _view.value = _view.value?.copy(step = HostStep.IN_GAME, linkLost = true, message = TogetherCopy.streamLinkLostHost(name, seconds))
+        if (!platform.foreground.value) platform.alert(TogetherAlert.LinkLost(name, streamGraceS = seconds))
+        val graceEpoch = epoch
+        val graceRound = round
+        streamGrace?.cancel()
+        streamGrace = launchSession {
+            kotlinx.coroutines.delay(timing.streamLinkGraceMs)
+            post(Input.StreamGraceOver(graceEpoch, graceRound))
+        }
+    }
+
+    private fun handleStreamGraceOver(input: Input.StreamGraceOver) {
+        if (!isCurrent(input.epoch) || input.round != round || stream == null) return
+        streamGrace = null
+        val name = streamGuestName ?: TogetherCopy.otherPhone
+        if (streamGuestConnected) {
+ // The guest is still watching, so the stream (and its pad) stay.
+            _view.value = _view.value?.copy(message = TogetherCopy.streamLinkLostStill(name))
+        } else {
+            stopStream()
+            _view.value = _view.value?.copy(message = TogetherCopy.linkLost(name))
         }
     }
 
@@ -769,6 +891,7 @@ internal class HostEngine(
         val currentMode = mode ?: return
         val currentAddress = address ?: return
         val currentSessionId = sessionId ?: return
+        val guestAddress = guest?.remoteAddress
         ad?.stop()
         ad = null
         headStartJob?.cancel()
@@ -782,9 +905,12 @@ internal class HostEngine(
                 val marker = criticalLaunches.enter(currentCoroutineContext().job)
                 try {
                     withContext(NonCancellable) {
+                        var prep = StreamPrep()
                         val outcome = try {
                             withContext(ioDispatcher) {
-                                emulators.launch(
+ // Player 2's pad exists before the emulator starts, so it sees it at boot.
+                                if (currentMode == TogetherMode.STREAM) prep = prepareStream(currentGame, guestAddress)
+                                prep.failure ?: emulators.launch(
                                     TogetherLaunch(
                                         sessionId = currentSessionId,
                                         role = Role.HOST,
@@ -793,6 +919,7 @@ internal class HostEngine(
                                         core = currentOffer.core,
                                         hostAddress = currentAddress,
                                         playerName = myName,
+                                        p2Config = prep.p2Config,
                                     ),
                                 )
                             }
@@ -802,7 +929,7 @@ internal class HostEngine(
                             log(t)
                             EmuRouter.Outcome.Failed(TogetherCopy.noWifi)
                         }
-                        post(Input.HostLaunched(launchEpoch, launchRound, outcome))
+                        post(Input.HostLaunched(launchEpoch, launchRound, outcome, prep.round, prep.guide))
                     }
                 } finally {
                     criticalLaunches.exit(marker)
@@ -822,17 +949,60 @@ internal class HostEngine(
         }
     }
 
+ /**
+ * STREAM, before the host's emulator starts: bind player 2, then
+ * start capture, encoding and the pad for the joined guest only.
+ */
+    private suspend fun prepareStream(currentGame: GameEntity, guestAddress: String?): StreamPrep {
+        if (guestAddress == null) return StreamPrep(failure = EmuRouter.Outcome.Failed(TogetherCopy.streamNetwork))
+        val emu = StreamEmus.emuFor(currentGame)
+            ?: return StreamPrep(failure = EmuRouter.Outcome.Blocked(TogetherCopy.notSupported))
+        val prepared = player2.prepare(currentGame, emu)
+        if (prepared is P2Prep.Failed) return StreamPrep(failure = EmuRouter.Outcome.Failed(prepared.text))
+        val token = StreamToken.generate()
+        val started = streamHost.start(StreamConfig(token = token, guestAddress = guestAddress))
+        if (!started.ok) {
+            return StreamPrep(failure = EmuRouter.Outcome.Failed(TogetherCopy.streamStartFailed(started.error)))
+        }
+        return StreamPrep(
+            round = StreamRound(token, started),
+            p2Config = (prepared as? P2Prep.RetroArchConfig)?.cfg,
+            guide = (prepared as? P2Prep.Guide)?.lines?.joinToString(" "),
+        )
+    }
+
     private suspend fun handleHostLaunched(input: Input.HostLaunched) {
-        if (!isCurrent(input.epoch) || input.round != round || _view.value?.step != HostStep.LAUNCHING) return
+        if (!isCurrent(input.epoch) || input.round != round || _view.value?.step != HostStep.LAUNCHING) {
+ // A stream started for a launch nobody waits for any more must not keep the pad.
+            if (input.stream != null) launchSession { runCatching { withContext(ioDispatcher) { streamHost.stop() } }.onFailure(::log) }
+            return
+        }
         val outcome = input.outcome
         if (outcome is EmuRouter.Outcome.Launched) {
             val currentGuest = guest
             val currentSession = sessionId
+            val started = input.stream
             if (currentGuest != null && currentSession != null) {
                 launchSession {
                     try {
                         withContext(ioDispatcher) {
                             currentGuest.send(LinkMsg.Launch(currentSession, input.round))
+ // The guest opens its viewer on this, after Launch.
+                            if (started != null) {
+                                currentGuest.send(
+                                    LinkMsg.StreamReady(
+                                        sessionId = currentSession,
+                                        round = input.round,
+                                        proto = StreamWire.VERSION,
+                                        token = started.token,
+                                        mediaPort = started.started.mediaPort,
+                                        inputPort = started.started.inputPort,
+                                        width = started.started.width,
+                                        height = started.started.height,
+                                        audio = started.started.audio,
+                                    ),
+                                )
+                            }
                         }
                     } catch (cancelled: CancellationException) {
                         throw cancelled
@@ -841,11 +1011,21 @@ internal class HostEngine(
                     }
                 }
             }
+            val streamMessage = when {
+                input.guide != null -> input.guide
+                started != null && !started.started.audio -> TogetherCopy.streamNoSound
+                else -> null
+            }
             _view.value = _view.value?.copy(
                 step = HostStep.IN_GAME,
-                message = null,
+                message = streamMessage,
                 problem = null,
+                streamLine = if (started != null) TogetherCopy.hostStreamWaiting else null,
             )
+            if (started != null) {
+                stream = started
+                startStreamPoll(input.round)
+            }
             val name = _view.value?.guestName ?: TogetherCopy.otherPhone
             platform.updateService(TogetherCopy.ongoingPlaying(name, game?.title ?: ""))
             if (mode == TogetherMode.GB_LINK) {
@@ -861,6 +1041,8 @@ internal class HostEngine(
                 }
             }
         } else {
+ // The game didn't start: the stream it was meant for must not outlive it.
+            if (input.stream != null) launchSession { runCatching { withContext(ioDispatcher) { streamHost.stop() } }.onFailure(::log) }
             val message = TogetherCopy.launchFailed(TogetherCopy.outcomeText(outcome))
             _view.value = _view.value?.copy(
                 step = if (input.round == 1) HostStep.JOINED else HostStep.IN_GAME,
@@ -885,6 +1067,94 @@ internal class HostEngine(
                 log(t)
             }
         }
+    }
+
+ /** Only before a guest joins, and only to a mode this game lists. */
+    private suspend fun handleSwitchMode(next: TogetherMode) {
+        val current = _view.value ?: return
+        if (guest != null || next == current.mode || next !in current.altModes) return
+        if (current.step != HostStep.WAITING && current.step != HostStep.NOT_READY) return
+        val id = gameId ?: return
+        handleHostGame(Input.HostGame(id, next) {})
+    }
+
+ /** The host's stream line, refreshed every [StreamCaps.STATUS_POLL_MS]; also feeds the shell's app watchdog. */
+    private fun startStreamPoll(pollRound: Int) {
+        streamPoll?.cancel()
+        lastInputPackets = -1L
+        silentPolls = 0
+        peerSilent = false
+        val pollEpoch = epoch
+        streamPoll = launchSession {
+            while (true) {
+                kotlinx.coroutines.delay(StreamCaps.STATUS_POLL_MS)
+                val status = try {
+                    withContext(ioDispatcher) { streamHost.status() }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (t: Throwable) {
+                    log(t)
+                    null
+                }
+                post(Input.StreamPolled(pollEpoch, pollRound, status))
+                if (status == null || !status.running) break
+            }
+        }
+    }
+
+    private fun handleStreamPolled(input: Input.StreamPolled) {
+        if (!isCurrent(input.epoch) || input.round != round || stream == null) return
+        val status = input.status
+        if (status == null || !status.running) {
+            stream = null
+            streamPoll = null
+            streamGrace?.cancel()
+            streamGrace = null
+            val text = status?.error?.let { TogetherCopy.streamStartFailed(it) } ?: TogetherCopy.streamStopped
+            _view.value = _view.value?.copy(streamLine = null, message = text)
+            return
+        }
+        val name = _view.value?.guestName ?: streamGuestName ?: TogetherCopy.otherPhone
+        streamGuestConnected = status.guestConnected
+        watchForSilence(status, name)
+        val line = if (status.guestConnected) TogetherCopy.hostStreamLine(name, status.fps, status.bitrate) else TogetherCopy.hostStreamWaiting
+        _view.value = _view.value?.copy(streamLine = line)
+    }
+
+ /**
+ * The guest's input sender sends at least every 50 ms, so a connected guest whose packet count stands
+ * still across two polls (2+ s) has dropped off without the link noticing yet: warn the host at once
+ * (a heads-up while the game is on screen) and say when it is back.
+ */
+    private fun watchForSilence(status: StreamStatus, name: String) {
+        val packets = status.inputPackets
+        val moving = packets != lastInputPackets
+        lastInputPackets = packets
+        silentPolls = if (status.guestConnected && !moving) silentPolls + 1 else 0
+        if (!peerSilent && silentPolls >= SILENT_POLLS && _view.value?.linkLost != true) {
+            peerSilent = true
+            _view.value = _view.value?.copy(message = TogetherCopy.streamPeerSilent(name))
+            if (!platform.foreground.value) platform.alert(TogetherAlert.PeerSilent(name))
+        } else if (peerSilent && silentPolls == 0) {
+            peerSilent = false
+            if (_view.value?.message == TogetherCopy.streamPeerSilent(name)) _view.value = _view.value?.copy(message = null)
+        }
+    }
+
+ /** Stops the stream and removes player 2's pad; the host keeps playing. */
+    private fun stopStream() {
+        streamPoll?.cancel()
+        streamPoll = null
+        streamGrace?.cancel()
+        streamGrace = null
+        streamGuestConnected = false
+        lastInputPackets = -1L
+        silentPolls = 0
+        peerSilent = false
+        if (stream == null) return
+        stream = null
+        _view.value = _view.value?.copy(streamLine = null)
+        launchSession { runCatching { withContext(ioDispatcher) { streamHost.stop() } }.onFailure(::log) }
     }
 
     private suspend fun handleAct(action: TogetherAction) {
@@ -1032,6 +1302,13 @@ internal class HostEngine(
         }.onFailure(::log)
         runCatching { criticalLaunches.join(2_000L) }.onFailure(::log)
         runCatching { sendByeAndClose(guest, com.gamebex.client.together.ByeReason.LEFT) }.onFailure(::log)
+ // The pad goes first, then player 2's emulator settings come back.
+        runCatching {
+            streamPoll = null
+            if (stream != null || mode == TogetherMode.STREAM) withContext(ioDispatcher) { streamHost.stop() }
+            stream = null
+        }.onFailure(::log)
+        runCatching { if (mode == TogetherMode.STREAM) withContext(ioDispatcher) { player2.restore() } }.onFailure(::log)
         runCatching { resources?.closeAll() }.onFailure(::log)
         runCatching { withContext(ioDispatcher) { emulators.endSession() } }.onFailure(::log)
         runCatching { platform.cancelAlerts() }.onFailure(::log)

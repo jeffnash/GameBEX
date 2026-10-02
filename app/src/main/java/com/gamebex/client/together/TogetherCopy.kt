@@ -3,6 +3,7 @@ package com.gamebex.client.together
 import com.gamebex.client.data.CoreNames
 import com.gamebex.client.data.Emu
 import com.gamebex.client.launch.EmuRouter
+import com.gamebex.client.stream.StreamError
 
 object TogetherCopy {
     const val eyebrow = "Play together"
@@ -13,6 +14,7 @@ object TogetherCopy {
         TogetherMode.RA_NETPLAY -> "RetroArch netplay"
         TogetherMode.PSP_ADHOC -> "PPSSPP ad hoc"
         TogetherMode.GB_LINK -> "Game Boy link"
+        TogetherMode.STREAM -> "Stream"
         null -> ""
     }
     const val checkingPhone = "Checking this phone…"
@@ -70,6 +72,11 @@ object TogetherCopy {
             "Only one of you picks 2 player. If it jumps back to 1 player, try again.",
             "Keep RetroArch open on both phones. Opening its menu or leaving the app on one phone freezes the other.",
         )
+        TogetherMode.STREAM -> listOf(
+            "The game runs on this phone. The other phone shows your screen and plays its sound.",
+            "Player 2 uses the other phone's controller. On this phone it's called $streamPadName.",
+            "End stops the stream and removes player 2's controller.",
+        )
         null -> emptyList()
     }
     /** [menuButton]: the printed label of the pad button RetroArch's menu uses (keycode 100). */
@@ -88,6 +95,11 @@ object TogetherCopy {
             "Use the game's link cable menu, for example Cable Club to trade.",
             "Only one of you picks 2 player. If it jumps back to 1 player, try again.",
             "Keep RetroArch open on both phones. Opening its menu or leaving the app on one phone freezes the other.",
+        )
+        TogetherMode.STREAM -> listOf(
+            "You'll see $host's screen on this phone. Your controller is player 2.",
+            "To leave the stream, hold SELECT and START for 2 seconds or press your controller's home button.",
+            "$openStream brings it back while $host is still playing.",
         )
         null -> emptyList()
     }
@@ -122,6 +134,7 @@ object TogetherCopy {
         TogetherAction.COPY_CORE -> "Copy core"
         TogetherAction.DOWNLOAD -> "Download"
         TogetherAction.USE_ANYWAY -> "Use mine anyway"
+        TogetherAction.OPEN_STREAM -> openStream
     }
     fun problemFor(r: Readiness): Problem = when (r) {
         is Readiness.NeedsEmulator -> Problem(needsEmulator(r.emu.label), TogetherAction.OPEN_SYSTEM)
@@ -217,4 +230,57 @@ object TogetherCopy {
     const val otherPhone = "the other phone"
     const val inviteTitle = "Play together?"
     fun inviteBody(name: String, game: String, system: String) = "$name is hosting $game ($system)."
+
+    const val streamPadName = "GameBEX Player 2"
+    fun useModeInstead(mode: TogetherMode) = "Use ${modeLabel(mode)} instead"
+    const val openStream = "Open stream"
+    const val showStats = "Show stats"
+    const val hideStats = "Hide stats"
+    fun watching(host: String) = "Watching $host's game"
+    const val streamClosed = "The stream is closed on this phone. Open it again to keep playing."
+    const val streamUnavailable = "Streaming isn't available in this build of GameBEX."
+    const val streamNeedsAndroid13 = "Streaming from this phone needs Android 13 or newer."
+    const val streamNeedsAndroid10 = "Watching a stream needs Android 10 or newer."
+    const val streamNoController = "This phone won't let GameBEX add a controller for player 2."
+    const val streamNoScreen = "This phone won't let GameBEX share its screen."
+    const val streamNoEncoder = "This phone has no video encoder GameBEX can use."
+    const val streamNoDecoder = "This phone can't play the stream: it has no H.264 video decoder."
+    const val streamNoSound = "Streaming without sound: this phone won't share the game's audio."
+    const val streamNetwork = "Couldn't open the stream on this phone's Wi-Fi. Check Wi-Fi and try again."
+    const val streamStopped = "The stream stopped. Press Play again to restart it."
+    const val streamNotReady = "The stream from the other phone didn't start in time."
+    const val streamShellNoAnswer = "Shizuku didn't start GameBEX's stream service. Check again; if it keeps happening, restart Shizuku."
+    fun streamCantOpen(host: String) = "Couldn't open the stream from $host. Both phones need to be on the same Wi-Fi."
+    fun streamLost(host: String) = "Lost the stream from $host."
+    fun streamEnded(host: String) = "$host stopped the stream."
+    const val streamRefused = "The other phone didn't accept this stream. Leave and join the session again."
+    const val streamUpdateBoth = "Update GameBEX on both phones to use Stream."
+    const val streamReplaced = "The stream opened again on this phone, so this copy closed."
+    const val tapForMenu = "Tap the screen for Leave and stats"
+    const val streamReconnecting = "Reconnecting…"
+    fun streamLinkLostHost(name: String, seconds: Int) = "Lost the connection to $name. The stream stays up for $seconds seconds in case it comes back."
+    /** Host: the grace is over and the guest is still watching. */
+    fun streamLinkLostStill(name: String) = "Lost the connection to $name, but the stream is still running."
+    /** Host: the guest's phone went quiet while the stream is up. */
+    fun streamPeerSilent(name: String) = "$name's phone stopped responding. The stream stays on while it tries to come back."
+    /** Guest viewer: the stream recovered but the link to the host did not. */
+    fun streamLinkLostStillGuest(host: String) = "Lost the connection to $host, but the stream is still running."
+    fun streamLinkLostGuest(host: String) = "Lost the connection to $host. Trying to keep the stream going…"
+    const val weakWifi = "Weak Wi-Fi: lowering the picture quality"
+    const val leaveStreamHint = "Hold SELECT and START to leave"
+    const val leaveStream = "Leave stream"
+    const val hostStreamWaiting = "Stream is on. Waiting for the other phone to connect."
+    fun hostStreamLine(guest: String, fps: Int, bitrate: Int) = "Streaming to $guest · $fps fps · ${mbps(bitrate)} Mbps"
+    fun mbps(bps: Int): String = String.format(java.util.Locale.US, "%.1f", bps / 1_000_000.0)
+    const val netherPlayer2 = "One time only: in NetherSX2 open Settings, Controllers, Controller Port 2. Choose DualShock 2, then Automatic Mapping, and pick GameBEX Player 2."
+    fun streamPlayer2Other(emu: String) = "In $emu, set controller port 2 to $streamPadName. GameBEX can't set it for you."
+    fun streamStartFailed(error: StreamError?): String = when (error) {
+        StreamError.OLD_ANDROID -> streamNeedsAndroid13
+        StreamError.DISPLAY_CAPTURE -> streamNoScreen
+        StreamError.ENCODER -> streamNoEncoder
+        StreamError.UHID -> streamNoController
+        StreamError.NETWORK -> streamNetwork
+        StreamError.SHELL_UNAVAILABLE -> startShizuku
+        StreamError.BAD_CONFIG, null -> streamStopped
+    }
 }

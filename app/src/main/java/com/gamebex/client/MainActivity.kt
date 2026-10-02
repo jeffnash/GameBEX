@@ -66,6 +66,7 @@ import com.gamebex.client.ui.together.TogetherInviteDialog
 import com.gamebex.client.ui.together.TogetherHubScreen
 import com.gamebex.client.ui.together.TogetherHostScreen
 import com.gamebex.client.ui.together.TogetherGuestScreen
+import com.gamebex.client.stream.guest.StreamGuestRuntime
 import com.gamebex.client.ui.BrowseViewModel
 import com.gamebex.client.ui.ConsoleDownloadsScreen
 import com.gamebex.client.ui.sources.SourcesScreen
@@ -716,9 +717,10 @@ private fun ConsoleNavHost(
             }, onOpenRetroArch = { openRetroArchMenu(context) })
         }
         composable("together/guest") {
+            val streamViewerOpen by StreamGuestRuntime.viewerOpen.collectAsState()
             TogetherGuestScreen(app.together, rail, hints, onBack = { nav.leaveTogether() }, onOpenSystem = { nav.openSystem() }, onOpenPpsspp = {
                 context.packageManager.getLaunchIntentForPackage("org.ppsspp.ppsspp")?.let { context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            }, onOpenRetroArch = { openRetroArchMenu(context) })
+            }, onOpenRetroArch = { openRetroArchMenu(context) }, streamViewerOpen = streamViewerOpen)
         }
     }
 }

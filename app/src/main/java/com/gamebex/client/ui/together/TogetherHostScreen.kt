@@ -65,6 +65,9 @@ import com.gamebex.client.ui.console.screenFocus
 /** Test tag on the host's primary (A) button. */
 internal const val HOST_PRIMARY_TAG = "together-host-primary"
 
+/** Test tag on the host's "Use <mode> instead" button. */
+internal const val HOST_ALT_MODE_TAG = "together-host-alt-mode"
+
 internal fun togetherPlatformName(folder: String): String = PlatformRegistry.byFolder[folder]?.display ?: folder
 
 internal fun togetherSubtitle(folder: String, mode: TogetherMode?): String? {
@@ -264,6 +267,8 @@ fun TogetherHostScreen(
         HostStep.IN_GAME -> if (v?.linkLost == true) "" else TogetherCopy.playAgain
         else -> ""
     }
+    // Before a guest joins, X (or a tap) hosts the game in its next mode instead.
+    val altMode = v?.altModes?.firstOrNull()?.takeIf { v.step == HostStep.WAITING || v.step == HostStep.NOT_READY }
     val secondaryLabel = when (v?.step) {
         HostStep.JOINED, HostStep.LAUNCHING, HostStep.IN_GAME -> TogetherCopy.end
         else -> TogetherCopy.cancel
@@ -286,6 +291,7 @@ fun TogetherHostScreen(
         if (showPrimary && primaryEnabled && primaryLabel.isNotBlank()) add(ControllerHint(ControllerGlyph.A, primaryLabel))
         add(ControllerHint(ControllerGlyph.B, secondaryLabel))
         if (v?.step == HostStep.JOINED) add(ControllerHint(ControllerGlyph.Y, TogetherCopy.removeHint))
+        altMode?.let { add(ControllerHint(ControllerGlyph.X, TogetherCopy.useModeInstead(it))) }
     }
     LaunchedEffect(hintList) { hints.set(hintList) }
     Box(
@@ -294,6 +300,7 @@ fun TogetherHostScreen(
             onA = { if (primaryEnabled) primary(); true },
             onB = { controller.end(); true },
             onY = { if (v?.step == HostStep.JOINED) { controller.hostRemoveGuest(); true } else false },
+            onX = { altMode?.let { controller.hostSwitchMode(it); true } ?: false },
             onStart = { if (primaryEnabled) primary(); true },
         ),
     ) {
@@ -314,6 +321,8 @@ fun TogetherHostScreen(
                         when (v?.step) {
                             HostStep.NOT_READY -> v?.problem?.text
                             HostStep.WAITING -> TogetherCopy.hostWaitingSub
+                            // "Streaming to Sam · 60 fps · 7.9 Mbps".
+                            HostStep.IN_GAME -> v?.streamLine
                             else -> null
                         }, null,
                     )
@@ -342,6 +351,14 @@ fun TogetherHostScreen(
                         PrimaryConsoleAction(primaryLabel, primaryEnabled, { if (primaryEnabled) primary() }, enabled = primaryEnabled, modifier = Modifier.heightIn(min = g.x(84)).testTag(HOST_PRIMARY_TAG))
                     }
                     SecondaryConsoleAction(secondaryLabel, false, { controller.end() }, Modifier.heightIn(min = g.x(84)))
+                    altMode?.let { mode ->
+                        SecondaryConsoleAction(
+                            TogetherCopy.useModeInstead(mode),
+                            false,
+                            { controller.hostSwitchMode(mode) },
+                            Modifier.heightIn(min = g.x(84)).testTag(HOST_ALT_MODE_TAG),
+                        )
+                    }
                 }
                 v?.message?.let {
                     Text(it, color = ConsoleColors.Warning, fontSize = g.t(16), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.stackY(580).width(g.x(560)))

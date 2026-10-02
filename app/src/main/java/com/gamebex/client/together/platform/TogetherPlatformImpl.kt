@@ -85,7 +85,12 @@ class TogetherPlatformImpl(
             val (id, title, text) = when (alert) {
                 is TogetherAlert.RoomOpen -> Triple(43, TogetherCopy.alertRoomOpenTitle(alert.hostName), TogetherCopy.alertRoomOpenText(raMenuButton()))
                 is TogetherAlert.PeerLeft -> Triple(44, TogetherCopy.peerLeft(alert.name), TogetherCopy.alertTapToOpen)
-                is TogetherAlert.LinkLost -> Triple(44, TogetherCopy.linkLost(alert.name), TogetherCopy.alertTapToOpen)
+                is TogetherAlert.LinkLost -> Triple(
+                    44,
+                    alert.streamGraceS?.let { TogetherCopy.streamLinkLostHost(alert.name, it) } ?: TogetherCopy.linkLost(alert.name),
+                    TogetherCopy.alertTapToOpen,
+                )
+                is TogetherAlert.PeerSilent -> Triple(44, TogetherCopy.streamPeerSilent(alert.name), TogetherCopy.alertTapToOpen)
                 is TogetherAlert.TapToStart -> Triple(45, TogetherCopy.alertTapToStartTitle(alert.hostName), TogetherCopy.alertTapToStartText)
             }
             notifications?.notify(
@@ -107,6 +112,7 @@ class TogetherPlatformImpl(
     override fun cancelAlerts() {
         runCatching {
             notifications?.cancel(43)
+            notifications?.cancel(44)
             notifications?.cancel(45)
         }
     }

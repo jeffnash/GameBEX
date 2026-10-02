@@ -35,6 +35,9 @@ import com.gamebex.client.together.TOGETHER_PROTO
 import com.gamebex.client.together.DownloadResult
 import com.gamebex.client.together.DownloadState
 import com.gamebex.client.together.net.JoinLink
+import com.gamebex.client.stream.StreamEndpoint
+import com.gamebex.client.stream.StreamToken
+import com.gamebex.client.stream.proto.StreamWire
 import com.gamebex.client.together.proto.BlobSink
 import java.io.File
 import java.util.Collections
@@ -201,8 +204,12 @@ internal class GuestEngine(
     private var lastCoreProgress: Int? = null
     private var lastCoreProgressAtNs = 0L
     private var resources: SessionResources? = null
-    /** Validated dialed address, actor-owned; emulator config uses this, not Offer.hostAddress. */
+ /** Validated dialed address, actor-owned; emulator config uses this, not Offer.hostAddress. */
     private var playAddress: String? = null
+ /** STREAM: the host's last StreamReady; the viewer reopens with it. */
+    private var streamReady: LinkMsg.StreamReady? = null
+ /** STREAM: completed by the StreamReady of the round being launched. */
+    private var streamSignal = CompletableDeferred<LinkMsg.StreamReady>()
     private val coreName = Regex("^[a-z0-9_]+$")
 
     init {
@@ -221,7 +228,7 @@ internal class GuestEngine(
         }
     }
 
-    /** Refreshes the cached player name without doing Settings/network work on the caller. */
+ /** Refreshes the cached player name without doing Settings/network work on the caller. */
     internal fun refreshPlayerName(): Job = scope.launch {
             try {
                 myName = withContext(ioDispatcher) { platform.playerName() }
@@ -237,13 +244,13 @@ internal class GuestEngine(
         commitJoin(target)
     }
 
-    /** Sets CONNECTING on the caller thread without entering the actor. */
+ /** Sets CONNECTING on the caller thread without entering the actor. */
     internal fun prepareJoin(target: NearbyHost) {
         val token = sessionToken.incrementAndGet()
         replaceView(token, GuestView(GuestStep.CONNECTING, target.name))
     }
 
-    /** Starts the join after the other engine has finished ending. */
+ /** Starts the join after the other engine has finished ending. */
     internal fun commitJoin(target: NearbyHost) {
         post(Input.Join(target) {})
     }
@@ -260,7 +267,7 @@ internal class GuestEngine(
         post(Input.End(publishedToken(), null))
     }
 
-    /** Completes only after this engine has run its ordered end cleanup. */
+ /** Completes only after this engine has run its ordered end cleanup. */
     internal suspend fun endAndAwait() {
         val done = CompletableDeferred<Unit>()
         inputs.send(Input.End(publishedToken(), done))
@@ -347,6 +354,8 @@ internal class GuestEngine(
         linkOpen = false
         byeReceived = false
         playAddress = null
+        streamReady = null
+        streamSignal = CompletableDeferred()
         resources = SessionResources()
         replaceView(token, GuestView(GuestStep.CONNECTING, input.target.name))
         val startedEpoch = epoch
@@ -402,6 +411,7 @@ internal class GuestEngine(
                         appVersion = platform.appVersion(),
                         raVersion = platform.packageVersion("com.retroarch.aarch64"),
                         ppssppVersion = platform.packageVersion("org.ppsspp.ppsspp"),
+                        streamProto = StreamWire.VERSION,
                     )
                 }
                 withContext(ioDispatcher) { input.link.send(hello) }
@@ -479,7 +489,7 @@ internal class GuestEngine(
                 sessionCore = when (message.mode) {
                     TogetherMode.RA_NETPLAY -> message.game.core
                     TogetherMode.GB_LINK -> "gambatte"
-                    TogetherMode.PSP_ADHOC -> null
+                    TogetherMode.PSP_ADHOC, TogetherMode.STREAM -> null
                 }
                 _view.value = _view.value?.copy(
                     hostName = hostName(),
@@ -507,6 +517,7 @@ internal class GuestEngine(
             is LinkMsg.CoreBegin -> handleCoreBegin(message)
             is LinkMsg.CoreEnd -> handleCoreEnd(message)
             is LinkMsg.CoreUnavailable -> if (message.sessionId == offer?.sessionId) handleCoreUnavailable()
+            is LinkMsg.StreamReady -> handleStreamReady(message)
             is LinkMsg.Ping, is LinkMsg.Pong, is LinkMsg.GuestState, is LinkMsg.CoreRequest -> Unit
         }
     }
@@ -529,17 +540,21 @@ internal class GuestEngine(
         round = message.round
         lastLaunchFailed = false
         liveSignal = CompletableDeferred()
+        streamSignal = CompletableDeferred()
+        val signal = streamSignal
         val launchEpoch = epoch
         val launchHostName = hostName()
         val selectedPlayerName = myName
         val selectedCore = sessionCore
         val mode = selectedOffer.mode
+ // A STREAM guest has nothing to count down to; it waits for the host's stream.
+        val countdownS = if (mode == TogetherMode.STREAM) 0 else timing.countdownS
         _view.value = _view.value?.copy(
             step = GuestStep.LAUNCHING,
             phase = _view.value?.phase,
             problem = null,
             instructions = TogetherCopy.guestInstructions(mode, launchHostName, platform.raMenuButton()),
-            countdown = timing.countdownS,
+            countdown = if (countdownS > 0) countdownS else null,
             linkLost = false,
             message = null,
         )
@@ -547,12 +562,19 @@ internal class GuestEngine(
         launchStep {
             var elapsedMs = 0L
             try {
-                repeat(timing.countdownS.coerceAtLeast(0)) { i ->
-                    post(Input.Countdown(launchEpoch, timing.countdownS - i))
+                repeat(countdownS.coerceAtLeast(0)) { i ->
+                    post(Input.Countdown(launchEpoch, countdownS - i))
                     delay(1_000L)
                     elapsedMs += 1_000L
                 }
-                if (mode != TogetherMode.RA_NETPLAY) {
+                var ready: LinkMsg.StreamReady? = null
+                if (mode == TogetherMode.STREAM) {
+                    ready = withTimeoutOrNull(timing.launchWaitMs) { signal.await() }
+                    if (ready == null) {
+                        post(Input.GuestLaunched(launchEpoch, message.round, EmuRouter.Outcome.Failed(TogetherCopy.streamNotReady)))
+                        return@launchStep
+                    }
+                } else if (mode != TogetherMode.RA_NETPLAY) {
                     val remaining = (timing.launchWaitMs - elapsedMs).coerceAtLeast(0L)
                     withTimeoutOrNull(remaining) { liveSignal.await() }
                 }
@@ -574,6 +596,7 @@ internal class GuestEngine(
                                         core = selectedCore,
                                         hostAddress = selectedAddress,
                                         playerName = selectedPlayerName,
+                                        stream = ready?.let { endpointFor(it, selectedAddress, launchHostName) },
                                     ),
                                 )
                             }
@@ -678,6 +701,75 @@ internal class GuestEngine(
         _view.value = _view.value?.copy(message = TogetherCopy.roomOpen(hostName()))
     }
 
+    private fun handleStreamReady(message: LinkMsg.StreamReady) {
+        if (message.sessionId != offer?.sessionId || message.round != round) return
+        if (message.proto != StreamWire.VERSION || !StreamToken.isValid(message.token)) {
+            log("rejected stream_ready proto=${message.proto}")
+            return
+        }
+        streamReady = message
+        streamSignal.complete(message)
+    }
+
+ /** The guest closed its viewer while the host still streams; open it again. */
+    private fun reopenStream() {
+        val ready = streamReady ?: return
+        val selectedOffer = offer ?: return
+        val selectedLocal = local ?: return
+        val address = playAddress ?: return
+        val name = hostName()
+        val playerName = myName
+        launchSession {
+            val outcome = try {
+                withContext(ioDispatcher) {
+                    emulators.launch(
+                        TogetherLaunch(
+                            sessionId = selectedOffer.sessionId,
+                            role = Role.GUEST,
+                            mode = TogetherMode.STREAM,
+                            game = selectedLocal,
+                            core = null,
+                            hostAddress = address,
+                            playerName = playerName,
+                            stream = endpointFor(ready, address, name),
+                        ),
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (t: Throwable) {
+                log(t)
+                EmuRouter.Outcome.Failed(t.message ?: TogetherCopy.noWifi)
+            }
+            if (outcome !is EmuRouter.Outcome.Launched) log("stream reopen failed: $outcome")
+        }
+    }
+
+ /** The viewer connects to the dialed host address, never to one the host names. */
+    private fun endpointFor(ready: LinkMsg.StreamReady, address: String, name: String) = StreamEndpoint(
+        host = address,
+        mediaPort = ready.mediaPort,
+        inputPort = ready.inputPort,
+        token = ready.token,
+        width = ready.width,
+        height = ready.height,
+        audio = ready.audio,
+        hostName = name,
+    )
+
+ /** STREAM guests never run the game: a row-less stand-in carries its title and folder. */
+    private fun streamStandIn(o: LinkMsg.Offer): GameEntity = GameEntity(
+        id = 0,
+        title = o.game.title,
+        folder = o.game.folder,
+        volumeId = "",
+        relPath = "",
+        fileName = o.game.fileName,
+        sizeBytes = o.game.fileSize,
+        mtimeMs = 0,
+        ext = o.game.fileName.substringAfterLast('.', ""),
+    )
+
     private suspend fun handleAct(action: TogetherAction) {
         val current = _view.value ?: return
         when (action) {
@@ -694,6 +786,7 @@ internal class GuestEngine(
             TogetherAction.DOWNLOAD -> if (current.step == GuestStep.ACTION_NEEDED) startDownload()
             TogetherAction.INSTALL_CORE -> if (current.step == GuestStep.ACTION_NEEDED) startCoreInstall()
             TogetherAction.COPY_CORE -> if (current.step == GuestStep.ACTION_NEEDED) startCoreCopy()
+            TogetherAction.OPEN_STREAM -> if (current.step == GuestStep.IN_GAME && offer?.mode == TogetherMode.STREAM) reopenStream()
         }
     }
 
@@ -770,12 +863,20 @@ internal class GuestEngine(
     private fun sideloadAllowed(mode: TogetherMode, core: String): Boolean = when (mode) {
         TogetherMode.RA_NETPLAY -> core in TogetherCaps.RA_NETPLAY_CORES
         TogetherMode.GB_LINK -> core == "gambatte"
-        TogetherMode.PSP_ADHOC -> false
+        TogetherMode.PSP_ADHOC, TogetherMode.STREAM -> false
     }
 
     private suspend fun runPrepChain(snapshot: PrepSnapshot): ChainResult {
         val selectedOffer = snapshot.offer
         val mode = snapshot.mode
+ // A STREAM guest needs no game, emulator or core, only a phone that can watch.
+        if (mode == TogetherMode.STREAM) {
+            val stand = streamStandIn(selectedOffer)
+            return when (val readiness = emulators.readiness(mode, Role.GUEST, stand, null)) {
+                Readiness.Ready -> ChainResult.Ready(stand, coreMissing = false)
+                else -> ChainResult.Stop(GuestStep.ACTION_NEEDED, GuestPhase.NEEDS_SETUP, TogetherCopy.problemFor(readiness), local = stand)
+            }
+        }
         val clearPick = booleanArrayOf(false)
         val foundLocal = findLocalGame(snapshot, clearPick)
         fun done(result: ChainResult): ChainResult {
@@ -1126,8 +1227,8 @@ internal class GuestEngine(
         coreRequestTimer = null
         coreRequestGeneration += 1
         val expected = sessionCore ?: return
-        // isSafeCoreBuild pins build.core to expected. The allowlist check is defense in
-        // depth: Offer receipt already rejected an off-allowlist session core.
+ // isSafeCoreBuild pins build.core to expected. The allowlist check is defense in
+ // depth: Offer receipt already rejected an off-allowlist session core.
         if (message.build != hostBuild || !TogetherSupport.isSafeCoreBuild(message.build, expected) || !sideloadAllowed(selectedOffer.mode, expected)) {
             handleCoreFailure()
             return
@@ -1362,7 +1463,7 @@ internal class GuestEngine(
 
     private fun hostName(): String = _view.value?.hostName ?: hostHello?.name ?: target?.name ?: TogetherCopy.otherPhone
 
-    /** The dialed address becomes the emulator target, so it must be private too; loopback pairs only with loopback. */
+ /** The dialed address becomes the emulator target, so it must be private too; loopback pairs only with loopback. */
     private fun acceptedHostAddress(hostAddress: String, currentLink: Link): Boolean {
         val remote = currentLink.remoteAddress
         if (isLoopbackHost(remote) || isLoopbackHost(hostAddress)) return isLoopbackHost(remote) && isLoopbackHost(hostAddress)

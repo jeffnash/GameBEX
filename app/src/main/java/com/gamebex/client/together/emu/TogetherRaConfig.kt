@@ -71,7 +71,8 @@ object TogetherRaConfig {
             TogetherMode.GB_LINK -> {
                 put("input_netplay_host_toggle_btn", "nul")
             }
-            TogetherMode.PSP_ADHOC -> Unit
+            // STREAM writes its own session config (StreamRaConfig).
+            TogetherMode.PSP_ADHOC, TogetherMode.STREAM -> Unit
         }
     }
 
@@ -92,7 +93,7 @@ object TogetherRaConfig {
             }
             append("gambatte_show_gb_link_settings = \"enabled\"\n")
         }
-        TogetherMode.PSP_ADHOC -> ""
+        TogetherMode.PSP_ADHOC, TogetherMode.STREAM -> ""
     }
 
     fun gbIpDigits(ipv4: String): List<String> {

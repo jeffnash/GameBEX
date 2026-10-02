@@ -43,6 +43,7 @@ class FakeTogetherController : TogetherController {
     var startedBrowsing = 0
     var stoppedBrowsing = 0
     var ended = 0
+    val switches = mutableListOf<TogetherMode>()
 
     fun setHost(value: HostView?) { hostFlow.value = value }
     fun setGuest(value: GuestView?) { guestFlow.value = value }
@@ -56,6 +57,7 @@ class FakeTogetherController : TogetherController {
     override fun hostStart() { hostStarts++ }
     override fun hostRemoveGuest() { hostRemoves++; hostFlow.value = hostFlow.value?.copy(guestName = null, guestPhase = null) }
     override fun hostPlayAgain() { hostPlayAgains++ }
+    override fun hostSwitchMode(mode: TogetherMode) { switches += mode }
     override fun join(target: NearbyHost) { guestFlow.value = GuestView(GuestStep.CONNECTING, target.name) }
     override fun joinAddress(text: String): String? {
         val parsed = JoinLink.parseAddress(text) ?: return TogetherCopy.addressInvalid

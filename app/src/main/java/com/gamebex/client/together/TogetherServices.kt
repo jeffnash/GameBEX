@@ -3,6 +3,7 @@ package com.gamebex.client.together
 import com.gamebex.client.data.Emu
 import com.gamebex.client.data.local.GameEntity
 import com.gamebex.client.launch.EmuRouter
+import com.gamebex.client.stream.StreamEndpoint
 import java.io.File
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.flow.Flow
@@ -26,6 +27,8 @@ data class TogetherTiming(
     val progressThrottleMs: Long = 1_000L,
     val downloadTickMs: Long = 1_000L,
     val downloadGiveUpMs: Long = 30L * 60_000L,
+ /** STREAM: how long the host keeps streaming after the guest's link drops, in case the guest comes back. */
+    val streamLinkGraceMs: Long = 15_000L,
 )
 
 interface LinkTransport {
@@ -92,6 +95,10 @@ data class TogetherLaunch(
  /** The host's LAN IPv4 (the host passes its own). */
     val hostAddress: String,
     val playerName: String,
+ /** STREAM guest only: where the viewer connects. */
+    val stream: StreamEndpoint? = null,
+ /** STREAM host on RetroArch only: the session config reserving player 2 (StreamPlayer2.prepare). */
+    val p2Config: File? = null,
 )
 
 sealed interface Readiness {
@@ -191,7 +198,10 @@ interface Discovery {
 sealed interface TogetherAlert {
     data class RoomOpen(val hostName: String, val mode: TogetherMode) : TogetherAlert
     data class PeerLeft(val name: String) : TogetherAlert
-    data class LinkLost(val name: String) : TogetherAlert
+ /** [streamGraceS] is set when a running stream stays up that long for the guest to come back. */
+    data class LinkLost(val name: String, val streamGraceS: Int? = null) : TogetherAlert
+ /** STREAM: the guest's phone stopped sending input while the stream is up (a Wi-Fi drop the link hasn't noticed yet). */
+    data class PeerSilent(val name: String) : TogetherAlert
  /** A launch or core install is waiting for GameBEX to be on screen. */
     data class TapToStart(val hostName: String) : TogetherAlert
 }
@@ -241,6 +251,8 @@ interface TogetherController {
     fun hostStart()
     fun hostRemoveGuest()
     fun hostPlayAgain()
+ /** Re-checks the hosted game in [mode] (one of HostView.altModes); only before a guest joins. */
+    fun hostSwitchMode(mode: TogetherMode) {}
  /** Sets guest to GuestView(CONNECTING, target.name, …) synchronously, then starts. */
     fun join(target: NearbyHost)
  /** Null when joining started; otherwise the error line to show. */

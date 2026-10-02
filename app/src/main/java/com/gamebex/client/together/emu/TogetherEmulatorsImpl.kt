@@ -21,6 +21,13 @@ import com.gamebex.client.together.TogetherLaunch
 import com.gamebex.client.together.TogetherMode
 import com.gamebex.client.together.TogetherEmulators
 import com.gamebex.client.together.TogetherSupport
+import android.os.Build
+import com.gamebex.client.stream.StreamCaps
+import com.gamebex.client.stream.StreamEmus
+import com.gamebex.client.stream.guest.StreamGuestRuntime
+import com.gamebex.client.stream.guest.VideoDecoder
+import com.gamebex.client.stream.host.StreamShellClient
+import com.gamebex.client.stream.p2.StreamPlayer2Impl
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -37,7 +44,42 @@ class TogetherEmulatorsImpl(ctx: Context) : TogetherEmulators {
         return when (mode) {
             TogetherMode.RA_NETPLAY, TogetherMode.GB_LINK -> readinessRetroArch(mode, role, game, core)
             TogetherMode.PSP_ADHOC -> readinessPpsspp(game)
+            TogetherMode.STREAM -> if (role == Role.HOST) readinessStreamHost(game) else readinessStreamGuest()
         }
+    }
+
+    /** Checks Android 13, Shizuku, a shell that can make the pad, capture and encode, then the game's own emulator. */
+    private suspend fun readinessStreamHost(game: GameEntity): Readiness {
+        if (Build.VERSION.SDK_INT < StreamCaps.MIN_HOST_SDK) return Readiness.Blocked(TogetherCopy.streamNeedsAndroid13)
+        when (ShizukuFiles.state(context)) {
+            ShizukuFiles.State.NOT_RUNNING -> return Readiness.NeedsShizuku(false)
+            ShizukuFiles.State.NOT_GRANTED -> return Readiness.NeedsShizuku(true)
+            ShizukuFiles.State.OUTDATED,
+            ShizukuFiles.State.UNAVAILABLE,
+            -> return Readiness.Blocked(TogetherCopy.shizukuRequired)
+            ShizukuFiles.State.READY -> Unit
+        }
+        val probe = StreamShellClient.forApp(context).probe()
+        when {
+            probe.sdk == 0 -> return Readiness.Blocked(TogetherCopy.streamShellNoAnswer)
+            !probe.uhid && !probe.hidTool -> return Readiness.Blocked(TogetherCopy.streamNoController)
+            !probe.displayApi -> return Readiness.Blocked(TogetherCopy.streamNoScreen)
+            !probe.avcEncoder -> return Readiness.Blocked(TogetherCopy.streamNoEncoder)
+        }
+        val emu = StreamEmus.emuFor(game) ?: return Readiness.Blocked(TogetherCopy.notSupported)
+        if (emu == Emu.RETROARCH) return readinessRetroArch(TogetherMode.STREAM, Role.HOST, game, StreamEmus.raCore(game))
+        if (!EmuRouter.isInstalled(context.packageManager, emu.pkg)) return Readiness.NeedsEmulator(emu)
+        return when (val preflight = EmuRouter.preflight(context, game)) {
+            is EmuRouter.Preflight.Stop -> Readiness.Blocked(TogetherCopy.outcomeText(preflight.outcome))
+            is EmuRouter.Preflight.Ok -> Readiness.Ready
+        }
+    }
+
+    /** The guest runs no emulator, so it needs only Android 10 and an H.264 decoder. */
+    private fun readinessStreamGuest(): Readiness = when {
+        Build.VERSION.SDK_INT < StreamCaps.MIN_GUEST_SDK -> Readiness.Blocked(TogetherCopy.streamNeedsAndroid10)
+        !VideoDecoder.available() -> Readiness.Blocked(TogetherCopy.streamNoDecoder)
+        else -> Readiness.Ready
     }
 
     private suspend fun readinessRetroArch(mode: TogetherMode, role: Role, game: GameEntity, core: String?): Readiness {
@@ -149,6 +191,16 @@ class TogetherEmulatorsImpl(ctx: Context) : TogetherEmulators {
     }
 
     override suspend fun launch(req: TogetherLaunch): EmuRouter.Outcome {
+        // A STREAM guest opens the viewer; it has no game to launch.
+        if (req.mode == TogetherMode.STREAM && req.role == Role.GUEST) {
+            val endpoint = req.stream ?: return EmuRouter.Outcome.Failed(TogetherCopy.streamNotReady)
+            return try {
+                StreamGuestRuntime.open(context, endpoint)
+                EmuRouter.Outcome.Launched(TogetherCopy.modeLabel(TogetherMode.STREAM), context.packageName)
+            } catch (e: RuntimeException) {
+                EmuRouter.Outcome.Failed(TogetherCopy.streamCantOpen(endpoint.hostName))
+            }
+        }
         val outcome = EmuRouter.play(context, req.game, together = req)
         if (outcome is EmuRouter.Outcome.Launched) {
             (context.applicationContext as GameBexApp).noteLaunch(req.game.id, outcome.emuPkg)
@@ -158,5 +210,8 @@ class TogetherEmulatorsImpl(ctx: Context) : TogetherEmulators {
 
     override suspend fun endSession() {
         PpssppNetConfig.forApp(context).restorePending()
+        // Dolphin's player-2 settings are restored here too, which also covers a crash.
+        runCatching { StreamPlayer2Impl.forApp(context).restore() }
+        runCatching { StreamGuestRuntime.close() }
     }
 }

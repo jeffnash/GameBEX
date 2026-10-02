@@ -11,6 +11,8 @@ import com.gamebex.client.together.net.LiveProbesImpl
 import com.gamebex.client.together.proto.SocketTransport
 import com.gamebex.client.together.session.TogetherLibraryImpl
 import com.gamebex.client.together.TogetherController
+import com.gamebex.client.stream.host.StreamShellClient
+import com.gamebex.client.stream.p2.StreamPlayer2Impl
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,6 +52,8 @@ object TogetherRuntime {
             ),
             discovery = TogetherNsd(app, prefs.deviceId),
             platform = TogetherPlatformImpl(app, prefs),
+            streamHost = StreamShellClient.forApp(app),
+            player2 = StreamPlayer2Impl.forApp(app),
         )
     }
 }

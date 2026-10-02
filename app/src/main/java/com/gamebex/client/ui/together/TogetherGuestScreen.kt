@@ -58,6 +58,8 @@ fun TogetherGuestScreen(
     onOpenSystem: () -> Unit,
     onOpenPpsspp: () -> Unit,
     onOpenRetroArch: () -> Unit = {},
+    /** STREAM: false while the viewer is closed, so "Open stream" shows. */
+    streamViewerOpen: Boolean = true,
 ) {
     val view by controller.guest.collectAsState()
     val v = view
@@ -84,10 +86,12 @@ fun TogetherGuestScreen(
     val visibleStart = if (picking) togetherWindowStart(selected, choices.size, 6, pickerStart) else pickerStart
     SideEffect { if (picking && pickerStart != visibleStart) pickerStart = visibleStart }
     val action = v?.problem?.action
+    val streamClosed = v?.step == GuestStep.IN_GAME && v.mode == com.gamebex.client.together.TogetherMode.STREAM && !streamViewerOpen
     val primaryLabel = when (v?.step) {
         GuestStep.ACTION_NEEDED -> action?.let(TogetherCopy::actionLabel)
         GuestStep.INSTALLING_CORE -> TogetherCopy.recheck
         GuestStep.ENDED -> TogetherCopy.back
+        GuestStep.IN_GAME -> if (streamClosed) TogetherCopy.openStream else null
         else -> null
     }
     val showLeave = v != null && v.step != GuestStep.ENDED
@@ -104,6 +108,7 @@ fun TogetherGuestScreen(
             }
             v?.step == GuestStep.INSTALLING_CORE -> controller.act(TogetherAction.RECHECK)
             v?.step == GuestStep.ENDED -> onBack()
+            streamClosed -> controller.act(TogetherAction.OPEN_STREAM)
         }
     }
     val hintsList = buildList {
@@ -112,6 +117,7 @@ fun TogetherGuestScreen(
             v?.step == GuestStep.ACTION_NEEDED -> action?.let { add(ControllerHint(ControllerGlyph.A, TogetherCopy.actionLabel(it))) }
             v?.step == GuestStep.INSTALLING_CORE -> add(ControllerHint(ControllerGlyph.A, TogetherCopy.recheck))
             v?.step == GuestStep.ENDED -> add(ControllerHint(ControllerGlyph.A, TogetherCopy.back))
+            streamClosed -> add(ControllerHint(ControllerGlyph.A, TogetherCopy.openStream))
         }
         // B is hidden in ENDED: A is Back there, and B → onBack() still works silently.
         if (showLeave) add(ControllerHint(ControllerGlyph.B, TogetherCopy.leave))
@@ -155,7 +161,8 @@ fun TogetherGuestScreen(
                             GuestStep.DOWNLOADING, GuestStep.CORE_SYNC -> v?.progress?.let { "$it%" }
                             GuestStep.INSTALLING_CORE -> TogetherCopy.installingCore
                             GuestStep.PICKING_GAME -> TogetherCopy.pickSub
-                            GuestStep.IN_GAME, GuestStep.ENDED -> v?.message
+                            GuestStep.IN_GAME -> if (streamClosed) TogetherCopy.streamClosed else v?.message
+                            GuestStep.ENDED -> v?.message
                             else -> null
                         },
                         null,

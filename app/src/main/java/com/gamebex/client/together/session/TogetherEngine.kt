@@ -14,6 +14,10 @@ import com.gamebex.client.together.TogetherPlatform
 import com.gamebex.client.together.TogetherTiming
 import com.gamebex.client.together.GuestView
 import com.gamebex.client.together.net.JoinLink
+import com.gamebex.client.stream.NoStreamHost
+import com.gamebex.client.stream.NoStreamPlayer2
+import com.gamebex.client.stream.StreamHost
+import com.gamebex.client.stream.StreamPlayer2
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
@@ -43,8 +47,12 @@ class TogetherEngine(
     private val timing: TogetherTiming = TogetherTiming(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+ /** STREAM host: the shell-uid stream process. */
+    streamHost: StreamHost = NoStreamHost,
+ /** STREAM host: player 2's binding. */
+    player2: StreamPlayer2 = NoStreamPlayer2,
 ) : TogetherController {
-    private val hostEngine = HostEngine(transport, emulators, library, discovery, platform, timing, scope, ioDispatcher)
+    private val hostEngine = HostEngine(transport, emulators, library, discovery, platform, timing, scope, ioDispatcher, streamHost, player2)
     private val guestEngine = GuestEngine(transport, probes, emulators, library, platform, timing, scope, ioDispatcher)
 
     override val nearby: StateFlow<List<NearbyHost>> = discovery.found
@@ -129,6 +137,7 @@ class TogetherEngine(
     override fun hostStart() = hostEngine.start()
     override fun hostRemoveGuest() = hostEngine.removeGuest()
     override fun hostPlayAgain() = hostEngine.playAgain()
+    override fun hostSwitchMode(mode: com.gamebex.client.together.TogetherMode) = hostEngine.switchMode(mode)
 
     override fun join(target: NearbyHost) {
         dismissed.value = dismissed.value + target.key
@@ -175,11 +184,11 @@ class TogetherEngine(
         }
     }
 
-    /**
-     * The first idle foreground restores a PPSSPP session that died with the
-     * process. That restore force-stops a backgrounded PPSSPP; that's
-     * acceptable because the session already ended abnormally.
-     */
+ /**
+ * The first idle foreground restores a PPSSPP session that died with the
+ * process. That restore force-stops a backgrounded PPSSPP; that's
+ * acceptable because the session already ended abnormally.
+ */
     override fun onForeground() {
         refreshAddress()
         hostEngine.onForeground()
@@ -206,11 +215,11 @@ class TogetherEngine(
         scope.launch { refreshNameNow() }
     }
 
-    /**
-     * Saves the name and republishes [myName]. The engines read platform.playerName()
-     * at their own refresh points (browse, foreground, setup, connect), so a new
-     * session uses the new name; one already running keeps the name it started with.
-     */
+ /**
+ * Saves the name and republishes [myName]. The engines read platform.playerName
+ * at their own refresh points (browse, foreground, setup, connect), so a new
+ * session uses the new name; one already running keeps the name it started with.
+ */
     override fun rename(name: String?) {
         scope.launch {
             runCatching { withContext(ioDispatcher) { platform.setCustomName(name) } }

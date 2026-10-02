@@ -20,6 +20,8 @@ import com.gamebex.client.data.local.RomStore
 import com.gamebex.client.net.BiosFetcher
 import com.gamebex.client.ui.UserErrors
 import com.gamebex.client.together.TogetherLaunch
+import com.gamebex.client.stream.StreamEmus
+import com.gamebex.client.together.Role
 import com.gamebex.client.together.TogetherMode
 import com.gamebex.client.together.TogetherSupport
 import com.gamebex.client.together.TogetherCopy
@@ -357,7 +359,32 @@ object EmuRouter {
                     is PpssppNetConfig.ApplyResult.Applied -> fireStandalone(ctx, game, Emu.PPSSPP, req)
                 }
             }
+            TogetherMode.STREAM -> if (req.role == Role.HOST) playStreamHost(ctx, game, req) else Outcome.Blocked(TogetherCopy.streamUnavailable)
         }
+    }
+
+    /**
+     * The Stream host plays as usual. On RetroArch it boots with the
+     * session config that reserves player 2 ([TogetherLaunch.p2Config]), after a
+     * restart so RetroArch reads it; other emulators take Play's own route.
+     */
+    private suspend fun playStreamHost(ctx: Context, game: GameEntity, req: TogetherLaunch): Outcome {
+        val cfg = req.p2Config ?: return playInner(ctx, game, null, fresh = false, together = null)
+        EmuCloser.beforeLaunch(ctx, RA_PKG)
+        if (!isInstalled(ctx.packageManager, RA_PKG)) return Outcome.MissingEmu(Emu.RETROARCH)
+        if (retroArchNeedsFirstRun(ctx)) return Outcome.NeedsSetup(TogetherCopy.retroArchFileAccess)
+        val core = StreamEmus.raCore(game) ?: return Outcome.Blocked(TogetherCopy.notSupported)
+        (CoreSystemFiles.ensure(ctx, core, null) as? CoreSystemFiles.Result.Failed)
+            ?.let { Log.w(TAG, "system files for $core: ${it.reason}") }
+        val cores = RetroCoreProbe.queryInstalledCores(ctx)
+        if (!TogetherSupport.coreConfirmed(core, cores) { InstalledCoreLedger.forApp(ctx).verified(core) != null }) {
+            return Outcome.NeedsSetup(TogetherCopy.needsCore(com.gamebex.client.data.CoreNames.display(core)))
+        }
+        return launchRetroArchSession(
+            stop = { SessionStop.stop(ctx, RA_PKG) },
+            writeConfig = { cfg },
+            fire = { file -> fireRetroArch(ctx, game, core, fresh = false, cfgOverride = file) },
+        )
     }
 
     /**

@@ -4,6 +4,7 @@ import android.content.Context
 import android.hardware.input.InputManager
 import android.util.Log
 import android.view.InputDevice
+import com.gamebex.client.stream.StreamCaps
 
 /**
  * Connected gamepads, as emulators should see them. A Bluetooth pad shows up
@@ -67,10 +68,13 @@ object ControllerRegistry {
      * Real gamepads: gamepad/joystick sources, not virtual. A sub-device name
      * alone never disqualifies (Android may merge the pad under it); it only
      * loses to a plain-named gamepad node of the same pad. One entry per
-     * physical pad. Pure.
+     * physical pad. Stream's "GameBEX Player 2" is never one: it
+     * belongs to the guest, and player 1's setup must not pick it. Pure.
      */
     fun pads(devices: List<DeviceInfo>): List<Pad> {
-        val candidates = devices.filter { !it.isVirtual && ControllerProbe.isGamepadSource(it.sources) }
+        val candidates = devices.filter {
+            !it.isVirtual && it.name != StreamCaps.PAD_NAME && ControllerProbe.isGamepadSource(it.sources)
+        }
         val plain = candidates.filterNot { isSubDevice(it.name) }.map { it.name.trim().lowercase() }.toSet()
         return candidates
             .filterNot { isSubDevice(it.name) && baseName(it.name).lowercase() in plain }

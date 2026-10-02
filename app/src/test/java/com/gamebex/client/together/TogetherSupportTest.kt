@@ -19,9 +19,25 @@ class TogetherSupportTest {
         assertEquals(TogetherMode.GB_LINK, TogetherSupport.modeFor(game("gb", coreOverride = "gambatte")))
         assertEquals(TogetherMode.GB_LINK, TogetherSupport.modeFor(game("gbc", coreOverride = "gambatte")))
         assertNull(TogetherSupport.modeFor(game("gba")))
-        assertNull(TogetherSupport.modeFor(game("ps2")))
+        assertEquals(TogetherMode.STREAM, TogetherSupport.modeFor(game("ps2")))
         assertNull(TogetherSupport.modeFor(game("snes", available = false)))
         assertNull(TogetherSupport.modeFor(game("snes", deletedAtMs = 1)))
+    }
+
+ // Stream covers the systems without a native mode and ranks after any native one.
+    @Test fun streamIsTheFallbackForItsSystems() {
+        for (folder in listOf("n64", "gc", "wii", "psx", "saturn", "dreamcast", "naomi", "3do", "ps2")) {
+            assertEquals(folder, listOf(TogetherMode.STREAM), TogetherSupport.modesFor(game(folder)))
+        }
+        assertEquals(listOf(TogetherMode.RA_NETPLAY), TogetherSupport.modesFor(game("snes")))
+        assertEquals(emptyList<TogetherMode>(), TogetherSupport.modesFor(game("n64", available = false)))
+        assertEquals(emptyList<TogetherMode>(), TogetherSupport.modesFor(game("no-such-system")))
+    }
+
+ // Nothing is verified yet; a verified native mode would come first.
+    @Test fun verifiedNativeModesAreEmptyUntilTheOwnerApproves() {
+        assertTrue(TogetherCaps.VERIFIED_NATIVE.isEmpty())
+        assertNull(TogetherSupport.nativeModeFor(game("psx")))
     }
 
     @Test fun matchFoldersByCore() {
@@ -61,7 +77,7 @@ class TogetherSupportTest {
         assertTrue(TogetherSupport.coreConfirmed("gambatte", setOf("gambatte")) { false })
     }
 
-    // RetroArch that was never opened can't be launched directly.
+ // RetroArch that was never opened can't be launched directly.
     @Test fun retroArchWithoutFileAccessNeedsOpenOnce() {
         assertEquals(
             Readiness.NeedsOpenOnce(com.gamebex.client.data.Emu.RETROARCH),
@@ -77,24 +93,24 @@ class TogetherSupportTest {
         ledgerVerified: Boolean,
     ): Readiness = TogetherSupport.retroArchReadiness(needsFirstRun, preflightStop, "gambatte", probed) { ledgerVerified }
 
-    // A RetroArch netplay host offers its core build, so GameBEX must know it.
+ // A RetroArch netplay host offers its core build, so GameBEX must know it.
     @Test fun netplayHostNeedsACoreBuildGameBexInstalled() {
         val probedOnly = TogetherSupport.retroArchReadiness(false, null, "snes9x", setOf("snes9x"), knownBuildRequired = true) { false }
         assertEquals(Readiness.NeedsCore("snes9x"), probedOnly)
         val recorded = TogetherSupport.retroArchReadiness(false, null, "snes9x", setOf("snes9x"), knownBuildRequired = true) { true }
         assertEquals(Readiness.Ready, recorded)
-        // Everyone else keeps trusting the probe.
+ // Everyone else keeps trusting the probe.
         assertEquals(Readiness.Ready, TogetherSupport.retroArchReadiness(false, null, "snes9x", setOf("snes9x")) { false })
-        // The probe still wins when it says the core is missing.
+ // The probe still wins when it says the core is missing.
         assertEquals(Readiness.NeedsCore("snes9x"), TogetherSupport.retroArchReadiness(false, null, "snes9x", emptySet(), knownBuildRequired = true) { true })
     }
 
-    // RetroArch builds before 2026-07-28 crash as the netplay client (upstream 5fa3573d88).
+ // RetroArch builds before 2026-07-28 crash as the netplay client (upstream 5fa3573d88).
     @Test fun netplayNeedsARetroArchBuiltAfterTheClientCrashFix() {
         val stable = 1763607214L  // 1.22.2, built 2025-11-20
         assertEquals(Readiness.NeedsUpdate(Emu.RETROARCH), TogetherSupport.raNetplayBuildGate(TogetherMode.RA_NETPLAY, stable))
         assertNull(TogetherSupport.raNetplayBuildGate(TogetherMode.RA_NETPLAY, 1790521311L))
-        // Game Boy link never touches netplay; an unknown version never blocks.
+ // Game Boy link never touches netplay; an unknown version never blocks.
         assertNull(TogetherSupport.raNetplayBuildGate(TogetherMode.GB_LINK, stable))
         assertNull(TogetherSupport.raNetplayBuildGate(TogetherMode.RA_NETPLAY, null))
         assertEquals(
@@ -103,7 +119,7 @@ class TogetherSupportTest {
         )
     }
 
-    // RA modes need Shizuku to really restart RetroArch before a session launch.
+ // RA modes need Shizuku to really restart RetroArch before a session launch.
     @Test fun retroArchModesNeedShizukuRunningAndAllowed() {
         assertTrue(TogetherCaps.RA_RESTART_NEEDS_SHIZUKU)
         for (mode in listOf(TogetherMode.RA_NETPLAY, TogetherMode.GB_LINK)) {

@@ -14,5 +14,12 @@
             android:launchMode="singleTop"
             android:screenOrientation="sensorLandscape"
             android:theme="@style/Theme.GameBEX" />
+        <!-- Debug only: Stream test pattern and loopback viewer. -->
+        <activity
+            android:name=".stream.lab.StreamLabActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@style/Theme.GameBEX" />
     </application>
 </manifest>
