@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicLong
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -150,8 +151,8 @@ class StreamHostSessionTest {
         val c = FakeShellComponents()
         val started = session(c, config(level = 2)).start()
         assertTrue(started.ok)
-        assertEquals(1280, started.width)
-        assertEquals(576, started.height)
+        assertEquals(960, started.width)
+        assertEquals(432, started.height)
         assertEquals(StreamCaps.LEVELS[2], c.video.level)
     }
 
@@ -180,26 +181,25 @@ class StreamHostSessionTest {
     }
 
     @Test
-    fun theWholeDisplayIsMirroredWithoutAppCaptureOrWhenTheHostDeclinesIt() {
-        val plain = FakeShellComponents()
-        assertTrue(session(plain).start().ok)
-        assertNull(plain.video.captureTarget)
-
-        val declined = FakeShellComponents()
-        val s = session(declined, config().copy(appCapture = true))
+    fun captureRelayIsRequiredEvenWhenConfigDisablesAppCapture() {
+        val c = FakeShellComponents()
+        val s = session(c, config(level = 1).copy(appCapture = false))
         assertTrue(s.start().ok)
-        s.useMirror()
-        assertEquals(1, declined.video.mirrorRequests)
+        assertNotNull(c.video.captureTarget)
+        val got = mutableListOf<Pair<Int, Int>>()
+        s.setCaptureListener { _, w, h -> got += w to h }
+        assertEquals(listOf(1280 to 576), got)
     }
 
     @Test
-    fun aStoppedSessionIgnoresALateMirrorRequest() {
+    fun decliningCaptureStopsAllStreamResources() {
         val c = FakeShellComponents()
         val s = session(c, config().copy(appCapture = true))
         assertTrue(s.start().ok)
         s.stop()
-        s.useMirror()
-        assertEquals(0, c.video.mirrorRequests)
+        assertTrue(s.stopped)
+        assertTrue(c.video.stopped)
+        assertTrue(c.pad!!.closed)
     }
 
     @Test

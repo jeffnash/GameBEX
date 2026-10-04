@@ -20,19 +20,26 @@ class StreamCaptureActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val id = savedInstanceState?.getString(EXTRA_REQUEST_ID) ?: intent.getStringExtra(EXTRA_REQUEST_ID)
+        answered = savedInstanceState?.getBoolean(EXTRA_ANSWERED) ?: false
         requestId = id
-        if (id == null) {
+        if (id == null || answered) {
             closePrompt()
             return
         }
         StreamAppCapture.attachConsent(id, this) {
             runCatching {
                 val manager = getSystemService(MediaProjectionManager::class.java)
-                val prompt = if (Build.VERSION.SDK_INT >= 34) {
-                    manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForUserChoice())
-                } else {
-                    manager.createScreenCaptureIntent()
-                }
+                val prompt = CaptureIdentity.consentIntent(
+                    Build.VERSION.SDK_INT,
+                    userChoice = {
+                        if (Build.VERSION.SDK_INT >= 34) {
+                            manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForUserChoice())
+                        } else {
+                            error("User-choice capture consent requires Android 14")
+                        }
+                    },
+                    wholeScreen = { manager.createScreenCaptureIntent() },
+                )
                 startActivityForResult(prompt, REQUEST)
             }.onFailure { answer(RESULT_CANCELED, null) }
         }
@@ -40,6 +47,7 @@ class StreamCaptureActivity : Activity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         requestId?.let { outState.putString(EXTRA_REQUEST_ID, it) }
+        outState.putBoolean(EXTRA_ANSWERED, answered)
         super.onSaveInstanceState(outState)
     }
 
@@ -72,5 +80,6 @@ class StreamCaptureActivity : Activity() {
     internal companion object {
         const val EXTRA_REQUEST_ID = "com.gamebex.client.stream.host.CONSENT_REQUEST_ID"
         private const val REQUEST = 1
+        private const val EXTRA_ANSWERED = "consent_answered"
     }
 }

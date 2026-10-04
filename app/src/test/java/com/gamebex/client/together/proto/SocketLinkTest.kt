@@ -6,6 +6,7 @@ import com.gamebex.client.together.LinkEvent
 import com.gamebex.client.together.LinkMsg
 import com.gamebex.client.together.OfferedGame
 import com.gamebex.client.together.Role
+import com.gamebex.client.together.TOGETHER_PROTO
 import com.gamebex.client.together.TogetherMode
 import com.gamebex.client.together.TogetherTiming
 import java.net.ServerSocket
@@ -29,10 +30,10 @@ class SocketLinkTest {
         val timing = TogetherTiming(pingMs = 20, silenceMs = 500)
         val (guest, host) = connected(timing)
         try {
-            guest.send(LinkMsg.Hello(1, Role.GUEST, "guest", "Guest", "1.0"))
+            guest.send(LinkMsg.Hello(TOGETHER_PROTO, Role.GUEST, "guest", "Guest", "1.0"))
             guest.send(LinkMsg.Offer("s", TogetherMode.GB_LINK, OfferedGame("g", "gb", "g.gb", 1), null, "127.0.0.1"))
             guest.send(LinkMsg.Bye(ByeReason.LEFT))
-            assertEquals(LinkMsg.Hello(1, Role.GUEST, "guest", "Guest", "1.0"), receiveMessage(host))
+            assertEquals(LinkMsg.Hello(TOGETHER_PROTO, Role.GUEST, "guest", "Guest", "1.0"), receiveMessage(host))
             assertEquals(LinkMsg.Offer("s", TogetherMode.GB_LINK, OfferedGame("g", "gb", "g.gb", 1), null, "127.0.0.1"), receiveMessage(host))
             assertEquals(LinkMsg.Bye(ByeReason.LEFT), receiveMessage(host))
         } finally {

@@ -30,7 +30,7 @@ import java.nio.ByteBuffer
  * bump and update both phones. Golden vectors are keyed by version and guard every wire encoding.
  */
 object StreamWire {
-    const val VERSION: Int = 1
+    const val VERSION: Int = 2
 
     val MEDIA_MAGIC: ByteArray = byteArrayOf(0x47, 0x42, 0x58, 0x53)
     val INPUT_MAGIC: ByteArray = byteArrayOf(0x47, 0x42, 0x58, 0x49)
@@ -39,10 +39,11 @@ object StreamWire {
     val AUDIO_UDP_MAGIC: ByteArray = byteArrayOf(0x47, 0x42, 0x58, 0x50)
 
     const val TOKEN_BYTES: Int = 16
-    const val HELLO_SIZE: Int = 24
+    const val HELLO_PREFIX_SIZE: Int = 24
+    const val HELLO_SIZE: Int = 32
     const val WELCOME_SIZE: Int = 28
-    const val INPUT_SIZE: Int = 38
-    const val ACK_SIZE: Int = 28
+    const val INPUT_SIZE: Int = 46
+    const val ACK_SIZE: Int = 36
     /** Header of an audio datagram; the PCM follows. */
     const val AUDIO_UDP_HEADER: Int = 32
 
@@ -55,7 +56,7 @@ object StreamWire {
     const val T_PING: Int = 0x10
     const val T_PONG: Int = 0x11
     const val T_KEYFRAME_REQUEST: Int = 0x12
-    const val T_REPORT: Int = 0x13
+    const val T_DELIVERY: Int = 0x14
     const val T_INFO: Int = 0x20
     const val T_BYE: Int = 0x21
 
@@ -68,6 +69,7 @@ object StreamWire {
 
     /** Input packet flag: release everything (the guest is leaving). */
     const val INPUT_FLAG_NEUTRAL: Int = 1
+    const val ACK_FLAG_WROTE: Int = 1
 
     const val BYE_LEAVING: Int = 0
     const val BYE_REPLACED: Int = 1
@@ -75,7 +77,7 @@ object StreamWire {
 }
 
 /** Guest's first bytes on the media connection. */
-class Hello(val version: Int, val token: ByteArray)
+class Hello(val version: Int, val token: ByteArray, val attachId: Long)
 
 /** Host's answer to [Hello]. [audioRate] 0 means the stream has no sound. */
 data class Welcome(
@@ -114,14 +116,7 @@ sealed interface MediaFrame {
     /** Guest asks for an IDR frame (decoder error, reconnect). */
     data object KeyframeRequest : MediaFrame
 
-    /** Guest health, once a second; the host shows it in its status line. */
-    data class Report(
-        val received: Int,
-        val decoded: Int,
-        val rendered: Int,
-        val videoP95Us: Int,
-        val audioUnderruns: Int,
-    ) : MediaFrame
+    data class Delivery(val report: DeliveryWire.Report) : MediaFrame
 
     /** Host changed quality level or bitrate. */
     data class Info(val level: Int, val width: Int, val height: Int, val bitrate: Int) : MediaFrame
@@ -139,13 +134,23 @@ data class InputPacket(
     val seq: Int,
     val sampleNs: Long,
     val state: PadState,
+    val attachId: Long,
 )
 
 /** Host's receipt for an input packet: guest [sampleNs] echoed, host [appliedNs]. */
-data class InputAck(val seq: Int, val sampleNs: Long, val appliedNs: Long)
+data class InputAck(
+    val seq: Int,
+    val sampleNs: Long,
+    val appliedNs: Long,
+    val attachId: Long,
+    val flags: Int = 0,
+) {
+    val wrote: Boolean get() = flags and StreamWire.ACK_FLAG_WROTE != 0
+}
 
 object StreamHandshake {
-    fun encodeHello(token: ByteArray): ByteArray {
+    fun encodeHello(token: ByteArray, attachId: Long): ByteArray {
+        require(attachId != 0L)
         require(token.size == StreamWire.TOKEN_BYTES) { "token must be ${StreamWire.TOKEN_BYTES} bytes" }
         val b = ByteBuffer.allocate(StreamWire.HELLO_SIZE)
         b.put(StreamWire.MEDIA_MAGIC)
@@ -153,14 +158,30 @@ object StreamHandshake {
         b.put(0)
         b.putShort(0)
         b.put(token)
+        b.putLong(attachId)
         return b.array()
     }
 
     /** Null when [bytes] is not a hello (wrong size or magic). */
     fun decodeHello(bytes: ByteArray): Hello? {
-        if (bytes.size != StreamWire.HELLO_SIZE) return null
+        if (bytes.size < StreamWire.HELLO_PREFIX_SIZE) return null
         if (!magic(bytes, StreamWire.MEDIA_MAGIC)) return null
-        return Hello(bytes[4].toInt() and 0xFF, bytes.copyOfRange(8, 8 + StreamWire.TOKEN_BYTES))
+        if (bytes[5] != 0.toByte() || bytes[6] != 0.toByte() || bytes[7] != 0.toByte()) return null
+        val version = bytes[4].toInt() and 0xFF
+        if (version != StreamWire.VERSION) {
+            if (bytes.size != StreamWire.HELLO_PREFIX_SIZE) return null
+            return Hello(version, bytes.copyOfRange(8, 24), 0L)
+        }
+        if (bytes.size != StreamWire.HELLO_SIZE) return null
+        val attachId = ByteBuffer.wrap(bytes, 24, 8).long
+        if (attachId == 0L) return null
+        return Hello(version, bytes.copyOfRange(8, 24), attachId)
+    }
+
+    fun readHello(input: DataInputStream): Hello? {
+        val prefix = readExactly(input, StreamWire.HELLO_PREFIX_SIZE)
+        if ((prefix[4].toInt() and 0xFF) != StreamWire.VERSION) return decodeHello(prefix)
+        return decodeHello(prefix + readExactly(input, 8))
     }
 
     fun encodeWelcome(w: Welcome): ByteArray {
@@ -242,12 +263,8 @@ object MediaFrames {
             it.putLong(frame.t2)
         }
         MediaFrame.KeyframeRequest -> body(StreamWire.T_KEYFRAME_REQUEST, 0) {}
-        is MediaFrame.Report -> body(StreamWire.T_REPORT, 20) {
-            it.putInt(frame.received)
-            it.putInt(frame.decoded)
-            it.putInt(frame.rendered)
-            it.putInt(frame.videoP95Us)
-            it.putInt(frame.audioUnderruns)
+        is MediaFrame.Delivery -> body(StreamWire.T_DELIVERY, DeliveryWire.SIZE) {
+            it.put(DeliveryWire.encode(frame.report))
         }
         is MediaFrame.Info -> body(StreamWire.T_INFO, 9) {
             it.put(frame.level.toByte())
@@ -309,10 +326,9 @@ object MediaFrames {
                 MediaFrame.Pong(b.int, b.long, b.long, b.long)
             }
             StreamWire.T_KEYFRAME_REQUEST -> MediaFrame.KeyframeRequest
-            StreamWire.T_REPORT -> {
-                need(20)
-                MediaFrame.Report(b.int, b.int, b.int, b.int, b.int)
-            }
+            StreamWire.T_DELIVERY -> MediaFrame.Delivery(
+                DeliveryWire.decode(rest(b)) ?: throw IOException("invalid delivery report"),
+            )
             StreamWire.T_INFO -> {
                 need(9)
                 val level = b.get().toInt() and 0xFF
@@ -348,6 +364,8 @@ object MediaFrames {
 
 object InputWire {
     fun encode(p: InputPacket): ByteArray {
+        require(p.attachId != 0L)
+        require(p.flags and StreamWire.INPUT_FLAG_NEUTRAL.inv() == 0)
         val s = p.state.sanitized()
         val b = ByteBuffer.allocate(StreamWire.INPUT_SIZE)
         b.put(StreamWire.INPUT_MAGIC)
@@ -355,6 +373,7 @@ object InputWire {
         b.put(p.flags.toByte())
         b.putShort(0)
         b.putLong(p.key)
+        b.putLong(p.attachId)
         b.putInt(p.seq)
         b.putLong(p.sampleNs)
         b.putShort(s.buttons.toShort())
@@ -377,8 +396,10 @@ object InputWire {
         b.position(4)
         if ((b.get().toInt() and 0xFF) != StreamWire.VERSION) return null
         val flags = b.get().toInt() and 0xFF
-        b.short
+        if (flags and StreamWire.INPUT_FLAG_NEUTRAL.inv() != 0 || b.short.toInt() != 0) return null
         val key = b.long
+        val attachId = b.long
+        if (attachId == 0L) return null
         val seq = b.int
         val sample = b.long
         val buttons = b.short.toInt() and 0xFFFF
@@ -389,16 +410,20 @@ object InputWire {
         val lt = b.get().toInt() and 0xFF
         val rt = b.get().toInt() and 0xFF
         val hat = b.get().toInt() and 0xFF
+        if (b.get() != 0.toByte()) return null
         val state = PadState(buttons, lx, ly, rx, ry, lt, rt, hat).sanitized()
-        return InputPacket(flags, key, seq, sample, state)
+        return InputPacket(flags, key, seq, sample, state, attachId)
     }
 
     fun encodeAck(a: InputAck): ByteArray {
+        require(a.attachId != 0L)
+        require(a.flags and StreamWire.ACK_FLAG_WROTE.inv() == 0)
         val b = ByteBuffer.allocate(StreamWire.ACK_SIZE)
         b.put(StreamWire.ACK_MAGIC)
         b.put(StreamWire.VERSION.toByte())
-        b.put(0)
+        b.put(a.flags.toByte())
         b.putShort(0)
+        b.putLong(a.attachId)
         b.putInt(a.seq)
         b.putLong(a.sampleNs)
         b.putLong(a.appliedNs)
@@ -409,8 +434,13 @@ object InputWire {
         if (length != StreamWire.ACK_SIZE || bytes.size < length) return null
         if (!StreamHandshake.magic(bytes, StreamWire.ACK_MAGIC)) return null
         val b = ByteBuffer.wrap(bytes, 0, length)
-        b.position(8)
-        return InputAck(b.int, b.long, b.long)
+        b.position(4)
+        if ((b.get().toInt() and 0xFF) != StreamWire.VERSION) return null
+        val flags = b.get().toInt() and 0xFF
+        if (flags and StreamWire.ACK_FLAG_WROTE.inv() != 0 || b.short.toInt() != 0) return null
+        val attachId = b.long
+        if (attachId == 0L) return null
+        return InputAck(b.int, b.long, b.long, attachId, flags)
     }
 
     /**

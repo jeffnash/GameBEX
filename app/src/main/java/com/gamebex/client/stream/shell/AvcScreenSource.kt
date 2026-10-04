@@ -1,6 +1,9 @@
 package com.gamebex.client.stream.shell
 
 import android.media.MediaCodec
+import android.media.MediaFormat
+import android.os.Build
+import com.gamebex.client.stream.StreamDebug
 import android.os.Bundle
 import android.util.Log
 import android.view.Surface
@@ -21,11 +24,11 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 class AvcScreenSource(
     private val encoders: () -> List<AvcEncoders.EncoderInfo> = AvcEncoders::list,
+    private val codecDiagnostics: Boolean = StreamDebug.flag("codec_diag"),
 ) : VideoSource {
     private val lock = Any()
     private var codec: MediaCodec? = null
     private var surface: Surface? = null
-    private var mirror: ScreenMirror? = null
     /** App capture: the app renders the game's window into our surface, so no display mirror. */
     private var appTarget: CaptureTarget? = null
     private var drain: Thread? = null
@@ -35,7 +38,10 @@ class AvcScreenSource(
     private val invalidPts = AtomicInteger()
     @Volatile private var running = false
     @Volatile private var sink: VideoSink? = null
-    @Volatile private var configSent = false
+    private val catalog by lazy { encoders() }
+    private var vendorDiscovered = false
+    private var codecEpoch = 0L
+    val eligibleLevels: List<VideoLevel> get() = StreamCaps.LEVELS.filter { AvcEncoders.rank(catalog, it).isNotEmpty() }
     @Volatile private var bitrate = 0
 
     /** The encoder and capture API in use, for logs and the probe. */
@@ -52,7 +58,12 @@ class AvcScreenSource(
             this.sink = sink
             running = true
             restarts = 0
-            openLocked(level, bitrate)
+            try {
+                openLocked(level, bitrate)
+            } catch (f: StreamFailure) {
+                running = false
+                throw f
+            }
         }
     }
 
@@ -82,13 +93,15 @@ class AvcScreenSource(
 
     override fun changeLevel(level: VideoLevel, bitrate: Int) {
         val old: Thread?
+        val reopenGeneration: Int
         synchronized(lock) {
             if (!running) return
             old = closeLocked()
+            reopenGeneration = generation
         }
         old?.join(JOIN_MS)
         synchronized(lock) {
-            if (!running) return
+            if (!running || generation != reopenGeneration || codec != null) return
             try {
                 openLocked(level, bitrate)
             } catch (f: StreamFailure) {
@@ -102,27 +115,10 @@ class AvcScreenSource(
         synchronized(lock) { appTarget = target }
     }
 
-    override fun useMirror() {
-        synchronized(lock) {
-            if (appTarget == null) return
-            appTarget = null
-            val s = surface
-            if (!running || s == null) return
-            try {
-                val m = ScreenMirror.open(level.width, level.height, s)
-                mirror = m
-                captureApi = m.api
-                Log.i(TAG, "video: app capture declined, mirroring the display via ${m.api}")
-            } catch (f: StreamFailure) {
-                running = false
-                sink?.onFailure("mirror: ${f.message}")
-            }
-        }
-    }
-
     /** Configures the first encoder that accepts [level], then starts capture into it. */
     private fun openLocked(level: VideoLevel, bitrate: Int) {
-        val candidates = AvcEncoders.rank(encoders(), level)
+        val target = appTarget ?: throw StreamFailure(StreamError.DISPLAY_CAPTURE, "explicit screen sharing consent required")
+        val candidates = AvcEncoders.rank(catalog, level)
         if (candidates.isEmpty()) throw StreamFailure(StreamError.ENCODER, "no H.264 encoder for ${level.width}x${level.height}")
         var last: Throwable? = null
         for (info in candidates) {
@@ -149,36 +145,35 @@ class AvcScreenSource(
                     runCatching { c.release() }
                     continue
                 }
-                val target = appTarget
-                val m = if (target != null) {
-                    null
-                } else {
-                    try {
-                        ScreenMirror.open(level.width, level.height, input)
-                    } catch (f: StreamFailure) {
-                        runCatching { c.stop() }
-                        runCatching { c.release() }
-                        runCatching { input.release() }
-                        throw f
-                    }
-                }
                 codec = c
                 surface = input
-                mirror = m
                 encoderName = info.name
-                captureApi = m?.api ?: API_APP
-                this.level = level
+                captureApi = API_APP
                 this.bitrate = bitrate
-                configSent = false
                 generation += 1
                 val gen = generation
-                drain = Thread({ drainLoop(c, gen) }, "gbx-video-drain").apply {
+                if (codecDiagnostics && !vendorDiscovered) {
+                    vendorDiscovered = true
+                    if (Build.VERSION.SDK_INT >= 31) runCatching {
+                        c.supportedVendorParameters.sorted().forEach { name ->
+                            Log.i(TAG, "CODEC_VENDOR codec=${c.name} parameter=$name type=${c.getParameterDescriptor(name)?.type}")
+                        }
+                    }.onFailure { Log.i(TAG, "CODEC_VENDOR_UNAVAILABLE codec=${c.name} reason=${it.javaClass.simpleName}") }
+                    Log.i(TAG, "CODEC_CAPS ${catalog.joinToString { "${it.name}:${it.supportedLevelIds}" }}")
+                    runCatching { Log.i(TAG, "CODEC_FORMAT configured=${c.inputFormat}") }
+                }
+                drain = Thread({ drainLoop(c, gen, level) }, "gbx-video-drain").apply {
                     isDaemon = true
                     priority = Thread.MAX_PRIORITY
                     start()
                 }
-                Log.i(TAG, "video: ${info.name} ${level.width}x${level.height}@${level.fps} ${bitrate}bps strict=$strict via $captureApi")
-                target?.onSurface(input, level.width, level.height)
+                Log.i(TAG, "video: ${info.name} ${level.width}x${level.height}@${level.fps} ${bitrate}bps strict=$strict software=${!info.hardware} via $captureApi")
+                try {
+                    target.onSurface(input, level.width, level.height)
+                } catch (t: Throwable) {
+                    closeLocked()
+                    throw StreamFailure(StreamError.DISPLAY_CAPTURE, "capture surface failed", t)
+                }
                 return
             }
         }
@@ -189,21 +184,33 @@ class AvcScreenSource(
     private fun closeLocked(): Thread? {
         generation += 1
         if (surface != null) runCatching { appTarget?.onSurface(null, 0, 0) }
-        runCatching { mirror?.close() }
         runCatching { codec?.stop() }
         runCatching { codec?.release() }
         runCatching { surface?.release() }
-        mirror = null
         codec = null
         surface = null
         return drain.also { drain = null }
     }
 
-    private fun drainLoop(c: MediaCodec, gen: Int) {
+    private fun drainLoop(c: MediaCodec, gen: Int, requested: VideoLevel) {
         val info = MediaCodec.BufferInfo()
+        var configSent = false
+        var actual = requested
+        var epoch = 0L
+        fun publish(csd: ByteArray) {
+            synchronized(lock) {
+                if (!current(c, gen)) return
+                codecEpoch++
+                epoch = codecEpoch
+                level = actual
+                sink?.onFormat(EncodedFormat(actual, bitrate, csd, epoch))
+                configSent = true
+            }
+        }
         try {
-            while (running && gen == currentGeneration()) {
+            while (synchronized(lock) { current(c, gen) }) {
                 val index = c.dequeueOutputBuffer(info, DEQUEUE_TIMEOUT_US)
+                if (!synchronized(lock) { current(c, gen) }) return
                 when {
                     index >= 0 -> {
                         val dequeuedNs = System.nanoTime()
@@ -217,32 +224,43 @@ class AvcScreenSource(
                         } finally {
                             c.releaseOutputBuffer(index, false)
                         }
-                        if (data != null) deliver(data, info, dequeuedNs)
+                        if (!synchronized(lock) { current(c, gen) }) return
+                        if (data != null) {
+                            if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
+                                if (!configSent) publish(data)
+                            } else {
+                                val key = info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
+                                if (key && !configSent) AnnexB.parameterSets(data)?.let { publish(it) }
+                                if (configSent) synchronized(lock) {
+                                    if (current(c, gen)) deliver(data, info, dequeuedNs, epoch)
+                                }
+                            }
+                        }
                         if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
                     }
-                    index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> Log.i(TAG, "encoder output format ${c.outputFormat}")
+                    index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                        val format = c.outputFormat
+                        val width = format.getInteger(MediaFormat.KEY_WIDTH)
+                        val height = format.getInteger(MediaFormat.KEY_HEIGHT)
+                        val fps = if (format.containsKey(MediaFormat.KEY_FRAME_RATE)) format.getInteger(MediaFormat.KEY_FRAME_RATE) else requested.fps
+                        actual = actualLevelFor(requested, width, height, fps)
+                        Log.i(TAG, "encoder output ${actual.width}x${actual.height}@${actual.fps} rank=${actual.index}")
+                        val csd = listOf("csd-0", "csd-1").mapNotNull { key ->
+                            format.getByteBuffer(key)?.duplicate()?.let { b -> ByteArray(b.remaining()).also { b.get(it) } }
+                        }.fold(ByteArray(0)) { bytes, next -> bytes + next }
+                        configSent = false
+                        if (csd.isNotEmpty()) publish(csd)
+                    }
                 }
             }
         } catch (e: IllegalStateException) {
-            if (running && gen == currentGeneration()) recover(e)
+            if (synchronized(lock) { current(c, gen) }) recover(c, gen, requested, e)
         }
     }
 
-    private fun deliver(data: ByteArray, info: MediaCodec.BufferInfo, dequeuedNs: Long) {
+    private fun deliver(data: ByteArray, info: MediaCodec.BufferInfo, dequeuedNs: Long, epoch: Long) {
         val out = sink ?: return
-        if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
-            configSent = true
-            out.onConfig(data)
-            return
-        }
         val key = info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
-        if (key && !configSent) {
-            // Some encoders put SPS/PPS only inside the first IDR; the guest needs them as config.
-            AnnexB.parameterSets(data)?.let {
-                configSent = true
-                out.onConfig(it)
-            }
-        }
         val capture = captureNsForPts(info.presentationTimeUs, dequeuedNs)
         if (capture == 0L) {
             val count = invalidPts.incrementAndGet()
@@ -250,24 +268,26 @@ class AvcScreenSource(
                 Log.w(TAG, "encoder PTS outside ${MAX_PTS_AGE_NS}ns: ptsUs=${info.presentationTimeUs} dequeuedNs=$dequeuedNs invalidPts=$count")
             }
         }
-        out.onFrame(EncodedFrame(seq.incrementAndGet(), key, capture, dequeuedNs, data))
+        out.onFrame(EncodedFrame(seq.incrementAndGet(), key, capture, dequeuedNs, data, epoch))
     }
 
     /** One restart per failure, at most [MAX_RESTARTS] per stream; then the stream ends. */
-    private fun recover(e: IllegalStateException) {
+    private fun recover(failed: MediaCodec, failedGen: Int, requested: VideoLevel, e: IllegalStateException) {
         Log.w(TAG, "encoder failed", e)
         Thread({
             val old: Thread?
+            val reopenGeneration: Int
             synchronized(lock) {
-                if (!running) return@Thread
+                if (!current(failed, failedGen)) return@Thread
                 old = closeLocked()
+                reopenGeneration = generation
             }
             old?.join(JOIN_MS)
             synchronized(lock) {
-                if (!running) return@Thread
+                if (!running || generation != reopenGeneration || codec != null) return@Thread
                 restarts += 1
                 val failure = if (restarts > MAX_RESTARTS) "encoder failed ${restarts} times" else try {
-                    openLocked(level, bitrate)
+                    openLocked(requested, bitrate)
                     null
                 } catch (f: StreamFailure) {
                     f.message ?: "restart failed"
@@ -280,7 +300,7 @@ class AvcScreenSource(
         }, "gbx-video-restart").apply { isDaemon = true }.start()
     }
 
-    private fun currentGeneration(): Int = synchronized(lock) { generation }
+    private fun current(c: MediaCodec, gen: Int): Boolean = running && identityMatches(codec, generation, c, gen)
 
     companion object {
         /** [captureApi] while the app's single-app projection feeds the encoder. */
@@ -291,6 +311,16 @@ class AvcScreenSource(
         private const val MAX_RESTARTS = 2
         private const val MAX_PTS_AGE_NS = 1_000_000_000L
         private const val PTS_LOG_INTERVAL = 120
+
+        internal fun identityMatches(current: Any?, generation: Int, candidate: Any, candidateGeneration: Int): Boolean =
+            current === candidate && generation == candidateGeneration
+
+        internal fun actualLevelFor(requested: VideoLevel, width: Int, height: Int, fps: Int): VideoLevel {
+            if (width <= 0 || height <= 0 || fps <= 0) throw IllegalStateException("encoder reported invalid dimensions or rate")
+            val actual = StreamCaps.LEVELS.firstOrNull { it.width == width && it.height == height && it.fps == fps }
+                ?: throw IllegalStateException("encoder reported unsupported format ${width}x${height}@$fps")
+            return requested.copy(index = actual.index, width = width, height = height, fps = fps)
+        }
 
         internal fun captureNsForPts(ptsUs: Long, dequeuedNs: Long): Long {
             if (ptsUs <= 0L || ptsUs > Long.MAX_VALUE / 1_000L) return 0L

@@ -1,6 +1,11 @@
 package com.gamebex.client.stream.guest
 
 import android.view.KeyEvent
+import android.view.MotionEvent
+import android.os.SystemClock
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.input.pointer.motionEventSpy
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -52,6 +57,7 @@ internal fun StreamTouchPad(
     onTouchAxes: (Float, Float, Long) -> Unit,
     onReleaseTouchInput: () -> Unit,
     modifier: Modifier = Modifier,
+    unbufferedInput: Boolean = false,
 ) {
     val keyCallback by rememberUpdatedState(onTouchKey)
     val axesCallback by rememberUpdatedState(onTouchAxes)
@@ -111,7 +117,7 @@ internal fun StreamTouchPad(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Bottom) {
                     Dpad(pad, keySize)
-                    if (wide) LeftStick(pad, keySize * 2)
+                    if (wide) LeftStick(pad, keySize * 2, unbufferedInput)
                 }
                 if (wide) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -171,13 +177,13 @@ private fun PadKey(label: String, key: Int, pad: TouchPadState, modifier: Modifi
                                     change.position.y >= 0f && change.position.y < size.height
                                 if (change.changedToDownIgnoreConsumed() && inside) {
                                     held.add(id)
-                                    pad.press(id, key, System.nanoTime())
+                                    pad.press(id, key, touchSampleNs(change.uptimeMillis, System.nanoTime(), SystemClock.uptimeMillis()))
                                 }
                                 if (id in held) {
                                     change.consume()
                                     if (!change.pressed || !inside) {
                                         held.remove(id)
-                                        pad.release(id, System.nanoTime())
+                                        pad.release(id, touchSampleNs(change.uptimeMillis, System.nanoTime(), SystemClock.uptimeMillis()))
                                     }
                                 }
                             }
@@ -195,12 +201,17 @@ private fun PadKey(label: String, key: Int, pad: TouchPadState, modifier: Modifi
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun LeftStick(pad: TouchPadState, size: Dp) {
+private fun LeftStick(pad: TouchPadState, size: Dp, unbufferedInput: Boolean) {
     var axes by remember { mutableStateOf(Offset.Zero) }
+    val view = LocalView.current
     Canvas(
         Modifier.size(size).testTag(TAG_TOUCH_STICK)
             .semantics { contentDescription = "Left stick · GameBEX control" }
+            .motionEventSpy { event ->
+                if (unbufferedInput && event.actionMasked == MotionEvent.ACTION_DOWN) view.requestUnbufferedDispatch(event)
+            }
             .pointerInput(pad) {
                 var pointer: Long? = null
                 try {
@@ -214,10 +225,10 @@ private fun LeftStick(pad: TouchPadState, size: Dp) {
                                     if (change.pressed) {
                                         val radius = minOf(this@pointerInput.size.width, this@pointerInput.size.height) / 2f
                                         val (x, y) = touchStickAxes(change.position.x - radius, change.position.y - radius, radius)
-                                        pad.moveStick(change.id.value, x, y, System.nanoTime())
+                                        pad.moveStick(change.id.value, x, y, touchSampleNs(change.uptimeMillis, System.nanoTime(), SystemClock.uptimeMillis()))
                                         axes = Offset(x, y)
                                     } else {
-                                        pad.release(change.id.value, System.nanoTime())
+                                        pad.release(change.id.value, touchSampleNs(change.uptimeMillis, System.nanoTime(), SystemClock.uptimeMillis()))
                                         pointer = null
                                         axes = Offset.Zero
                                     }
@@ -243,3 +254,6 @@ private fun LeftStick(pad: TouchPadState, size: Dp) {
 internal const val TAG_TOUCH_PAD = "stream-touch-pad"
 internal const val TAG_TOUCH_STICK = "stream-touch-stick"
 internal fun touchKeyTag(key: Int) = "stream-touch-key-$key"
+
+internal fun touchSampleNs(eventUptimeMs: Long, nowNs: Long, nowUptimeMs: Long): Long =
+    nowNs - (nowUptimeMs - eventUptimeMs).coerceAtLeast(0L) * 1_000_000L

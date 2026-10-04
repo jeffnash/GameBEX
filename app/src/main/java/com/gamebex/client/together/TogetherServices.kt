@@ -29,6 +29,9 @@ data class TogetherTiming(
     val downloadGiveUpMs: Long = 30L * 60_000L,
     /** STREAM: how long the host keeps streaming after the guest's link drops, in case the guest comes back. */
     val streamLinkGraceMs: Long = 15_000L,
+    val controlResumeBudgetMs: Long = 30_000L,
+    val controlResumeConnectMs: Long = 1_000L,
+    val controlResumeHelloMs: Long = 2_000L,
 )
 
 interface LinkTransport {

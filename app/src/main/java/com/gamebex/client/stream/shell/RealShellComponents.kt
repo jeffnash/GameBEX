@@ -32,7 +32,7 @@ class RealShellComponents(@Suppress("unused") private val context: Context?) : S
         sdk = Build.VERSION.SDK_INT,
         uhid = VirtualPads.uhidAvailable(),
         hidTool = VirtualPads.hidToolAvailable(),
-        displayApi = ScreenMirror.available(),
+        displayApi = Build.VERSION.SDK_INT >= StreamCaps.MIN_HOST_SDK,
         audioApi = PlaybackAudioSource.available(),
         avcEncoder = runCatching { AvcEncoders.rank(AvcEncoders.list(), StreamCaps.LEVELS.last()).isNotEmpty() }.getOrDefault(false),
     )

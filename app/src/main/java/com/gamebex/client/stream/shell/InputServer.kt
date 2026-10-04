@@ -1,6 +1,7 @@
 package com.gamebex.client.stream.shell
 
 import com.gamebex.client.stream.StreamCaps
+import com.gamebex.client.stream.StreamDebug
 import com.gamebex.client.stream.proto.InputAck
 import com.gamebex.client.stream.proto.InputWire
 import com.gamebex.client.stream.proto.PadState
@@ -26,6 +27,9 @@ class InputServer(
     private val guestAddress: String,
     private val clock: () -> Long = System::nanoTime,
     private val timeoutMs: Long = StreamCaps.INPUT_TIMEOUT_MS,
+    private val cs6: Boolean = StreamDebug.flag("input_cs6"),
+    private val ackDropEvery: Int = StreamDebug.int("input_ack_drop_every", 0, 0..1000),
+    private val socketFactory: () -> DatagramSocket = { DatagramSocket(null) },
 ) : AutoCloseable {
     private var socket: DatagramSocket? = null
     private val closed = AtomicBoolean(false)
@@ -34,24 +38,34 @@ class InputServer(
     val packets = AtomicLong()
     val rejected = AtomicLong()
     val stale = AtomicLong()
+    val writeFailures = AtomicLong()
+    val audioDropped = AtomicLong()
+    val ackDropped = AtomicLong()
+    private var appliedPackets = 0L
+    private val authority = InputAuthority({ state ->
+        pad.write(state).also { if (!it) writeFailures.incrementAndGet() }
+    }, clock, timeoutMs * 1_000_000L)
 
     @Volatile var port: Int = 0
         private set
 
-    @Volatile var lastState: PadState = PadState.NEUTRAL
+    val lastState: PadState get() = authority.state
+    @Volatile var actualTos: Int? = null
         private set
-
-    /** Where the guest's valid input comes from: audio goes back there (same UDP pair, through any firewall state). */
-    @Volatile private var guestUdp: java.net.SocketAddress? = null
-    @Volatile private var guestUdpNs = 0L
     val audioSent = AtomicLong()
+
+    fun attach(attachId: Long): Boolean = synchronized(authority) {
+        if (closed.get()) false else authority.attach(attachId)
+    }
+
+    fun detach(attachId: Long) = authority.detach(attachId)
 
     /** Binds [preferredPort], or an ephemeral port when it is taken. Throws StreamFailure(NETWORK). */
     fun open(preferredPort: Int) {
-        val s = DatagramSocket(null)
+        val s = socketFactory()
         try {
             s.reuseAddress = true
-            com.gamebex.client.stream.proto.StreamSockets.markInput(s)
+            actualTos = com.gamebex.client.stream.proto.StreamSockets.markInput(s, cs6)
             try {
                 s.bind(InetSocketAddress(preferredPort))
             } catch (_: BindException) {
@@ -78,19 +92,12 @@ class InputServer(
     private fun loop(s: DatagramSocket) {
         val buffer = ByteArray(64)
         val packet = DatagramPacket(buffer, buffer.size)
-        var haveSeq = false
-        var lastSeq = 0
-        var lastPacketNs = clock()
-        var released = true
         while (!closed.get()) {
+            authority.tick()
             packet.setData(buffer, 0, buffer.size)
             try {
                 s.receive(packet)
             } catch (_: SocketTimeoutException) {
-                if (!released && clock() - lastPacketNs > timeoutMs * 1_000_000L) {
-                    drive(PadState.NEUTRAL)
-                    released = true
-                }
                 continue
             } catch (_: IOException) {
                 if (closed.get()) return
@@ -102,59 +109,59 @@ class InputServer(
                 rejected.incrementAndGet()
                 continue
             }
-            if (haveSeq && !InputWire.isNewer(p.seq, lastSeq)) {
-                stale.incrementAndGet()
-                continue
+            synchronized(authority) {
+                if (closed.get()) return
+                if (!authority.isAttached(p.attachId)) {
+                    rejected.incrementAndGet()
+                } else if (authority.isStale(p.seq)) {
+                    stale.incrementAndGet()
+                } else {
+                    packets.incrementAndGet()
+                    val state = if (p.flags and StreamWire.INPUT_FLAG_NEUTRAL != 0) PadState.NEUTRAL else p.state
+                    val applied = authority.apply(p.attachId, p.seq, p.sampleNs, state, packet.socketAddress)
+                    if (applied != null) {
+                        appliedPackets++
+                        if (ackDropEvery > 0 && appliedPackets % ackDropEvery == 0L) {
+                            ackDropped.incrementAndGet()
+                        } else {
+                            val flags = if (applied.wrote) StreamWire.ACK_FLAG_WROTE else 0
+                            val ack = InputWire.encodeAck(InputAck(applied.packetSeq, applied.sampleNs, applied.appliedNs, p.attachId, flags))
+                            runCatching { s.send(DatagramPacket(ack, ack.size, packet.socketAddress)) }
+                        }
+                    }
+                }
             }
-            haveSeq = true
-            lastSeq = p.seq
-            lastPacketNs = clock()
-            guestUdp = packet.socketAddress
-            guestUdpNs = lastPacketNs
-            packets.incrementAndGet()
-            val state = if (p.flags and StreamWire.INPUT_FLAG_NEUTRAL != 0) PadState.NEUTRAL else p.state
-            drive(state)
-            released = state.isNeutral
-            val ack = InputWire.encodeAck(InputAck(p.seq, p.sampleNs, clock()))
-            runCatching { s.send(DatagramPacket(ack, ack.size, packet.socketAddress)) }
         }
     }
 
-    /**
-     * Sends one PCM chunk to player 2 over UDP. False when no valid input arrived in the last
-     * [AUDIO_ROUTE_MS] (the guest isn't sending, or is on an older build), so the caller uses TCP instead.
-     */
-    fun sendAudio(chunk: PcmChunk): Boolean {
-        val s = socket ?: return false
-        val to = guestUdp ?: return false
-        if (closed.get() || clock() - guestUdpNs > AUDIO_ROUTE_MS * 1_000_000L) return false
+    fun sendAudio(chunk: PcmChunk): AudioSendResult = synchronized(authority) {
+        val s = socket ?: return AudioSendResult.NO_ROUTE
+        if (closed.get()) return AudioSendResult.NO_ROUTE
+        val to = authority.audioRoute(AUDIO_ROUTE_MS * 1_000_000L) ?: return AudioSendResult.NO_ROUTE
         val bytes = InputWire.encodeAudio(key, chunk.seq, chunk.captureNs, chunk.frames, chunk.data)
-        return try {
+        try {
             s.send(DatagramPacket(bytes, bytes.size, to))
             audioSent.incrementAndGet()
-            true
+            AudioSendResult.SENT
         } catch (_: IOException) {
-            false
+            audioDropped.incrementAndGet()
+            AudioSendResult.DROPPED
         }
-    }
-
-    private fun drive(state: PadState) {
-        if (state == lastState) return
-        lastState = state
-        pad.write(state)
     }
 
     /** Releases player 2 and closes the socket. The pad itself belongs to the session. */
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
-        runCatching { if (!lastState.isNeutral) pad.write(PadState.NEUTRAL) }
-        lastState = PadState.NEUTRAL
-        runCatching { socket?.close() }
-        thread?.join(1_000L)
+        try {
+            authority.close()
+        } finally {
+            runCatching { socket?.close() }
+            thread?.join(1_000L)
+        }
     }
 
     private companion object {
-        const val POLL_MS = 50
+        const val POLL_MS = 8
         /** The guest sends input at least every 50 ms; a second of silence means audio should take TCP. */
         const val AUDIO_ROUTE_MS = 1_000L
     }

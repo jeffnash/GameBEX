@@ -2,10 +2,15 @@ package com.gamebex.client.stream.shell
 
 import com.gamebex.client.stream.StreamToken
 import com.gamebex.client.stream.fakes.FakeVirtualPad
+import com.gamebex.client.stream.proto.InputAck
 import com.gamebex.client.stream.proto.InputPacket
 import com.gamebex.client.stream.proto.InputWire
 import com.gamebex.client.stream.proto.PadState
 import com.gamebex.client.stream.proto.StreamWire
+import java.io.IOException
+import java.net.SocketTimeoutException
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -13,6 +18,7 @@ import java.net.InetSocketAddress
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -35,12 +41,14 @@ class InputServerTest {
         InputServer(pad, key, guest, timeoutMs = timeoutMs).also {
             servers += it
             it.open(0)
+            assertTrue(it.attach(7L))
+            pad.writes.clear()
             it.start()
         }
 
-    private fun send(server: InputServer, seq: Int, state: PadState, flags: Int = 0, packetKey: Long = key) {
-        val bytes = InputWire.encode(InputPacket(flags, packetKey, seq, 1_000L + seq, state))
-        sender.send(DatagramPacket(bytes, bytes.size, InetAddress.getByName("127.0.0.1"), server.port))
+    private fun send(server: InputServer, seq: Int, state: PadState, flags: Int = 0, packetKey: Long = key, attachId: Long = 7L, socket: DatagramSocket = sender) {
+        val bytes = InputWire.encode(InputPacket(flags, packetKey, seq, 1_000L + seq, state, attachId))
+        socket.send(DatagramPacket(bytes, bytes.size, InetAddress.getByName("127.0.0.1"), server.port))
     }
 
     private fun waitFor(what: String, timeoutMs: Long = 2_000L, check: () -> Boolean) {
@@ -67,6 +75,7 @@ class InputServerTest {
         assertNotNull(ack)
         assertEquals(1, ack!!.seq)
         assertEquals(1_001L, ack.sampleNs)
+        assertTrue(ack.wrote)
         assertEquals(1L, s.packets.get())
     }
 
@@ -104,7 +113,14 @@ class InputServerTest {
         send(s, 1, jump)
         send(s, 2, jump)
         send(s, 3, jump)
-        waitFor("three packets") { s.packets.get() == 3L }
+        val applied = ack()!!
+        val heartbeat = ack()!!
+        val heartbeat2 = ack()!!
+        assertTrue(applied.wrote)
+        assertFalse(heartbeat.wrote)
+        assertFalse(heartbeat2.wrote)
+        assertEquals(applied.appliedNs, heartbeat.appliedNs)
+        assertEquals(applied.appliedNs, heartbeat2.appliedNs)
         assertEquals(listOf(jump), pad.writes.toList())
     }
 
@@ -154,10 +170,10 @@ class InputServerTest {
     fun audioGoesBackToTheGuestOnlyAfterItsValidInput() {
         val s = server()
         val chunk = PcmChunk(7, 123L, 240, ByteArray(960) { it.toByte() })
-        assertFalse(s.sendAudio(chunk))
+        assertEquals(AudioSendResult.NO_ROUTE, s.sendAudio(chunk))
         send(s, 1, jump)
         waitFor("pad write") { pad.writes.isNotEmpty() }
-        assertTrue(s.sendAudio(chunk))
+        assertEquals(AudioSendResult.SENT, s.sendAudio(chunk))
         val buffer = ByteArray(2_048)
         repeat(5) {
             val p = DatagramPacket(buffer, buffer.size)
@@ -170,5 +186,205 @@ class InputServerTest {
             return
         }
         throw AssertionError("no audio datagram")
+    }
+
+    private class ScriptedPad(private val fail: (Int, PadState) -> Boolean) : VirtualPad {
+        override val backend = "scripted"
+        val attempts = CopyOnWriteArrayList<PadState>()
+        val writes = CopyOnWriteArrayList<PadState>()
+        override fun write(state: PadState): Boolean {
+            attempts += state
+            if (fail(attempts.size, state)) return false
+            writes += state
+            return true
+        }
+        override fun close() = Unit
+    }
+
+    private fun scripted(pad: VirtualPad, timeoutMs: Long = 1_000L, ackDropEvery: Int = 0,
+        socketFactory: () -> DatagramSocket = { DatagramSocket(null) }): InputServer =
+        InputServer(pad, key, "127.0.0.1", timeoutMs = timeoutMs, cs6 = false, ackDropEvery = ackDropEvery,
+            socketFactory = socketFactory).also {
+            servers += it
+            it.open(0)
+            assertTrue(it.attach(7L))
+            it.start()
+        }
+
+    private fun ack(socket: DatagramSocket = sender): InputAck? {
+        val packet = DatagramPacket(ByteArray(128), 128)
+        return try {
+            socket.receive(packet)
+            InputWire.decodeAck(packet.data, packet.length)
+        } catch (_: SocketTimeoutException) { null }
+    }
+
+    @Test fun failedPressIsNotRememberedOrAcknowledgedButStillLearnsAudioRoute() {
+        val device = ScriptedPad { n, _ -> n == 2 }
+        val s = scripted(device)
+        sender.soTimeout = 80
+        send(s, 1, jump)
+        waitFor("failed write") { s.writeFailures.get() == 1L }
+        assertNull(ack())
+        assertEquals(listOf(PadState.NEUTRAL), device.writes.toList())
+        assertEquals(PadState.NEUTRAL, s.lastState)
+        assertEquals(AudioSendResult.SENT, s.sendAudio(PcmChunk(1, 5L, 1, ByteArray(4))))
+        val audio = DatagramPacket(ByteArray(128), 128)
+        sender.receive(audio)
+        assertNotNull(InputWire.decodeAudio(audio.data, audio.length))
+        send(s, 1, jump)
+        assertTrue(ack()!!.wrote)
+        assertEquals(listOf(PadState.NEUTRAL, jump), device.writes.toList())
+    }
+
+    @Test fun failedReleaseIsRetriedByNewerNeutralHeartbeat() {
+        val device = ScriptedPad { n, state -> n == 3 && state.isNeutral }
+        val s = scripted(device)
+        sender.soTimeout = 80
+        send(s, 1, jump)
+        assertTrue(ack()!!.wrote)
+        send(s, 2, PadState.NEUTRAL)
+        assertNull(ack())
+        assertEquals(jump, s.lastState)
+        send(s, 3, PadState.NEUTRAL)
+        assertTrue(ack()!!.wrote)
+        assertEquals(PadState.NEUTRAL, s.lastState)
+        assertEquals(1L, s.writeFailures.get())
+    }
+
+    @Test fun invalidAndStaleFloodCannotPostponeWatchdogAndFailedWatchdogRetries() {
+        val neutralFailures = AtomicInteger()
+        val device = ScriptedPad { n, state -> n > 1 && state.isNeutral && neutralFailures.getAndIncrement() == 0 }
+        val s = scripted(device, timeoutMs = 40L)
+        send(s, 1, jump)
+        assertNotNull(ack())
+        val end = System.nanoTime() + 150_000_000L
+        var seq = 2
+        while (System.nanoTime() < end) {
+            send(s, seq++, PadState(buttons = PadState.B), packetKey = key xor 1L)
+            send(s, 1, jump)
+            Thread.sleep(1)
+        }
+        waitFor("watchdog neutral") { device.writes.last().isNeutral }
+        assertTrue(neutralFailures.get() >= 2)
+        assertEquals(1L, s.writeFailures.get())
+        assertEquals(listOf(PadState.NEUTRAL, jump, PadState.NEUTRAL), device.writes.toList())
+    }
+
+    @Test fun reopenRelearnsRouteAcceptsSeqOneAndSameViewerReconnectIsIdempotent() {
+        val s = server()
+        send(s, 500, jump)
+        assertNotNull(ack())
+        assertTrue(s.attach(7L))
+        assertEquals(listOf(jump), pad.writes.toList())
+        assertTrue(s.attach(8L))
+        val chunk = PcmChunk(8, 5L, 1, ByteArray(4))
+        assertEquals(AudioSendResult.NO_ROUTE, s.sendAudio(chunk))
+        send(s, 501, jump)
+        waitFor("old attachment rejected") { s.rejected.get() == 1L }
+        s.detach(7L)
+        DatagramSocket(InetSocketAddress("127.0.0.1", 0)).use { next ->
+            next.soTimeout = 1_000
+            send(s, 1, PadState(buttons = PadState.B), attachId = 8L, socket = next)
+            assertEquals(8L, ack(next)!!.attachId)
+            assertEquals(AudioSendResult.SENT, s.sendAudio(chunk))
+            val audio = DatagramPacket(ByteArray(128), 128)
+            next.receive(audio)
+            assertEquals(8, InputWire.decodeAudio(audio.data, audio.length)!!.seq)
+            s.detach(8L)
+            assertEquals(AudioSendResult.NO_ROUTE, s.sendAudio(chunk))
+        }
+    }
+
+    @Test fun packetsCannotAttachThemselvesAndSequenceWrapRejectsReorder() {
+        val s = InputServer(pad, key, "127.0.0.1", cs6 = false, ackDropEvery = 0).also { servers += it }
+        s.open(0)
+        s.start()
+        send(s, 1, jump)
+        waitFor("no implicit attachment") { s.rejected.get() == 1L }
+        assertTrue(pad.writes.isEmpty())
+        assertTrue(s.attach(7L))
+        send(s, Int.MAX_VALUE, jump)
+        assertNotNull(ack())
+        send(s, Int.MIN_VALUE, PadState.NEUTRAL)
+        assertNotNull(ack())
+        send(s, Int.MAX_VALUE, jump)
+        waitFor("wrapped stale") { s.stale.get() == 1L }
+        assertEquals(PadState.NEUTRAL, s.lastState)
+    }
+
+    @Test fun validRouteSendIOExceptionDropsWithoutRequestingTcpFallback() {
+        val socket = object : DatagramSocket(null as java.net.SocketAddress?) {
+            @Volatile var failAudio = false
+            override fun send(packet: DatagramPacket) {
+                if (failAudio && packet.data.take(4).toByteArray().contentEquals(StreamWire.AUDIO_UDP_MAGIC)) throw IOException("send failed")
+                super.send(packet)
+            }
+        }
+        val s = scripted(ScriptedPad { _, _ -> false }, socketFactory = { socket })
+        send(s, 1, jump)
+        assertNotNull(ack())
+        socket.failAudio = true
+        assertEquals(AudioSendResult.DROPPED, s.sendAudio(PcmChunk(1, 5L, 1, ByteArray(4))))
+        assertEquals(1L, s.audioDropped.get())
+        assertEquals(0L, s.audioSent.get())
+    }
+
+    @Test fun routeReplacementWaitsForInFlightAudioThenDropsOldRoute() {
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val socket = object : DatagramSocket(null as java.net.SocketAddress?) {
+            override fun send(packet: DatagramPacket) {
+                if (packet.data.take(4).toByteArray().contentEquals(StreamWire.AUDIO_UDP_MAGIC)) {
+                    entered.countDown()
+                    if (!release.await(1, java.util.concurrent.TimeUnit.SECONDS)) throw IOException("deadline")
+                }
+                super.send(packet)
+            }
+        }
+        val s = scripted(ScriptedPad { _, _ -> false }, socketFactory = { socket })
+        send(s, 1, jump)
+        assertNotNull(ack())
+        val result = java.util.concurrent.atomic.AtomicReference<AudioSendResult>()
+        val audioThread = Thread { result.set(s.sendAudio(PcmChunk(1, 5L, 1, ByteArray(4)))) }
+        val replacing = java.util.concurrent.CountDownLatch(1)
+        val replaced = java.util.concurrent.CountDownLatch(1)
+        val replacement = Thread {
+            replacing.countDown()
+            s.attach(8L)
+            replaced.countDown()
+        }
+        try {
+            audioThread.start()
+            assertTrue(entered.await(1, java.util.concurrent.TimeUnit.SECONDS))
+            replacement.start()
+            assertTrue(replacing.await(1, java.util.concurrent.TimeUnit.SECONDS))
+            assertFalse(replaced.await(20, java.util.concurrent.TimeUnit.MILLISECONDS))
+            release.countDown()
+            audioThread.join(1_000)
+            replacement.join(1_000)
+            assertFalse(audioThread.isAlive)
+            assertFalse(replacement.isAlive)
+            assertEquals(AudioSendResult.SENT, result.get())
+            assertEquals(AudioSendResult.NO_ROUTE, s.sendAudio(PcmChunk(2, 6L, 1, ByteArray(4))))
+        } finally {
+            release.countDown()
+            audioThread.join(1_000)
+            if (replacement.state != Thread.State.NEW) replacement.join(1_000)
+        }
+    }
+
+    @Test fun ackFaultDropsOnlySuccessfulAckAndRetryReportsWroteFalse() {
+        val s = scripted(ScriptedPad { _, _ -> false }, ackDropEvery = 2)
+        sender.soTimeout = 80
+        send(s, 1, jump)
+        assertTrue(ack()!!.wrote)
+        send(s, 2, PadState.NEUTRAL)
+        assertNull(ack())
+        assertEquals(PadState.NEUTRAL, s.lastState)
+        send(s, 3, PadState.NEUTRAL)
+        assertFalse(ack()!!.wrote)
+        assertEquals(1L, s.ackDropped.get())
+        assertEquals(0L, s.writeFailures.get())
     }
 }

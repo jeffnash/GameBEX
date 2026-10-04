@@ -110,7 +110,7 @@ class FakeVideoSource(initial: VideoLevel) : VideoSource {
     @Volatile var levelChanges = 0
     @Volatile var stopped = false
     @Volatile var captureTarget: CaptureTarget? = null
-    @Volatile var mirrorRequests = 0
+    @Volatile var codecEpoch = 0L
 
     override fun start(level: VideoLevel, bitrate: Int, sink: VideoSink) {
         this.level = level
@@ -118,14 +118,12 @@ class FakeVideoSource(initial: VideoLevel) : VideoSource {
         this.sink = sink
         // A real encoder hands its new input surface over here; JVM tests can't make a Surface.
         captureTarget?.onSurface(null, level.width, level.height)
+        codecEpoch++
+        sink.onFormat(com.gamebex.client.stream.shell.EncodedFormat(level, bitrate, byteArrayOf(0, 0, 0, 1, 0x67, 1, 0, 0, 0, 1, 0x68, 1), codecEpoch))
     }
 
     override fun captureInto(target: CaptureTarget) {
         captureTarget = target
-    }
-
-    override fun useMirror() {
-        mirrorRequests += 1
     }
 
     override fun requestKeyframe() {
@@ -140,6 +138,8 @@ class FakeVideoSource(initial: VideoLevel) : VideoSource {
         this.level = level
         currentBitrate = bitrate
         levelChanges += 1
+        codecEpoch++
+        sink?.onFormat(com.gamebex.client.stream.shell.EncodedFormat(level, bitrate, byteArrayOf(0, 0, 0, 1, 0x67, 1, 0, 0, 0, 1, 0x68, 1), codecEpoch))
     }
 
     override fun stop() {
@@ -148,7 +148,7 @@ class FakeVideoSource(initial: VideoLevel) : VideoSource {
 
     /** Pushes one frame as the encoder thread would. */
     fun emit(seq: Int, key: Boolean, size: Int = 1_000, captureNs: Long = System.nanoTime()) {
-        sink?.onFrame(EncodedFrame(seq, key, captureNs, System.nanoTime(), ByteArray(size) { (it and 0x7F).toByte() }))
+        sink?.onFrame(EncodedFrame(seq, key, captureNs, System.nanoTime(), ByteArray(size) { (it and 0x7F).toByte() }, codecEpoch))
     }
 }
 
@@ -167,11 +167,14 @@ class FakeAudioSource(private val works: Boolean = true) : AudioSource {
     }
 
     fun emit(seq: Int) {
-        sink?.onPcm(PcmChunk(seq, System.nanoTime(), 480, ByteArray(480 * 4)))
+        sink?.onPcm(PcmChunk(seq, System.nanoTime(), StreamCaps.AUDIO_CHUNK_FRAMES, ByteArray(StreamCaps.AUDIO_CHUNK_FRAMES * StreamCaps.AUDIO_CHANNELS * 2)))
     }
 }
 
 class FakeMediaChannel(private val boundPort: Int = 55441) : MediaChannel {
+    override var onGuestAttached: (Long) -> Unit = {}
+    override var onGuestDetached: (Long) -> Unit = {}
+    val formats: MutableList<com.gamebex.client.stream.shell.EncodedFormat> = Collections.synchronizedList(mutableListOf())
     val configs: MutableList<ByteArray> = Collections.synchronizedList(mutableListOf())
     val frames: MutableList<EncodedFrame> = Collections.synchronizedList(mutableListOf())
     val pcm: MutableList<PcmChunk> = Collections.synchronizedList(mutableListOf())
@@ -205,6 +208,11 @@ class FakeMediaChannel(private val boundPort: Int = 55441) : MediaChannel {
 
     override fun onConfig(csd: ByteArray) {
         configs += csd
+    }
+
+    override fun onFormat(format: com.gamebex.client.stream.shell.EncodedFormat) {
+        formats += format
+        onConfig(format.csd)
     }
 
     override fun onFrame(frame: EncodedFrame) {

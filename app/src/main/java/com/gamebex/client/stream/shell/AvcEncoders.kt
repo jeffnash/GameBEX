@@ -29,6 +29,7 @@ object AvcEncoders {
         val cbr: Boolean,
         val maxWidth: Int,
         val maxHeight: Int,
+        val supportedLevelIds: Set<Int>? = null,
     )
 
     /**
@@ -37,13 +38,17 @@ object AvcEncoders {
      * Baseline, then CBR, then by name so the order is stable.
      */
     fun rank(all: List<EncoderInfo>, level: VideoLevel): List<EncoderInfo> =
-        all.filter { it.maxWidth >= level.width && it.maxHeight >= level.height }
+        all.filter { it.maxWidth >= level.width && it.maxHeight >= level.height &&
+            (it.supportedLevelIds == null || level.index in it.supportedLevelIds) }
             .sortedWith(
                 compareByDescending<EncoderInfo> { it.hardware }
                     .thenByDescending { PROFILE_CONSTRAINED_BASELINE in it.profiles }
                     .thenByDescending { it.cbr }
                     .thenBy { it.name },
             )
+
+    internal fun aligned(level: VideoLevel, widthAlignment: Int, heightAlignment: Int): Boolean =
+        widthAlignment > 0 && heightAlignment > 0 && level.width % widthAlignment == 0 && level.height % heightAlignment == 0
 
     /** Profile to ask for: Constrained Baseline when offered, else Baseline, else the encoder's default. */
     fun profileFor(info: EncoderInfo): Int? = when {
@@ -75,6 +80,12 @@ object AvcEncoders {
                     cbr = cbr,
                     maxWidth = video.supportedWidths.upper,
                     maxHeight = video.supportedHeights.upper,
+                    supportedLevelIds = StreamCaps.LEVELS.filter { level ->
+                        runCatching {
+                            aligned(level, video.widthAlignment, video.heightAlignment) &&
+                                video.areSizeAndRateSupported(level.width, level.height, level.fps.toDouble())
+                        }.getOrDefault(false)
+                    }.map { it.index }.toSet(),
                 )
             }.getOrNull()
         }

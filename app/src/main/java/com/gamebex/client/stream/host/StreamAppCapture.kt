@@ -31,7 +31,6 @@ object StreamAppCapture {
     private const val TAG = "GameBEXStream"
     private const val NAME = "gamebex-stream"
 
-    /** How long the host has to answer the share prompt before the stream mirrors the display. */
     const val CONSENT_TIMEOUT_MS: Long = 60_000L
 
     private val lock = Any()
@@ -43,25 +42,43 @@ object StreamAppCapture {
     private var display: VirtualDisplay? = null
     private val consent = StreamConsentLifecycle<Pair<Int, Intent?>>(lock)
     private var captureRequestId: String? = null
-    private var stopping = false
+    private var projectionCallback: MediaProjection.Callback? = null
 
     /** Called when the host ends sharing from Android's own controls (not when [stop] ends it). */
     @Volatile var onEnded: (() -> Unit)? = null
 
-    fun supported(): Boolean = Build.VERSION.SDK_INT >= 34
+    fun supported(): Boolean = CaptureIdentity.supported(Build.VERSION.SDK_INT)
 
     /** The shell's encoder surface, or null when it goes away; re-points a running capture. Any thread. */
-    fun onSurface(next: Surface?, w: Int, h: Int) {
+    fun onSurface(next: Surface?, w: Int, h: Int, allowed: () -> Boolean) {
+        var ended: (() -> Unit)? = null
         synchronized(lock) {
-            surface = next
-            width = w
-            height = h
-            val vd = display ?: return
-            runCatching {
-                if (next != null) vd.resize(w, h, dpi)
-                vd.surface = next
-            }.onFailure { Log.w(TAG, "app capture surface change failed", it) }
+            val vd = display
+            CaptureIdentity.surfaceChange(
+                current = allowed,
+                display = vd,
+                present = next != null,
+                width = w,
+                height = h,
+                resize = { display, width, height -> display.resize(width, height, dpi) },
+                retarget = { display -> display.surface = next },
+                storeSurface = {
+                    surface = next
+                    width = w
+                    height = h
+                },
+                stop = {
+                    Log.w(TAG, "app capture surface change failed")
+                    ended = onEnded
+                    stopLocked()
+                },
+                previousSurface = surface,
+                nextSurface = next,
+                previousWidth = width,
+                previousHeight = height,
+            )
         }
+        ended?.invoke()
     }
 
     /** Asks the host to share the game's app and starts capturing it; false when declined or unavailable. */
@@ -124,6 +141,7 @@ object StreamAppCapture {
     }
 
     private fun begin(app: Context, code: Int, data: Intent, requestId: String): Boolean {
+        if (surface == null || width <= 0 || height <= 0) return false
         if (!TogetherService.shareScreen(true)) {
             Log.w(TAG, "video: no foreground service for app capture")
             return false
@@ -136,18 +154,41 @@ object StreamAppCapture {
                 TogetherService.shareScreen(false)
                 return false
             }
-            stopping = false
             projection = p
             captureRequestId = requestId
-            p.registerCallback(callback, main)
-            display = runCatching { p.createVirtualDisplay(NAME, width, height, dpi, 0, surface, null, main) }
+            val callback = object : MediaProjection.Callback() {
+                override fun onStop() {
+                    val ended = synchronized(lock) {
+                        var ended: (() -> Unit)? = null
+                        CaptureIdentity.stopProjection(projection, p) {
+                            ended = onEnded
+                            stopLocked()
+                        }
+                        ended
+                    }
+                    Log.i(TAG, "video: the host stopped sharing")
+                    ended?.invoke()
+                }
+
+                override fun onCapturedContentResize(sourceWidth: Int, sourceHeight: Int) {
+                    synchronized(lock) {
+                        if (!CaptureIdentity.ownsProjection(projection, p)) return
+                        Log.i(TAG, "capture source size=${sourceWidth}x$sourceHeight")
+                    }
+                }
+            }
+            projectionCallback = callback
+            display = runCatching {
+                p.registerCallback(callback, main)
+                p.createVirtualDisplay(NAME, width, height, dpi, 0, surface, null, main)
+            }
                 .onFailure { Log.w(TAG, "app capture display failed", it) }
                 .getOrNull()
             if (display == null) {
                 stopLocked()
                 return false
             }
-            Log.i(TAG, "video: capturing the shared app only at ${width}x$height")
+            Log.i(TAG, "video: capturing the consented selection at ${width}x$height")
             return true
         }
     }
@@ -155,13 +196,18 @@ object StreamAppCapture {
     private fun stopLocked() {
         consent.stop()
         captureRequestId = null
-        stopping = true
-        runCatching { display?.release() }
+        val vd = display
         display = null
         val p = projection
         projection = null
+        val callback = projectionCallback
+        projectionCallback = null
+        surface = null
+        width = 0
+        height = 0
+        runCatching { vd?.release() }
         if (p != null) {
-            runCatching { p.unregisterCallback(callback) }
+            if (callback != null) runCatching { p.unregisterCallback(callback) }
             runCatching { p.stop() }
             TogetherService.shareScreen(false)
         }
@@ -169,17 +215,4 @@ object StreamAppCapture {
 
     private val dpi: Int get() = android.content.res.Resources.getSystem().displayMetrics.densityDpi
 
-    private val callback = object : MediaProjection.Callback() {
-        override fun onStop() {
-            val byHost = synchronized(lock) {
-                val ours = stopping
-                stopLocked()
-                !ours
-            }
-            if (byHost) {
-                Log.i(TAG, "video: the host stopped sharing")
-                onEnded?.invoke()
-            }
-        }
-    }
 }

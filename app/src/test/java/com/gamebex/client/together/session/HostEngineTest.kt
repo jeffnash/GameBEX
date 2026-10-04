@@ -9,6 +9,7 @@ import com.gamebex.client.together.LinkEvent
 import com.gamebex.client.together.LinkMsg
 import com.gamebex.client.together.Readiness
 import com.gamebex.client.together.Role
+import com.gamebex.client.together.TOGETHER_PROTO
 import com.gamebex.client.together.TogetherAction
 import com.gamebex.client.together.TogetherCopy
 import com.gamebex.client.together.CoreResult
@@ -101,7 +102,7 @@ class HostEngineTest {
         advanceUntilIdle()
         val first = h.join(this, "first")
         val second = h.transport.pair("10.42.1.22")
-        second.guest.send(LinkMsg.Hello(1, Role.GUEST, "guest-2", "second", "1.0"))
+        second.guest.send(LinkMsg.Hello(TOGETHER_PROTO, Role.GUEST, "guest-2", "second", "1.0"))
         advanceUntilIdle()
 
         assertEquals(HostStep.JOINED, h.engine.view.value?.step)
@@ -1257,7 +1258,7 @@ class HostEngineTest {
 
     private suspend fun Harness.join(scope: kotlinx.coroutines.test.TestScope, name: String = "Guest"): LinkPair {
         val pair = transport.pair()
-        pair.guest.send(LinkMsg.Hello(1, Role.GUEST, "guest-device-$name", name, "1.0"))
+        pair.guest.send(LinkMsg.Hello(TOGETHER_PROTO, Role.GUEST, "guest-device-$name", name, "1.0"))
         scope.advanceUntilIdle()
         return pair
     }

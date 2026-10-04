@@ -176,18 +176,26 @@ class PcmJitterBufferTest {
 
     @Test
     fun tooMuchQueuedAudioIsCutBackToTheTarget() {
-        val b = PcmJitterBuffer(chunkMs = 10)
+        var evicted = 0L
+        val b = PcmJitterBuffer(chunkMs = 10, onCounter = { name, delta ->
+            if (name == "a_evicted_frames") evicted += delta
+        })
         b.fill(1, 12)
         assertEquals(120, b.depthMs)
         b.fill(13, 1)
         assertEquals(30, b.depthMs)
         assertEquals(10, b.dropped)
+        assertEquals(4_800L, evicted)
+        assertEquals(b.evictedFrames, evicted)
         assertEquals(11, b.pull()!!.seq)
     }
 
     @Test
     fun aLingeringBacklogDrainsBackTowardTheTarget() {
-        val b = PcmJitterBuffer(chunkMs = 10)
+        var evicted = 0L
+        val b = PcmJitterBuffer(chunkMs = 10, onCounter = { name, delta ->
+            if (name == "a_evicted_frames") evicted += delta
+        })
         b.fill(1, 9)
         var seq = 10
         repeat(400) {
@@ -196,12 +204,17 @@ class PcmJitterBufferTest {
         }
         assertTrue("depth ${b.depthMs}", b.depthMs <= b.targetMs + PcmJitterBuffer.SLACK_MS)
         assertTrue(b.dropped >= 3)
+        assertEquals(b.dropped * 480L, evicted)
+        assertEquals(b.evictedFrames, evicted)
         assertEquals(0, b.underruns)
     }
 
     @Test
     fun cleanPlayLowersTheTargetToTheFloor() {
-        val b = PcmJitterBuffer(chunkMs = 10)
+        var evicted = 0L
+        val b = PcmJitterBuffer(chunkMs = 10, onCounter = { name, delta ->
+            if (name == "a_evicted_frames") evicted += delta
+        })
         var seq = 1
         b.fill(seq, 4)
         seq += 4
@@ -210,6 +223,8 @@ class PcmJitterBufferTest {
             assertNotNull(b.pull())
         }
         assertEquals(20, b.targetMs)
+        assertEquals(b.evictedFrames, evicted)
+        assertTrue(evicted > 0L)
         assertEquals(0, b.underruns)
         assertTrue("depth ${b.depthMs}", b.depthMs <= b.targetMs + PcmJitterBuffer.SLACK_MS)
     }
@@ -268,6 +283,121 @@ class PcmJitterBufferTest {
         assertEquals(30, b.targetMs)
         b.fill(4, 1)
         assertEquals(4, b.pull()!!.seq)
+    }
+
+    @Test
+    fun countsPacketGapsDuplicatesLateEvictionsAndSilenceAcrossReconnect() {
+        val b = PcmJitterBuffer()
+        b.push(100, 1, pcm)
+        b.push(102, 3, pcm)
+        b.push(102, 3, pcm)
+        b.push(101, 2, pcm)
+        assertEquals(1L, b.gapPackets)
+        assertEquals((pcm.size / 4).toLong(), b.duplicateFrames)
+        assertEquals((pcm.size / 4).toLong(), b.lateFrames)
+        assertNull(b.pull())
+        assertEquals(240L, b.silenceFrames)
+        val generation = b.generation
+        b.reset()
+        assertEquals((pcm.size / 4 * 2).toLong(), b.evictedFrames)
+        assertEquals(generation + 1, b.generation)
+        assertEquals(1L, b.gapPackets)
+        assertEquals(240L, b.silenceFrames)
+    }
+
+    @Test
+    fun callbackDeltasStayPositiveAndSynchronizedAcrossSequenceWrapAndReset() {
+        val events = mutableListOf<Pair<String, Long>>()
+        lateinit var b: PcmJitterBuffer
+        b = PcmJitterBuffer(onCounter = { name, delta ->
+            assertTrue(Thread.holdsLock(b))
+            assertTrue(delta > 0L)
+            events += name to delta
+        })
+        b.push(Int.MAX_VALUE, 1L, pcm)
+        b.push(Int.MIN_VALUE, 2L, pcm)
+        b.push(Int.MIN_VALUE, 2L, pcm)
+        b.push(Int.MAX_VALUE, 1L, pcm)
+        assertNull(b.pull())
+        b.reset()
+        b.reset()
+        assertEquals(listOf(
+            "a_source_unique_frames" to 480L,
+            "a_source_unique_frames" to 480L,
+            "a_duplicate_frames" to 480L,
+            "a_late_frames" to 480L,
+            "a_silence_frames" to 240L,
+            "a_evicted_frames" to 960L,
+        ), events)
+        assertEquals(0L, b.gapPackets)
+        assertEquals(960L, b.sourceUniqueFrames)
+        b.push(999, 3L, pcm)
+        assertEquals(0L, b.gapPackets)
+        assertEquals(1_440L, b.sourceUniqueFrames)
+    }
+
+    @Test
+    fun eventTimeCountersExcludePreRenderAndWarmupButIncludeFinalHalfSecond() {
+        var now = 0L
+        val stats = LatencyStats(clock = { now }, measureWarmupSeconds = 1,
+            measureSeconds = 2, runEnabled = true, deferredRunStart = true)
+        val b = PcmJitterBuffer(nowNs = { now }, onCounter = { name, delta -> stats.count(name, delta) })
+        val packet = ByteArray(960)
+        b.push(100, 1L, packet)
+        b.push(102, 3L, packet)
+        assertNull(b.pull())
+        now = 10_000_000_000L
+        stats.beginMeasurement(now)
+        stats.frameRendered(now)
+        now += 500_000_000L
+        b.push(104, 5L, packet)
+        assertNull(b.pull())
+        now = 12_000_000_000L
+        repeat(3) {
+            stats.audioBufferMs = b.depthMs
+            stats.audioUnderruns = b.underruns
+            stats.snapshot(now)
+            stats.statsLine(now)
+        }
+        now += 500_000_000L
+        b.push(107, 8L, packet)
+        b.push(107, 8L, packet)
+        b.push(106, 7L, packet)
+        assertNull(b.pull())
+        b.reset()
+        val cumulative = stats.snapshot(now).counters
+        assertEquals(4L, cumulative["a_gap_pkts"])
+        assertEquals(960L, cumulative["a_source_unique_frames"])
+        assertEquals(240L, cumulative["a_duplicate_frames"])
+        assertEquals(240L, cumulative["a_late_frames"])
+        assertEquals(960L, cumulative["a_evicted_frames"])
+        assertEquals(720L, cumulative["a_silence_frames"])
+        now = 13_000_000_000L
+        stats.tick(now)
+        repeat(3) {
+            stats.audioBufferMs = b.depthMs
+            stats.audioUnderruns = b.underruns
+            assertEquals(cumulative, stats.snapshot(now).counters)
+            stats.statsLine(now)
+        }
+        val line = stats.runLines(now).single { it.contains(" metric=counters ") }
+        val counters = line.split(' ').filter { '=' in it }.associate {
+            it.substringBefore('=') to it.substringAfter('=')
+        }
+        assertEquals("measure_end", counters["phase"])
+        assertEquals("11000000000", counters["start_ns"])
+        assertEquals("13000000000", counters["end_ns"])
+        assertEquals("2", counters["a_gap_pkts"])
+        assertEquals("240", counters["a_source_unique_frames"])
+        assertEquals("240", counters["a_duplicate_frames"])
+        assertEquals("240", counters["a_late_frames"])
+        assertEquals("960", counters["a_evicted_frames"])
+        assertEquals("240", counters["a_silence_frames"])
+        now += 100_000_000L
+        b.push(109, 10L, packet)
+        b.push(111, 12L, packet)
+        assertEquals(5L, stats.snapshot(now).counters["a_gap_pkts"])
+        assertTrue(stats.runLines(now).isEmpty())
     }
 
     @Test

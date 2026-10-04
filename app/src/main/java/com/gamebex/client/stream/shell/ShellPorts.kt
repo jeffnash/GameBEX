@@ -34,11 +34,20 @@ class EncodedFrame(
     val captureNs: Long,
     val encodedNs: Long,
     val data: ByteArray,
+    val codecEpoch: Long = 0L,
+)
+
+class EncodedFormat(
+    val level: VideoLevel,
+    val bitrate: Int,
+    val csd: ByteArray,
+    val codecEpoch: Long = 0L,
 )
 
 interface VideoSink {
     /** Annex-B SPS+PPS; sent before the first frame and after each restart. */
     fun onConfig(csd: ByteArray)
+    fun onFormat(format: EncodedFormat) = onConfig(format.csd)
     fun onFrame(frame: EncodedFrame)
     /** The source stopped for good (capture or encoder failure). */
     fun onFailure(reason: String)
@@ -70,11 +79,8 @@ interface VideoSource : VideoControl {
 
     fun stop()
 
-    /** Before [start]: hand each encoder surface to [target] instead of mirroring the display. */
     fun captureInto(target: CaptureTarget) {}
 
-    /** App capture was declined: mirror the whole display from now on. */
-    fun useMirror() {}
 }
 
 /**
@@ -107,8 +113,16 @@ class CaptureRelay : CaptureTarget {
 /** 16-bit PCM captured from the host's game audio. */
 class PcmChunk(val seq: Int, val captureNs: Long, val frames: Int, val data: ByteArray)
 
+enum class AudioSendResult { SENT, NO_ROUTE, DROPPED }
+
 fun interface AudioSink {
     fun onPcm(chunk: PcmChunk)
+    fun sendPcm(chunk: PcmChunk): AudioSendResult = try {
+        onPcm(chunk)
+        AudioSendResult.SENT
+    } catch (_: java.io.IOException) {
+        AudioSendResult.DROPPED
+    }
 }
 
 interface AudioSource {
@@ -137,6 +151,9 @@ data class MediaStats(
     val guestChangedNs: Long,
     /** Set when the video source gave up; the session then stops with StreamError.ENCODER. */
     val failure: String? = null,
+    val videoConfigDiscarded: Long = 0,
+    val videoRetiredDiscarded: Long = 0,
+    val tcpAudioEvictedFrames: Long = 0,
 )
 
 /** The guest-facing media connection. */
@@ -149,6 +166,13 @@ interface MediaChannel : VideoSink, AudioSink {
 
     /** Starts accepting the guest; [control] receives keyframe, bitrate and level requests. */
     fun start(control: VideoControl, level: VideoLevel, bitrate: Int, audio: Boolean)
+
+    var onGuestAttached: (attachId: Long) -> Unit
+        get() = {}
+        set(value) {}
+    var onGuestDetached: (attachId: Long) -> Unit
+        get() = {}
+        set(value) {}
 
     fun stats(): MediaStats
 

@@ -8,90 +8,87 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
 import android.view.Surface
+import com.gamebex.client.BuildConfig
 import com.gamebex.client.stream.StreamCaps
 import com.gamebex.client.stream.StreamDebug
 import com.gamebex.client.stream.proto.AnnexB
 import com.gamebex.client.stream.proto.MediaFrame
 import java.nio.ByteBuffer
 import java.util.ArrayDeque
+import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * H.264 decode straight to the viewer's Surface, asynchronous
- * MediaCodec on its own HandlerThread. Each decoded frame is released for
- * display at once; nothing waits for a presentation time.
- *
- * Low-latency keys, tried in order until configure accepts them (as
- * moonlight-android's MediaCodecHelper.setDecoderLowLatencyOptions does):
- * 1. KEY_LOW_LATENCY (Android 11+) and MediaTek's "vdec-lowlatency", KEY_PRIORITY 0;
- * 2. KEY_LOW_LATENCY and KEY_PRIORITY only;
- * 3. no optional keys.
- * The SPS is rewritten by [SpsFixup] first when [StreamCaps.SPS_FIXUP] is on.
- */
 class VideoDecoder(
     private val surface: Surface,
     private val stats: LatencyStats,
     private val clock: ClockSync,
     private val onVideoReady: () -> Unit = {},
+    private val latestOutput: Boolean = StreamDebug.flag("latest_output"),
+    private val codecDiag: Boolean = StreamDebug.flag("codec_diag"),
+    private val decoderOverride: String? = if (BuildConfig.DEBUG) StreamDebug.prop("decoder") else null,
+    private val vendorDiscovery: AtomicBoolean = AtomicBoolean(false),
     private val onNeedKeyframe: () -> Unit,
 ) {
-    private class Times(val captureNs: Long, val sendNs: Long, val receivedNs: Long)
+    private data class Released(val frame: DecoderFrames.Submitted, val releasedNs: Long, val generation: Long)
 
     private val thread = HandlerThread("gbx-video-decode", android.os.Process.THREAD_PRIORITY_DISPLAY).apply { start() }
     private val handler = Handler(thread.looper)
     private val lock = Any()
     private var codec: MediaCodec? = null
-    private var csd: ByteArray? = null
-    private var width = 0
-    private var height = 0
-    private val pending = ArrayDeque<MediaFrame.Video>()
+    private var activeRequest: DecoderRequest? = null
+    private var readyRequest: DecoderRequest? = null
+    private var generation = 0L
+    private val frames = DecoderFrames { reason, count ->
+        stats.count(reason, count.toLong())
+        stats.frameDropped(count)
+    }
     private val freeInputs = ArrayDeque<Int>()
-    private val times = HashMap<Long, Times>()
-    private val released = HashMap<Long, Long>()
-    private var waitingForKey = true
+    private val released = LinkedHashMap<Long, Released>()
+    private var returningOutputs = false
+    private val decoderInfos = runCatching {
+        MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filter {
+            !it.isEncoder && it.supportedTypes.any { type -> type.equals(MIME, ignoreCase = true) }
+        }
+    }.getOrDefault(emptyList())
+    private val readyOutputs = ReadyOutputs<MediaCodec>(
+        latestOutput,
+        post = { action -> handler.post { action() }; Unit },
+        isCurrent = { output -> synchronized(lock) { isCurrent(output.codec, output.generation) && frames.contains(output.pts) } },
+        finish = ::finishOutput,
+    )
     @Volatile private var closed = false
 
- /** The decoder in use, for the stats log. */
     @Volatile var decoderName: String? = null
         private set
 
- /** New stream parameters: (re)creates the decoder. Called on the network thread. */
-    fun configure(csdIn: ByteArray, w: Int, h: Int) {
+    val pendingCount: Int get() = synchronized(lock) { frames.pendingCount }
+    val hasRenderedCurrentConfig: Boolean get() = synchronized(lock) { !closed && readyRequest != null && readyRequest === frames.config }
+
+    fun configure(csdIn: ByteArray, w: Int, h: Int, codecEpoch: Long = 0) {
+        require(w > 0 && h > 0 && codecEpoch >= 0)
         val fixed = if (StreamCaps.SPS_FIXUP) SpsFixup.fixCsd(csdIn) else csdIn
-        synchronized(lock) {
-            csd = fixed
-            width = w
-            height = h
-            pending.clear()
-            waitingForKey = true
+        val request = synchronized(lock) {
+            if (closed) return
+            val level = StreamCaps.LEVELS.getOrNull(stats.level)?.takeIf { it.width == w && it.height == h }
+            frames.configure(fixed, w, h, codecEpoch, level?.fps ?: 60)
         }
-        handler.post { recreate() }
+        handler.post { recreate(request) }
     }
 
- /** One received frame. Called on the network thread. */
-    fun offer(frame: MediaFrame.Video, receivedNs: Long) {
-        synchronized(lock) {
-            if (closed) return
-            if (waitingForKey && !frame.key) {
+    fun offer(frame: MediaFrame.Video, receivedNs: Long, codecEpoch: Long = 0) {
+        val accepted = synchronized(lock) {
+            if (closed) {
+                stats.count("dec_closed")
                 stats.frameDropped()
                 return
             }
-            waitingForKey = false
-            if (pending.size >= MAX_PENDING) {
- // The decoder fell behind: skip to the next keyframe rather than build latency.
-                pending.clear()
-                waitingForKey = !frame.key
-                stats.frameDropped()
-                if (!frame.key) {
-                    onNeedKeyframe()
-                    return
-                }
-            }
- // A keyframe can repeat the SPS in-band; patch it like the config one so the decoder keeps output order.
-            pending.addLast(if (frame.key && StreamCaps.SPS_FIXUP) withFixedSps(frame) else frame)
-            times[frame.seq.toLong()] = Times(frame.captureNs, frame.sendNs, receivedNs)
-            if (times.size > MAX_TIMES) times.keys.minOrNull()?.let { times.remove(it) }
+            frames.offer(if (frame.key && StreamCaps.SPS_FIXUP) withFixedSps(frame) else frame, receivedNs, codecEpoch)
         }
-        handler.post { feed() }
+        if (accepted == DecoderFrames.Offer.NEED_KEY) onNeedKeyframe()
+        if (accepted == DecoderFrames.Offer.ACCEPTED) handler.post { feed() }
+    }
+
+    fun tick(nowNs: Long) {
+        stats.tick(nowNs)
     }
 
     private fun withFixedSps(frame: MediaFrame.Video): MediaFrame.Video {
@@ -102,47 +99,95 @@ class VideoDecoder(
     }
 
     fun close() {
-        closed = true
+        synchronized(lock) {
+            if (closed) return
+            closed = true
+            frames.reset("dec_close")
+            if (released.isNotEmpty()) stats.count("dec_framework_callback_missing", released.size.toLong())
+            released.clear()
+        }
         handler.post {
-            releaseCodec()
+            releaseCodec("dec_close")
             thread.quitSafely()
         }
     }
 
-    private fun recreate() {
-        releaseCodec()
-        val (c, w, h) = synchronized(lock) { Triple(csd, width, height) }
-        if (c == null || closed) return
-        for (attempt in 0..2) {
-            val decoder = try {
-                pickDecoder()?.let { MediaCodec.createByCodecName(it) } ?: MediaCodec.createDecoderByType(MIME)
-            } catch (e: Exception) {
-                Log.w(TAG, "no decoder", e)
-                return
-            }
-            try {
-                decoder.setCallback(callback, handler)
-                decoder.configure(format(c, w, h, attempt), surface, null, 0)
-                decoder.setOnFrameRenderedListener({ _, ptsUs, renderedNs -> onRendered(ptsUs, renderedNs) }, handler)
-                decoder.start()
-                synchronized(lock) {
-                    codec = decoder
-                    freeInputs.clear()
+    private fun recreate(request: DecoderRequest) {
+        if (synchronized(lock) { closed || frames.config !== request }) return
+        releaseCodec("dec_recreate_abandon")
+        if (synchronized(lock) { closed || frames.config !== request }) return
+        val fps = request.fps
+        val candidates = candidates(request.width, request.height, fps)
+        if (candidates.isEmpty()) {
+            stats.count("dec_no_candidate")
+            Log.w(TAG, "no AVC decoder candidate ${request.width}x${request.height}@$fps")
+        }
+        for (candidate in candidates) {
+            for (attempt in 0..2) {
+                if (synchronized(lock) { closed || frames.config !== request }) return
+                val decoder = try {
+                    MediaCodec.createByCodecName(candidate.name)
+                } catch (e: Exception) {
+                    Log.w(TAG, "no decoder ${candidate.name}", e)
+                    break
                 }
-                decoderName = decoder.name
-                Log.i(TAG, "decoder ${decoder.name} ${w}x$h attempt $attempt")
-                onNeedKeyframe()
-                return
-            } catch (e: Exception) {
-                Log.w(TAG, "decoder ${decoder.name} refused attempt $attempt", e)
-                runCatching { decoder.release() }
+                val ownedGeneration = synchronized(lock) { ++generation }
+                try {
+                    decoder.setCallback(callbackFor(ownedGeneration, request), handler)
+                    val requestedFormat = format(request.csd, request.width, request.height, attempt)
+                    if (codecDiag) Log.i(TAG, "CODEC_FORMAT stage=requested codec=${candidate.name} format=$requestedFormat")
+                    decoder.configure(requestedFormat, surface, null, 0)
+                    decoder.setOnFrameRenderedListener({ c, ptsUs, _ -> onRendered(c, ownedGeneration, request, ptsUs) }, handler)
+                    val installed = synchronized(lock) {
+                        if (closed || frames.config !== request) false else {
+                            codec = decoder
+                            activeRequest = request
+                            freeInputs.clear()
+                            true
+                        }
+                    }
+                    if (!installed) {
+                        runCatching { decoder.release() }
+                        return
+                    }
+                    decoder.start()
+                    decoderName = decoder.name
+                    Log.i(TAG, "decoder ${decoder.name} ${request.width}x${request.height}@$fps attempt $attempt hardware=${candidate.hardware} joint=${candidate.eligible} fallback=${!candidate.eligible || !candidate.hardware}")
+                    if (!candidate.eligible) stats.count("dec_capability_fallback")
+                    if (!candidate.hardware) stats.count("dec_software_fallback")
+                    discoverVendor(decoder)
+                    onNeedKeyframe()
+                    return
+                } catch (e: Exception) {
+                    Log.w(TAG, "decoder ${candidate.name} refused attempt $attempt", e)
+                    synchronized(lock) {
+                        if (codec === decoder) {
+                            codec = null
+                            activeRequest = null
+                            freeInputs.clear()
+                        }
+                    }
+                    runCatching { decoder.release() }
+                }
             }
+        }
+        stats.count("dec_configure_failed")
+        synchronized(lock) {
+            if (frames.config === request) frames.reset("dec_configure_failed")
         }
     }
 
-    private fun releaseCodec() {
+    private fun releaseCodec(reason: String) {
+        returningOutputs = true
+        readyOutputs.clear()
+        returningOutputs = false
         val c = synchronized(lock) {
             freeInputs.clear()
+            frames.abandonSubmitted(reason)
+            if (released.isNotEmpty()) stats.count("dec_framework_callback_missing", released.size.toLong())
+            released.clear()
+            activeRequest = null
+            readyRequest = null
             codec.also { codec = null }
         } ?: return
         runCatching { c.stop() }
@@ -151,68 +196,122 @@ class VideoDecoder(
 
     private fun feed() {
         while (true) {
-            val (c, index, frame) = synchronized(lock) {
+            var needKey = false
+            val failed = synchronized(lock) {
                 val c = codec ?: return
-                if (freeInputs.isEmpty() || pending.isEmpty()) return
-                Triple(c, freeInputs.pollFirst(), pending.pollFirst())
-            }
-            try {
-                val buffer = c.getInputBuffer(index) ?: continue
-                buffer.clear()
-                if (frame.data.size > buffer.capacity()) {
-                    c.queueInputBuffer(index, 0, 0, frame.seq.toLong(), 0)
-                    onNeedKeyframe()
-                    continue
+                val request = activeRequest ?: return
+                if (closed || frames.config !== request || freeInputs.isEmpty() || frames.pendingCount == 0) return
+                val index = freeInputs.removeFirst()
+                val input = frames.submit() ?: return
+                try {
+                    val buffer = c.getInputBuffer(index)
+                    if (buffer == null || input.frame.data.size > buffer.capacity()) {
+                        frames.terminal(input.pts, if (buffer == null) "dec_input_null" else "dec_input_oversize")
+                        frames.requireKey()
+                        needKey = true
+                        c.queueInputBuffer(index, 0, 0, input.pts, 0)
+                    } else {
+                        buffer.clear()
+                        buffer.put(input.frame.data)
+                        c.queueInputBuffer(index, 0, input.frame.data.size, input.pts, 0)
+                    }
+                    null
+                } catch (e: Exception) {
+                    frames.terminal(input.pts, "dec_input_fail")
+                    frames.requireKey()
+                    needKey = true
+                    Log.w(TAG, "queueInputBuffer failed", e)
+                    c to request
                 }
-                buffer.put(frame.data)
-                c.queueInputBuffer(index, 0, frame.data.size, frame.seq.toLong(), 0)
-            } catch (e: IllegalStateException) {
-                Log.w(TAG, "queueInputBuffer failed", e)
+            }
+            if (needKey) onNeedKeyframe()
+            if (failed != null) {
+                val (c, request) = failed
+                handler.post {
+                    val restart = synchronized(lock) {
+                        if (!ownsDecoder(c, codec, request, frames.config) || closed) false else {
+                            frames.reset("dec_recreate_abandon")
+                            true
+                        }
+                    }
+                    if (restart) recreate(request)
+                }
                 return
             }
         }
     }
 
-    private val callback = object : MediaCodec.Callback() {
+    private fun isCurrent(c: MediaCodec, capturedGeneration: Long): Boolean =
+        !closed && c === codec && capturedGeneration == generation && activeRequest === frames.config
+
+    private fun callbackFor(capturedGeneration: Long, request: DecoderRequest) = object : MediaCodec.Callback() {
         override fun onInputBufferAvailable(codec: MediaCodec, index: Int) {
             synchronized(lock) {
-                if (codec !== this@VideoDecoder.codec) return
+                if (!isCurrent(codec, capturedGeneration) || frames.config !== request) return
                 freeInputs.addLast(index)
             }
             feed()
         }
 
         override fun onOutputBufferAvailable(codec: MediaCodec, index: Int, info: MediaCodec.BufferInfo) {
-            if (codec !== synchronized(lock) { this@VideoDecoder.codec }) return
-            val now = System.nanoTime()
-            try {
- // An explicit render time of "now" (Moonlight's low-latency path): the default (true) asks for the
- // frame's pts, which is our sequence number, and that made the present metric meaningless.
-                codec.releaseOutputBuffer(index, now)
-            } catch (e: IllegalStateException) {
-                return
-            }
-            val t = synchronized(lock) { times.remove(info.presentationTimeUs) } ?: return
-            released[info.presentationTimeUs] = now
-            if (released.size > MAX_TIMES) released.keys.minOrNull()?.let { released.remove(it) }
-            recordOutputStats(stats, clock, t.captureNs, t.sendNs, t.receivedNs, now)
-            onVideoReady()
+            if (!synchronized(lock) { isCurrent(codec, capturedGeneration) && frames.config === request }) return
+            readyOutputs.offer(ReadyOutput(codec, capturedGeneration, index, info.presentationTimeUs, info.size, info.flags, System.nanoTime()))
         }
 
         override fun onError(codec: MediaCodec, e: MediaCodec.CodecException) {
+            if (!synchronized(lock) { isCurrent(codec, capturedGeneration) && frames.config === request }) return
             Log.w(TAG, "decoder error", e)
-            synchronized(lock) { waitingForKey = true }
-            handler.post { recreate() }
+            handler.post {
+                val restart = synchronized(lock) {
+                    if (!isCurrent(codec, capturedGeneration) || frames.config !== request) false else {
+                        frames.reset("dec_recreate_abandon")
+                        true
+                    }
+                }
+                if (restart) recreate(request)
+            }
         }
 
         override fun onOutputFormatChanged(codec: MediaCodec, format: MediaFormat) {
+            if (!synchronized(lock) { isCurrent(codec, capturedGeneration) && frames.config === request }) return
             Log.i(TAG, "decoder output format $format")
         }
     }
 
-    private fun onRendered(ptsUs: Long, renderedNs: Long) {
-        val releasedNs = released.remove(ptsUs) ?: return
-        stats.add(LatencyStats.Metric.PRESENT, renderedNs - releasedNs)
+    private fun finishOutput(output: ReadyOutput<MediaCodec>, render: Boolean) {
+        synchronized(lock) {
+            val live = output.codec === codec && output.generation == generation
+            if (!live || (!returningOutputs && !isCurrent(output.codec, output.generation))) return
+            val now = System.nanoTime()
+            val visible = render && output.picture && frames.contains(output.pts) && !returningOutputs
+            try {
+                if (visible) output.codec.releaseOutputBuffer(output.index, now)
+                else output.codec.releaseOutputBuffer(output.index, false)
+            } catch (e: Exception) {
+                frames.terminal(output.pts, "dec_release_fail")
+                return
+            }
+            val input = frames.terminal(output.pts, if (visible) null else "dec_decoded_superseded") ?: return
+            if (!visible) return
+            stats.count("dec_rendered")
+            stats.add(LatencyStats.Metric.CALLBACK_RELEASE, now - output.callbackNs)
+            released[output.pts] = Released(input, now, output.generation)
+            if (released.size > MAX_TIMES) {
+                released.remove(released.keys.first())
+                stats.count("dec_framework_callback_missing")
+            }
+            readyRequest = frames.config
+            recordOutputStats(stats, clock, input.frame.captureNs, input.frame.sendNs, input.receivedNs, now)
+        }
+        onVideoReady()
+    }
+
+    private fun onRendered(c: MediaCodec, capturedGeneration: Long, request: DecoderRequest, ptsUs: Long) {
+        synchronized(lock) {
+            if (!isCurrent(c, capturedGeneration) || frames.config !== request) return
+            val output = released.remove(ptsUs) ?: return
+            if (output.generation == capturedGeneration) stats.count("dec_framework_progress")
+        }
     }
 
     private fun format(csd: ByteArray, w: Int, h: Int, attempt: Int): MediaFormat =
@@ -230,40 +329,157 @@ class VideoDecoder(
                 if (Build.VERSION.SDK_INT >= 30) setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
                 setInteger(MediaFormat.KEY_PRIORITY, 0)
             }
- // No KEY_OPERATING_RATE / KEY_FRAME_RATE: on the MT6835 they made decoding slower .
             if (attempt == 0) setInteger(KEY_VDEC_LOW_LATENCY, 1)
         }
 
- /** A hardware AVC decoder when there is one (API 29 tells us), else null for the default. */
-    private fun pickDecoder(): String? {
-        StreamDebug.prop("decoder")?.let { return it }
-        if (Build.VERSION.SDK_INT < 29) return null
-        return MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
-            .filter { !it.isEncoder && it.supportedTypes.any { t -> t.equals(MIME, ignoreCase = true) } }
-            .sortedByDescending { it.isHardwareAccelerated }
-            .firstOrNull()
-            ?.name
+    private fun candidates(w: Int, h: Int, fps: Int): List<DecoderCandidate> {
+        val listed = decoderInfos.map { info ->
+            val hardware = if (Build.VERSION.SDK_INT >= 29) info.isHardwareAccelerated else {
+                !info.name.lowercase().let { it.startsWith("omx.google.") || it.startsWith("c2.android.") || it.contains(".sw.") }
+            }
+            val supported = runCatching {
+                val caps = info.getCapabilitiesForType(MIME).videoCapabilities ?: return@runCatching false
+                supportsDecoderSize(w, h, fps, caps.widthAlignment, caps.heightAlignment) {
+                    caps.areSizeAndRateSupported(w, h, fps.toDouble())
+                }
+            }.getOrDefault(false)
+            if (codecDiag) Log.i(TAG, "CODEC_CAPS name=${info.name} encoder=false hardware=$hardware size=${w}x$h@$fps joint=$supported")
+            DecoderCandidate(info.name, hardware, supported)
+        }
+        return rankDecoderCandidates(listed, decoderOverride)
+    }
+
+    private fun discoverVendor(c: MediaCodec) {
+        if (!codecDiag || !vendorDiscovery.compareAndSet(false, true)) return
+        if (Build.VERSION.SDK_INT >= 31) runCatching {
+            c.supportedVendorParameters.sorted().forEach { name ->
+                Log.i(TAG, "CODEC_VENDOR codec=${c.name} parameter=$name type=${c.getParameterDescriptor(name)?.type}")
+            }
+        }.onFailure { Log.i(TAG, "CODEC_VENDOR_UNAVAILABLE codec=${c.name} reason=${it.javaClass.simpleName}") }
+        runCatching { Log.i(TAG, "CODEC_FORMAT stage=configured codec=${c.name} input=${c.inputFormat} output=${c.outputFormat}") }
     }
 
     companion object {
         const val MIME: String = MediaFormat.MIMETYPE_VIDEO_AVC
- /** MediaTek's ACodec extension key (moonlight-android MediaCodecHelper). */
         const val KEY_VDEC_LOW_LATENCY: String = "vdec-lowlatency"
         private const val TAG = "GameBEXStream"
-        private const val MAX_PENDING = 8
         private const val MAX_TIMES = 120
 
         internal fun recordOutputStats(stats: LatencyStats, clock: ClockSync, captureNs: Long, sendNs: Long, receivedNs: Long, releasedNs: Long) {
             stats.frameRendered(releasedNs)
             stats.add(LatencyStats.Metric.DECODE, releasedNs - receivedNs)
-            if (clock.ready) {
-                if (captureNs != 0L) stats.add(LatencyStats.Metric.VIDEO, releasedNs - clock.hostToGuest(captureNs))
-                stats.add(LatencyStats.Metric.NETWORK, receivedNs - clock.hostToGuest(sendNs))
+            if (captureNs != 0L) clock.estimateHost(captureNs, releasedNs)?.let {
+                stats.addClockSample(LatencyStats.Metric.VIDEO, releasedNs - it.guestNs, it.errorBoundNs)
+            }
+            clock.estimateHost(sendNs, releasedNs)?.let {
+                stats.addClockSample(LatencyStats.Metric.NETWORK, receivedNs - it.guestNs, it.errorBoundNs)
             }
         }
 
- /** True when the phone has any H.264 decoder. */
         fun available(): Boolean = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
             .any { !it.isEncoder && it.supportedTypes.any { t -> t.equals(MIME, ignoreCase = true) } }
     }
 }
+
+internal class DecoderRequest(csd: ByteArray, val width: Int, val height: Int, val codecEpoch: Long, val fps: Int = 60) {
+    val csd = csd.copyOf()
+}
+
+internal class DecoderFrames(
+    private val maxPending: Int = 8,
+    private val maxTimes: Int = 120,
+    private val drop: (String, Int) -> Unit,
+) {
+    enum class Offer { ACCEPTED, DROPPED, NEED_KEY }
+    data class Envelope(val frame: MediaFrame.Video, val receivedNs: Long, val codecEpoch: Long)
+    data class Submitted(val pts: Long, val frame: MediaFrame.Video, val receivedNs: Long, val codecEpoch: Long)
+    var config: DecoderRequest? = null
+        private set
+    private val pending = ArrayDeque<Envelope>()
+    private val times = LinkedHashMap<Long, Submitted>()
+    private var nextPtsUs = 1L
+    private var waitingForKey = true
+    val pendingCount: Int get() = pending.size
+
+    init {
+        require(maxPending > 0 && maxTimes > 0)
+    }
+
+    fun configure(csd: ByteArray, width: Int, height: Int, codecEpoch: Long, fps: Int = 60): DecoderRequest {
+        reset("dec_config_reset")
+        return DecoderRequest(csd, width, height, codecEpoch, fps).also { config = it }
+    }
+
+    fun offer(frame: MediaFrame.Video, receivedNs: Long, codecEpoch: Long): Offer {
+        if (config == null || codecEpoch != config?.codecEpoch) {
+            drop("dec_epoch_stale", 1)
+            return Offer.DROPPED
+        }
+        if (waitingForKey && !frame.key) {
+            drop("dec_await_key", 1)
+            return Offer.DROPPED
+        }
+        if (pending.size >= maxPending) {
+            discardPending("dec_overflow")
+            waitingForKey = !frame.key
+            if (!frame.key) {
+                drop("dec_await_key", 1)
+                return Offer.NEED_KEY
+            }
+        }
+        waitingForKey = false
+        pending.addLast(Envelope(frame, receivedNs, codecEpoch))
+        return Offer.ACCEPTED
+    }
+
+    fun submit(): Submitted? {
+        val envelope = pending.pollFirst() ?: return null
+        check(nextPtsUs > 0)
+        val input = Submitted(nextPtsUs++, envelope.frame, envelope.receivedNs, envelope.codecEpoch)
+        times[input.pts] = input
+        if (times.size > maxTimes) terminal(times.keys.first(), "dec_time_evict")
+        return input
+    }
+
+    fun contains(pts: Long): Boolean = times.containsKey(pts)
+
+    fun terminal(pts: Long, reason: String?): Submitted? = times.remove(pts)?.also {
+        if (reason != null) drop(reason, 1)
+    }
+
+    fun requireKey() {
+        waitingForKey = true
+        discardPending("dec_await_key")
+    }
+
+    fun abandonSubmitted(reason: String) {
+        if (times.isNotEmpty()) drop(reason, times.size)
+        times.clear()
+    }
+
+    fun reset(reason: String) {
+        discardPending(reason)
+        abandonSubmitted(reason)
+        waitingForKey = true
+    }
+
+    private fun discardPending(reason: String) {
+        if (pending.isNotEmpty()) drop(reason, pending.size)
+        pending.clear()
+    }
+}
+
+internal data class DecoderCandidate(val name: String, val hardware: Boolean, val eligible: Boolean)
+
+internal fun supportsDecoderSize(width: Int, height: Int, fps: Int, widthAlignment: Int, heightAlignment: Int, joint: () -> Boolean): Boolean =
+    width > 0 && height > 0 && fps > 0 && widthAlignment > 0 && heightAlignment > 0 &&
+        width % widthAlignment == 0 && height % heightAlignment == 0 && joint()
+
+internal fun rankDecoderCandidates(candidates: List<DecoderCandidate>, override: String?): List<DecoderCandidate> {
+    val unique = candidates.distinctBy { it.name }
+    if (override != null) return listOf(unique.firstOrNull { it.name == override } ?: DecoderCandidate(override, false, false))
+    return unique.sortedWith(compareByDescending<DecoderCandidate> { it.eligible }.thenByDescending { it.hardware })
+}
+
+internal fun ownsDecoder(callbackCodec: Any, liveCodec: Any?, request: DecoderRequest, current: DecoderRequest?): Boolean =
+    callbackCodec === liveCodec && request === current

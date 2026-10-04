@@ -6,6 +6,7 @@ import com.gamebex.client.together.GuestPhase
 import com.gamebex.client.together.LinkMsg
 import com.gamebex.client.together.OfferedGame
 import com.gamebex.client.together.Role
+import com.gamebex.client.together.TOGETHER_PROTO
 import com.gamebex.client.together.TogetherMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -20,7 +21,7 @@ class LinkJsonTest {
 
     @Test fun everyMessageSubtypeRoundTripsWithDiscriminator() {
         val messages = listOf<LinkMsg>(
-            LinkMsg.Hello(1, Role.GUEST, "device", "Sam", "1.0"),
+            LinkMsg.Hello(TOGETHER_PROTO, Role.GUEST, "device", "Sam", "1.0"),
             LinkMsg.Offer("session", TogetherMode.RA_NETPLAY, game, core, "10.42.1.2"),
             LinkMsg.GuestState("session", GuestPhase.DOWNLOADING, "copying", 42),
             LinkMsg.CoreRequest("session", "mesen"),
@@ -29,6 +30,8 @@ class LinkJsonTest {
             LinkMsg.CoreUnavailable("session", "mesen"),
             LinkMsg.Launch("session", 1),
             LinkMsg.HostLive("session", 1),
+            LinkMsg.StreamReady("session", 1, com.gamebex.client.stream.proto.StreamWire.VERSION, "00112233445566778899aabbccddeeff", 55441, 55442, 1280, 576, true, "bridge-arrival"),
+            LinkMsg.StreamResumed("session", 1, "00000000-0000-4000-8000-000000000001", "bridge-arrival"),
             LinkMsg.Ping(7),
             LinkMsg.Pong(7),
             LinkMsg.Bye(ByeReason.LEFT),
@@ -38,7 +41,7 @@ class LinkJsonTest {
             assertTrue(text.contains("\"t\":"))
             assertEquals(message, LinkJson.decode(text))
         }
-        assertTrue(LinkJson.encode(LinkMsg.Hello(1, Role.GUEST, "d", "n", "v")).contains("\"t\":\"hello\""))
+        assertTrue(LinkJson.encode(LinkMsg.Hello(TOGETHER_PROTO, Role.GUEST, "d", "n", "v")).contains("\"t\":\"hello\""))
     }
 
     @Test fun unknownTypeIsDropped() {
@@ -51,7 +54,7 @@ class LinkJsonTest {
     }
 
     @Test fun nullsAreNotEncoded() {
-        val text = LinkJson.encode(LinkMsg.Hello(1, Role.GUEST, "d", "n", "v", null, null))
+        val text = LinkJson.encode(LinkMsg.Hello(TOGETHER_PROTO, Role.GUEST, "d", "n", "v", null, null))
         assertFalse(text.contains("null"))
         assertNotNull(LinkJson.decode(text))
     }

@@ -35,4 +35,28 @@ class StreamStatsTextTest {
             StreamStatsText.lines(s.snapshot(0)),
         )
     }
+
+    @Test
+    fun oversizedRunHistogramsRoundTripWithMetricAndPhaseIdentified() {
+        val row = "RUN label=B metric=video phase=measure_end hist=" + "1:5,".repeat(2500)
+        val chunks = StreamStatsText.runLogLines(listOf(row))
+        assertEquals(row, chunks.joinToString("") { it.substringAfter(" data=") })
+        chunks.forEachIndexed { index, part ->
+            assertEquals("RUNPART label=B metric=video phase=measure_end part=$index parts=${chunks.size}", part.substringBefore(" data="))
+            org.junit.Assert.assertTrue(part.substringAfter(" data=").length <= 3000)
+        }
+        assertEquals(listOf("RUN label=B metric=decode phase=measure_end n=0"),
+            StreamStatsText.runLogLines(listOf("RUN label=B metric=decode phase=measure_end n=0")))
+    }
+
+    @Test
+    fun invalidSamplesAndReleaseStallsAreVisibleWithoutChangingAudioOrigin() {
+        val s = LatencyStats()
+        s.add(LatencyStats.Metric.PRESENT, -1L)
+        s.frameRendered(0L)
+        s.tick(200_000_000L)
+        val lines = StreamStatsText.lines(s.snapshot(200_000_000L), "bridge-arrival")
+        assertEquals("1 release stalls · 200 ms total · 1 invalid samples", lines.last())
+        assertEquals("Bridge arrival → output – ms · buffer 0 ms · 0 gaps · 0 track underruns", lines[2])
+    }
 }

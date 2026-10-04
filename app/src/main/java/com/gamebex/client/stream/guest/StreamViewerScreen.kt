@@ -71,14 +71,19 @@ fun StreamViewerScreen(
     onTouchKey: (Int, Boolean, Long) -> Unit = { _, _, _ -> },
     onTouchAxes: (Float, Float, Long) -> Unit = { _, _, _ -> },
     onReleaseTouchInput: () -> Unit = {},
+    hudEnabled: Boolean = true,
+    touchPadHidden: Boolean = false,
+    unbufferedInput: Boolean = false,
+    fixedSurface: Boolean = false,
+    surfaceOpaque: Boolean = false,
 ) {
     var menu by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf(true) }
     val surfaceCallback by rememberUpdatedState(onSurface)
     val releaseTouchCallback by rememberUpdatedState(onReleaseTouchInput)
-    val loading = ui.status != ViewerStatus.ENDED &&
-        (ui.status == ViewerStatus.CONNECTING || ui.status == ViewerStatus.RECONNECTING || ui.waitingForVideo)
-    val controlsVisible = ui.status == ViewerStatus.WATCHING && !loading
+    val overlays = viewerOverlays(ui.status, ui.waitingForVideo, hudEnabled, touchPadHidden)
+    val loading = overlays.loading
+    val controlsVisible = overlays.menu
     LaunchedEffect(loading, ui.status) {
         if (!controlsVisible) menu = false
     }
@@ -102,6 +107,7 @@ fun StreamViewerScreen(
             AndroidView(
                 factory = { ctx ->
                     SurfaceView(ctx).apply {
+                        if (surfaceOpaque) holder.setFormat(android.graphics.PixelFormat.OPAQUE)
                         holder.addCallback(object : SurfaceHolder.Callback {
                             override fun surfaceCreated(h: SurfaceHolder) = surfaceCallback(h.surface)
                             override fun surfaceChanged(h: SurfaceHolder, format: Int, w: Int, hgt: Int) = Unit
@@ -112,14 +118,18 @@ fun StreamViewerScreen(
                         })
                     }
                 },
+                update = { view ->
+                    if (fixedSurface) view.holder.setFixedSize(ui.width.coerceAtLeast(1), ui.height.coerceAtLeast(1))
+                    else view.holder.setSizeFromLayout()
+                },
                 modifier = Modifier
                     .align(Alignment.Center)
                     .aspectRatio(ui.width.coerceAtLeast(1).toFloat() / ui.height.coerceAtLeast(1).toFloat())
                     .testTag(TAG_VIDEO),
             )
         }
-        if (controlsVisible) {
-            StreamTouchPad(onTouchKey, onTouchAxes, onReleaseTouchInput)
+        if (overlays.touchPad) {
+            StreamTouchPad(onTouchKey, onTouchAxes, onReleaseTouchInput, unbufferedInput = unbufferedInput)
         }
         if (loading) {
             LoadingOverlay(ui, onLeave)
@@ -135,27 +145,30 @@ fun StreamViewerScreen(
             }
         }
         if (ui.status != ViewerStatus.ENDED) {
-            if (hint && !menu) {
+            ui.message?.let { message ->
+                Banner(message, Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(12.dp))
+            }
+            if (overlays.hud && hint && !menu) {
                 Banner(
                     if (loading) TogetherCopy.leaveStreamHint else "${TogetherCopy.leaveStreamHint} · Menu for stats",
                     Modifier.align(Alignment.TopCenter).padding(top = if (loading) 12.dp else 60.dp),
                 )
             }
-            if (ui.weakWifi) {
+            if (overlays.hud && ui.weakWifi) {
                 Banner(
                     TogetherCopy.weakWifi,
                     if (loading) Modifier.align(Alignment.BottomStart).padding(start = 12.dp, end = 12.dp, bottom = 76.dp)
                     else Modifier.align(Alignment.TopCenter).padding(top = if (ui.linkLost) 144.dp else 104.dp),
                 )
             }
-            if (ui.linkLost) {
+            if (overlays.hud && ui.linkLost) {
                 Banner(
                     if (ui.status == ViewerStatus.WATCHING) TogetherCopy.streamLinkLostStillGuest(ui.hostName) else TogetherCopy.streamLinkLostGuest(ui.hostName),
                     Modifier.align(Alignment.TopCenter).padding(top = if (loading) 12.dp else 104.dp).testTag(TAG_LINK_LOST),
                     background = Color(0xE6B26A00),
                 )
             }
-            if (ui.showStats && ui.stats.isNotEmpty()) {
+            if (overlays.hud && ui.showStats && ui.stats.isNotEmpty()) {
                 Column(
                     Modifier
                         .align(Alignment.TopEnd)
@@ -182,11 +195,13 @@ fun StreamViewerScreen(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     Button(onClick = onLeave) { Text(TogetherCopy.leaveStream) }
-                    OutlinedButton(onClick = {
-                        onToggleStats()
-                        menu = false
-                    }) {
-                        Text(if (ui.showStats) TogetherCopy.hideStats else TogetherCopy.showStats, color = Color.White)
+                    if (overlays.hud) {
+                        OutlinedButton(onClick = {
+                            onToggleStats()
+                            menu = false
+                        }) {
+                            Text(if (ui.showStats) TogetherCopy.hideStats else TogetherCopy.showStats, color = Color.White)
+                        }
                     }
                 }
             }
@@ -294,3 +309,12 @@ const val TAG_STATS: String = "stream-stats"
 const val TAG_LINK_LOST: String = "stream-link-lost"
 private const val HINT_MS = 5_000L
 private const val MENU_MS = 4_000L
+
+internal data class ViewerOverlays(val loading: Boolean, val menu: Boolean, val touchPad: Boolean, val hud: Boolean)
+
+internal fun viewerOverlays(status: ViewerStatus, waitingForVideo: Boolean, hudEnabled: Boolean, touchPadHidden: Boolean): ViewerOverlays {
+    val loading = status != ViewerStatus.ENDED &&
+        (status == ViewerStatus.CONNECTING || status == ViewerStatus.RECONNECTING || waitingForVideo)
+    val controls = status == ViewerStatus.WATCHING && !loading
+    return ViewerOverlays(loading, controls, controls && !touchPadHidden, hudEnabled)
+}

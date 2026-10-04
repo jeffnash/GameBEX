@@ -6,7 +6,7 @@ import kotlinx.serialization.json.Json
 
 /** Why a stream could not start or stopped. */
 @Serializable
-enum class StreamError { SHELL_UNAVAILABLE, OLD_ANDROID, DISPLAY_CAPTURE, ENCODER, UHID, NETWORK, BAD_CONFIG }
+enum class StreamError { SHELL_UNAVAILABLE, OLD_ANDROID, DISPLAY_CAPTURE, ENCODER, UHID, NETWORK, BAD_CONFIG, SHARING_CANCELLED }
 
 /** What the host app asks the shell process to run (IStreamShell.start, as JSON). */
 @Serializable
@@ -20,11 +20,7 @@ data class StreamConfig(
  /** Index into [StreamCaps.LEVELS] to start at: level 1 on these phones (early check V-2). */
     val level: Int = 1,
     val audio: Boolean = true,
- /**
- * Capture only the game's app (Android 14+ single-app MediaProjection, run by the app) instead of
- * mirroring the whole display: the shell hands its encoder surface to the app and waits.
- */
-    val appCapture: Boolean = false,
+    val appCapture: Boolean = true,
     val rsound: Boolean = false,
 )
 
@@ -57,6 +53,11 @@ data class StreamStatus(
     val framesDropped: Long = 0,
     val inputPackets: Long = 0,
     val inputRejected: Long = 0,
+    val inputWriteFailures: Long = 0,
+    val videoConfigDiscarded: Long = 0,
+    val videoRetiredDiscarded: Long = 0,
+    val tcpAudioEvictedFrames: Long = 0,
+    val audioUdpDropped: Long = 0,
     val audio: Boolean = false,
     val guestVideoP95Us: Int = 0,
     val audioMode: String = "none",
@@ -111,6 +112,12 @@ object StreamToken {
         val bytes = ByteArray(16)
         random.nextBytes(bytes)
         return bytes.joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+    }
+
+    fun attachId(random: SecureRandom = SecureRandom()): Long {
+        var id: Long
+        do { id = random.nextLong() } while (id == 0L)
+        return id
     }
 
     fun isValid(token: String): Boolean = HEX.matches(token)

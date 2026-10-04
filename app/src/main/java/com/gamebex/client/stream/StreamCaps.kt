@@ -29,7 +29,8 @@ object StreamCaps {
     val LEVELS: List<VideoLevel> = listOf(
         VideoLevel(0, 1600, 720, 60, 8_000_000),
         VideoLevel(1, 1280, 576, 60, 4_000_000),
-        VideoLevel(2, 1280, 576, 30, 3_000_000),
+        VideoLevel(2, 960, 432, 60, 3_000_000),
+        VideoLevel(3, 1280, 576, 30, 3_000_000),
     )
     const val MIN_BITRATE: Int = 1_500_000
     const val I_FRAME_INTERVAL_S: Int = 10
@@ -71,7 +72,7 @@ object StreamCaps {
     const val SPS_FIXUP: Boolean = true
 
  /** Bump when IStreamShell or the shell code changes so Shizuku restarts the service. */
-    const val SHELL_SERVICE_VERSION: Int = 22
+    const val SHELL_SERVICE_VERSION: Int = 26
 
  /** Dolphin's index for the only device named [PAD_NAME]. */
     const val DOLPHIN_DEVICE_INDEX: Int = 0

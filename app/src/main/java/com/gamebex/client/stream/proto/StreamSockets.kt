@@ -18,8 +18,8 @@ object StreamSockets {
     /** DSCP AF41 (interactive video) in the IPv4 TOS byte. */
     const val TOS_VIDEO: Int = 0x88
 
-    /** DSCP EF (expedited forwarding), the voice access category on Wi-Fi. */
     const val TOS_INPUT: Int = 0xB8
+    const val TOS_CS6: Int = 0xC0
 
     /** Linux TCP_NOTSENT_LOWAT: how much unsent data the kernel may hold before writes block. */
     private const val TCP_NOTSENT_LOWAT = 25
@@ -32,9 +32,14 @@ object StreamSockets {
         runCatching { s.trafficClass = TOS_VIDEO }
     }
 
-    fun markInput(s: DatagramSocket) {
-        if (!enabled) return
-        runCatching { s.trafficClass = TOS_INPUT }
+    fun inputTos(cs6: Boolean): Int = if (cs6) TOS_CS6 else TOS_INPUT
+
+    fun markInput(s: DatagramSocket, cs6: Boolean = false): Int? {
+        if (!enabled) return null
+        return runCatching {
+            s.trafficClass = inputTos(cs6)
+            s.trafficClass
+        }.getOrNull()
     }
 
     /** Host media socket: video mark, and a small unsent-bytes cap so congestion shows up in our queue. */

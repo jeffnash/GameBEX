@@ -27,6 +27,7 @@ import org.junit.Test
  */
 class StreamLoopbackTest {
     private val token = StreamToken.generate()
+    private val attachId = StreamToken.attachId()
     private val pad = FakeVirtualPad()
     private val video = FakeVideoSource(StreamCaps.LEVELS[0])
     private val audio = FakeAudioSource()
@@ -71,9 +72,11 @@ class StreamLoopbackTest {
             override fun onPong(t0: Long, t1: Long, t2: Long, t3: Long) {
                 clock.add(t0, t1, t2, t3)
             }
-        }, { MediaFrame.Report(0, 0, 0, 0, 0) }).also { it.start() }
+        }, attachId = attachId).also { it.start() }
         inputPort = started.inputPort
-        input = InputSender("127.0.0.1", started.inputPort, token).also { it.start() }
+        input = InputSender("127.0.0.1", started.inputPort, token, onAudio = { seq, captureNs, pcm ->
+            events += MediaFrame.Audio(seq, captureNs, pcm.size / (StreamCaps.AUDIO_CHANNELS * 2), pcm)
+        }, attachId = attachId).also { it.start() }
     }
 
     private inline fun <reified T> next(): T {
@@ -99,8 +102,10 @@ class StreamLoopbackTest {
         start()
         waitFor("connected") { synchronized(states) { states.any { it is StreamClient.State.Connected } } }
         waitFor("guest seen by host") { session.status().guestConnected }
+        val initial = byteArrayOf(0, 0, 0, 1, 0x67, 1, 0, 0, 0, 1, 0x68, 1)
+        assertArrayEquals(initial, next<MediaFrame.VideoConfig>().csd)
         val csd = byteArrayOf(0, 0, 0, 1, 0x67, 0x42, 0, 0, 0, 1, 0x68, 0x01)
-        video.sink!!.onConfig(csd)
+        video.sink!!.onFormat(com.gamebex.client.stream.shell.EncodedFormat(video.level, video.currentBitrate, csd, video.codecEpoch))
         assertArrayEquals(csd, next<MediaFrame.VideoConfig>().csd)
         waitFor("keyframe asked for") { video.keyframeRequests >= 1 }
         video.emit(seq = 1, key = true)
@@ -108,7 +113,10 @@ class StreamLoopbackTest {
         assertEquals(1, next<MediaFrame.Video>().seq)
         assertEquals(2, next<MediaFrame.Video>().seq)
         audio.emit(seq = 1)
-        assertEquals(1, next<MediaFrame.Audio>().seq)
+        val pcm = next<MediaFrame.Audio>()
+        assertEquals(1, pcm.seq)
+        assertEquals(StreamCaps.AUDIO_CHUNK_FRAMES, pcm.frames)
+        assertEquals(StreamCaps.AUDIO_CHUNK_FRAMES * StreamCaps.AUDIO_CHANNELS * 2, pcm.pcm.size)
         waitFor("clock offset") { clock.ready }
         assertTrue(clock.rttNs in 0 until 1_000_000_000L)
 

@@ -45,6 +45,53 @@ class StreamViewerScreenTest {
     )
 
     @Test
+    fun hudOffStillShowsGuestAudioFailure() {
+        val message = "Guest audio is unavailable (write). Host sound is unchanged."
+        rule.setContent {
+            GameBexTheme { StreamViewerScreen(ui(ViewerStatus.WATCHING, message), {}, {}, {}, {}, hudEnabled = false) }
+        }
+        rule.onNodeWithText(message).assertIsDisplayed()
+        rule.onNodeWithTag(TAG_MENU, useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun hudOffKeepsTouchPadMenuAndLeave() {
+        var leaves = 0
+        rule.setContent {
+            GameBexTheme { StreamViewerScreen(ui(ViewerStatus.WATCHING, stats = true), {}, { leaves++ }, {}, {}, hudEnabled = false) }
+        }
+        rule.onNodeWithTag(TAG_STATS, useUnmergedTree = true).assertDoesNotExist()
+        rule.onNodeWithTag(TAG_TOUCH_PAD, useUnmergedTree = true).assertIsDisplayed()
+        rule.onNodeWithTag(TAG_MENU, useUnmergedTree = true).performClick()
+        rule.onNodeWithText(TogetherCopy.leaveStream).performClick()
+        assertEquals(1, leaves)
+    }
+
+    @Test
+    fun hiddenPadKeepsHudAndMenu() {
+        rule.setContent {
+            GameBexTheme { StreamViewerScreen(ui(ViewerStatus.WATCHING, stats = true), {}, {}, {}, {}, touchPadHidden = true) }
+        }
+        rule.onNodeWithTag(TAG_TOUCH_PAD, useUnmergedTree = true).assertDoesNotExist()
+        rule.onNodeWithTag(TAG_STATS, useUnmergedTree = true).assertIsDisplayed()
+        rule.onNodeWithTag(TAG_MENU, useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun hudOffKeepsWaitingLeaveAndTerminalMessage() {
+        var state by mutableStateOf(ui(ViewerStatus.WATCHING).copy(waitingForVideo = true))
+        rule.setContent {
+            GameBexTheme { StreamViewerScreen(state, {}, {}, {}, {}, hudEnabled = false, touchPadHidden = true) }
+        }
+        rule.onNodeWithTag(TAG_LOADING, useUnmergedTree = true).assertIsDisplayed()
+        rule.onNodeWithText(TogetherCopy.leaveStream).assertIsDisplayed()
+        rule.runOnIdle { state = ui(ViewerStatus.ENDED, "The host stopped sharing.") }
+        rule.onNodeWithTag(TAG_LOADING, useUnmergedTree = true).assertDoesNotExist()
+        rule.onNodeWithText("The host stopped sharing.").assertIsDisplayed()
+        rule.onNodeWithText(TogetherCopy.back).assertIsDisplayed()
+    }
+
+    @Test
     fun retroArchLifecycleProbeCompilesAndParsesOnAndroid() {
         fun snapshot(exiting: Boolean): String {
             val component = "com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture"

@@ -23,7 +23,5 @@ interface IStreamShell {
     int uid() = 5;
     /** App capture streams only: where the encoder's input surfaces go (null detaches). */
     void setCaptureListener(IStreamCapture listener) = 6;
-    /** App capture streams only: the host declined app capture, so mirror the whole display. */
-    void useMirror() = 7;
     void gameLaunched() = 8;
 }

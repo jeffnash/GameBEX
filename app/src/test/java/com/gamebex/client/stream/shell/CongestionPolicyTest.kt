@@ -59,13 +59,13 @@ class CongestionPolicyTest {
 
     @Test
     fun theLowestLevelStaysPut() {
-        val p = CongestionPolicy(startLevel = 2)
+        val p = CongestionPolicy(startLevel = 3)
         var t = 1_000 * ms
         repeat(40) {
             p.onDrop(t)
             t += 600 * ms
         }
-        assertEquals(2, p.level.index)
+        assertEquals(3, p.level.index)
         assertEquals(StreamCaps.MIN_BITRATE, p.bitrate)
     }
 
@@ -80,6 +80,35 @@ class CongestionPolicyTest {
         assertEquals(CongestionPolicy.Action.SetBitrate(7_986_000), p.tick(16_000 * ms))
         assertEquals(CongestionPolicy.Action.SetBitrate(8_000_000), p.tick(21_000 * ms))
         assertNull(p.tick(40_000 * ms))
+    }
+
+    @Test
+    fun normalAdaptationSkipsExperimentalRung() {
+        val p = CongestionPolicy(startLevel = 1)
+        var now = 0L
+        repeat(40) {
+            p.onDrop(now)
+            now += 600 * ms
+        }
+        assertEquals(3, p.level.index)
+    }
+
+    @Test
+    fun debugStartCanUseExperimentalRung() {
+        val p = CongestionPolicy(startLevel = 2)
+        assertEquals(2, p.level.index)
+        assertEquals(960, p.level.width)
+    }
+
+    @Test
+    fun filteredLadderUsesRankNotListPosition() {
+        val p = CongestionPolicy(levels = listOf(StreamCaps.LEVELS[1], StreamCaps.LEVELS[3]), startLevel = 1)
+        var now = 0L
+        repeat(40) {
+            p.onDrop(now)
+            now += 600 * ms
+        }
+        assertEquals(3, p.level.index)
     }
 
     @Test

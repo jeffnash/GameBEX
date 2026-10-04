@@ -249,6 +249,8 @@ object TogetherCopy {
     const val streamNoDecoder = "This phone can't play the stream: it has no H.264 video decoder."
     const val streamNoSound = "Streaming without sound: this phone won't share the game's audio."
     const val streamNetwork = "Couldn't open the stream on this phone's Wi-Fi. Check Wi-Fi and try again."
+    const val streamSharingCancelled = "Sharing was cancelled. Start again to share the game."
+    const val streamHostStoppedSharing = "The host stopped sharing."
     const val streamStopped = "The stream stopped. Press Play again to restart it."
     const val streamNotReady = "The stream from the other phone didn't start in time."
     const val streamShellNoAnswer = "Shizuku didn't start GameBEX's stream service. Check again; if it keeps happening, restart Shizuku."
@@ -279,6 +281,7 @@ object TogetherCopy {
     fun streamPlayer2Other(emu: String) = "In $emu, set controller port 2 to $streamPadName. GameBEX can't set it for you."
     fun streamStartFailed(error: StreamError?): String = when (error) {
         StreamError.OLD_ANDROID -> streamNeedsAndroid13
+        StreamError.SHARING_CANCELLED -> streamSharingCancelled
         StreamError.DISPLAY_CAPTURE -> streamNoScreen
         StreamError.ENCODER -> streamNoEncoder
         StreamError.UHID -> streamNoController

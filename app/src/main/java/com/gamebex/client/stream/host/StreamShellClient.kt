@@ -25,6 +25,9 @@ import com.gamebex.client.stream.shell.StreamShellService
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
@@ -44,14 +47,9 @@ class StreamShellClient private constructor(ctx: Context) : StreamHost {
     @Volatile private var streaming = false
     @Volatile private var appCapture = false
     private val captureEpoch = AtomicLong()
+    private val captureScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Volatile private var captureFailure: StreamError? = null
     @Volatile private var unboundAtMs = 0L
-
-    /** The shell hands its encoder surfaces here; StreamAppCapture renders the shared app into them. */
-    private val captureListener = object : IStreamCapture.Stub() {
-        override fun onSurface(surface: Surface?, width: Int, height: Int) {
-            StreamAppCapture.onSurface(surface, width, height)
-        }
-    }
 
     private val args: Shizuku.UserServiceArgs by lazy {
         val debuggable = (app.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
@@ -88,29 +86,49 @@ class StreamShellClient private constructor(ctx: Context) : StreamHost {
     }
 
     override suspend fun start(config: StreamConfig): StreamStarted = withContext(Dispatchers.IO) {
-        val epoch = captureEpoch.incrementAndGet()
-        appCapture = false
-        StreamAppCapture.onEnded = null
-        withContext(Dispatchers.Main) { StreamAppCapture.stop() }
+        val epoch = synchronized(lock) {
+            captureFailure = null
+            appCapture = false
+            streaming = false
+            StreamAppCapture.onEnded = null
+            StreamAppCapture.stop()
+            captureEpoch.incrementAndGet()
+        }
         if (ShizukuFiles.state(app) != ShizukuFiles.State.READY) {
             return@withContext StreamStarted(ok = false, error = StreamError.SHELL_UNAVAILABLE)
         }
         val svc = bind() ?: return@withContext StreamStarted(ok = false, error = StreamError.SHELL_UNAVAILABLE)
-        // Only the game's app is streamed where Android can share a single app (14+); the shell waits
-        // for attachCapture() to point the share at its encoder.
-        val wanted = config.copy(appCapture = StreamAppCapture.supported())
+        val wanted = config.copy(appCapture = true)
         val json = StreamJson.json.encodeToString(StreamConfig.serializer(), wanted)
-        val started = runCatching { StreamJson.json.decodeFromString(StreamStarted.serializer(), svc.start(json)) }
-            .onFailure { Log.w(TAG, "start failed", it) }
-            .getOrDefault(StreamStarted(ok = false, error = StreamError.SHELL_UNAVAILABLE))
-        streaming = started.ok
-        appCapture = started.ok && wanted.appCapture
-        if (appCapture) {
-            StreamAppCapture.onEnded = { if (captureEpoch.get() == epoch) runCatching { svc.stop() } }
-            runCatching { svc.setCaptureListener(captureListener) }.onFailure { Log.w(TAG, "capture listener failed", it) }
+        synchronized(lock) {
+            if (!CaptureIdentity.ownsSession(captureEpoch.get(), epoch, remote, svc)) {
+                return@synchronized StreamStarted(ok = false, error = StreamError.SHARING_CANCELLED)
+            }
+            var started = runCatching { StreamJson.json.decodeFromString(StreamStarted.serializer(), svc.start(json)) }
+                .onFailure { Log.w(TAG, "start failed", it) }
+                .getOrDefault(StreamStarted(ok = false, error = StreamError.SHELL_UNAVAILABLE))
+            streaming = started.ok
+            appCapture = started.ok
+            if (appCapture) {
+                StreamAppCapture.onEnded = { captureScope.launch { stopCapturedSession(epoch, svc) } }
+                val listener = object : IStreamCapture.Stub() {
+                    override fun onSurface(surface: Surface?, width: Int, height: Int) {
+                        StreamAppCapture.onSurface(surface, width, height) {
+                            appCapture && CaptureIdentity.ownsSession(captureEpoch.get(), epoch, remote, svc)
+                        }
+                    }
+                }
+                try {
+                    svc.setCaptureListener(listener)
+                } catch (failed: Exception) {
+                    Log.w(TAG, "capture listener failed", failed)
+                    stopCapturedSession(epoch, svc)
+                    started = StreamStarted(ok = false, error = StreamError.SHARING_CANCELLED)
+                }
+            }
+            if (!started.ok) unbind()
+            started
         }
-        if (!started.ok) unbind()
-        started
     }
 
     override suspend fun gameLaunched() = withContext(Dispatchers.IO) {
@@ -119,14 +137,16 @@ class StreamShellClient private constructor(ctx: Context) : StreamHost {
     }
 
     override suspend fun attachCapture() {
-        val epoch = captureEpoch.get()
-        if (!appCapture) return
-        val shared = runCatching { StreamAppCapture.start(app) { appCapture && captureEpoch.get() == epoch } }
-            .onFailure { Log.w(TAG, "app capture failed", it) }
-            .getOrDefault(false)
-        if (!shared && appCapture && captureEpoch.get() == epoch) {
-            withContext(Dispatchers.IO) { runCatching { remote?.useMirror() }.onFailure { Log.w(TAG, "mirror fallback failed", it) } }
+        val (epoch, svc) = synchronized(lock) {
+            if (!appCapture) return
+            captureEpoch.get() to (remote ?: return)
         }
+        val current = { appCapture && CaptureIdentity.ownsSession(captureEpoch.get(), epoch, remote, svc) }
+        CaptureIdentity.attach(
+            capture = { StreamAppCapture.start(app, current) },
+            current = current,
+            stop = { stopCapturedSession(epoch, svc) },
+        )
     }
 
     override suspend fun status(): StreamStatus? = withContext(Dispatchers.IO) {
@@ -136,24 +156,38 @@ class StreamShellClient private constructor(ctx: Context) : StreamHost {
                 .onFailure { Log.w(TAG, "status failed", it) }
                 .getOrNull()
         }
-        if (status?.running != true && appCapture && captureEpoch.compareAndSet(epoch, epoch + 1)) {
-            appCapture = false
-            StreamAppCapture.onEnded = null
-            withContext(Dispatchers.Main) { StreamAppCapture.stop() }
+        synchronized(lock) {
+            if (status?.running != true && appCapture && captureEpoch.compareAndSet(epoch, epoch + 1)) {
+                appCapture = false
+                streaming = false
+                StreamAppCapture.onEnded = null
+                StreamAppCapture.stop()
+            }
+            captureFailure?.let { StreamStatus(running = false, error = it) } ?: status
         }
-        status
     }
 
     override suspend fun stop() = withContext(Dispatchers.IO) {
-        captureEpoch.incrementAndGet()
-        streaming = false
-        if (appCapture) {
+        synchronized(lock) {
+            captureEpoch.incrementAndGet()
+            streaming = false
             appCapture = false
             StreamAppCapture.onEnded = null
-            withContext(Dispatchers.Main) { StreamAppCapture.stop() }
+            StreamAppCapture.stop()
+            remote?.let { svc -> runCatching { svc.stop() }.onFailure { Log.w(TAG, "stop failed", it) } }
+            unbind()
         }
-        remote?.let { svc -> runCatching { svc.stop() }.onFailure { Log.w(TAG, "stop failed", it) } }
-        unbind()
+    }
+
+    private fun stopCapturedSession(epoch: Long, svc: IStreamShell) = synchronized(lock) {
+        if (!CaptureIdentity.ownsSession(captureEpoch.get(), epoch, remote, svc)) return@synchronized
+        captureEpoch.incrementAndGet()
+        appCapture = false
+        streaming = false
+        captureFailure = StreamError.SHARING_CANCELLED
+        StreamAppCapture.onEnded = null
+        StreamAppCapture.stop()
+        runCatching { svc.stop() }.onFailure { Log.w(TAG, "capture stop failed", it) }
     }
 
     private fun bind(): IStreamShell? {

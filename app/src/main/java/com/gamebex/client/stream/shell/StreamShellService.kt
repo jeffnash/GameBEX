@@ -107,10 +107,6 @@ class StreamShellService() : IStreamShell.Stub() {
         synchronized(lock) { session }?.setCaptureListener(target)
     }
 
-    override fun useMirror() {
-        synchronized(lock) { session }?.useMirror()
-    }
-
     override fun gameLaunched() {
         synchronized(lock) { session }?.gameLaunched()
     }

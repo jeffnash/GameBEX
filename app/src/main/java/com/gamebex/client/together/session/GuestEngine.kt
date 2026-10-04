@@ -33,6 +33,7 @@ import com.gamebex.client.together.TogetherPlatform
 import com.gamebex.client.together.TogetherSupport
 import com.gamebex.client.together.TogetherTiming
 import com.gamebex.client.together.TOGETHER_PROTO
+import com.gamebex.client.together.StreamResume
 import com.gamebex.client.together.DownloadResult
 import com.gamebex.client.together.DownloadState
 import com.gamebex.client.together.net.JoinLink
@@ -65,6 +66,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.NonCancellable
@@ -87,6 +89,8 @@ internal class GuestEngine(
     private val scope: CoroutineScope,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val logSink: (String) -> Unit = { message -> Log.w("GameBEXTogether", message) },
+    private val controlOptions: () -> TogetherControlOptions = TogetherControlOptions::read,
+    private val controlLog: (String) -> Unit = { Log.i("GameBEXControl", it) },
 ) {
     private sealed interface Input {
         data class Join(val target: NearbyHost, val beforeStart: suspend () -> Unit) : Input
@@ -95,6 +99,9 @@ internal class GuestEngine(
         data class End(val token: Long, val done: CompletableDeferred<Unit>?) : Input
         data object Foreground : Input
         data class Connected(val epoch: Int, val link: Link, val token: Long) : Input
+        data class ControlResumed(val epoch: Int, val token: Long, val serial: Long, val ready: LinkMsg.StreamReady, val link: Link) : Input
+        data class ControlResumeFailed(val epoch: Int, val token: Long, val serial: Long) : Input
+        data class DebugCutLink(val epoch: Int, val round: Int, val token: Long, val link: Link) : Input
         data class ConnectFailed(val epoch: Int, val token: Long) : Input
         data class OfferTimeout(val epoch: Int, val token: Long) : Input
         data class LinkEvt(val link: Link, val event: LinkEvent, val token: Long) : Input
@@ -230,6 +237,10 @@ internal class GuestEngine(
     private var playAddress: String? = null
  /** STREAM: the host's last StreamReady; the viewer reopens with it. */
     private var streamReady: LinkMsg.StreamReady? = null
+    private var controlSnapshot = TogetherControlOptions()
+    private var resumeSerial = 0L
+    private var resumeJob: Job? = null
+    private var debugCutJob: Job? = null
  /** STREAM: completed by the StreamReady of the round being launched. */
     private var streamSignal = CompletableDeferred<LinkMsg.StreamReady>()
     private val coreName = Regex("^[a-z0-9_]+$")
@@ -315,6 +326,11 @@ internal class GuestEngine(
             }
             Input.Foreground -> handleForeground()
             is Input.Connected -> handleConnected(input)
+            is Input.ControlResumed -> handleControlResumed(input)
+            is Input.ControlResumeFailed -> handleControlResumeFailed(input)
+            is Input.DebugCutLink -> if (isCurrent(input.epoch) && owns(input.token) && input.round == round &&
+                input.link === link && linkOpen && _view.value?.step == GuestStep.IN_GAME
+            ) input.link.close()
             is Input.ConnectFailed -> if (isCurrent(input.epoch) && owns(input.token)) {
                 endInternal(TogetherCopy.cantReach(target?.name ?: TogetherCopy.otherPhone), sendBye = false, updateView = true, token = input.token)
             }
@@ -358,6 +374,8 @@ internal class GuestEngine(
         input.beforeStart()
         epoch += 1
         sessionEnded = false
+        cancelControlResume()
+        controlSnapshot = withContext(ioDispatcher) { controlOptions() }
         target = input.target
         link = null
         hostHello = null
@@ -480,13 +498,141 @@ internal class GuestEngine(
             is LinkEvent.Closed -> {
                 linkOpen = false
                 if (_view.value?.step == GuestStep.IN_GAME) {
+                    if (offer?.mode == TogetherMode.STREAM) link = null
+                    debugCutJob?.cancel()
+                    debugCutJob = null
+                    recordControl("control_lost")
                     writeIfToken(input.token) { it.copy(linkLost = true, message = TogetherCopy.linkLost(hostName())) }
                     if (!platform.foreground.value) platform.alert(TogetherAlert.LinkLost(hostName()))
+                    startControlResume(input.token)
                 } else {
                     endInternal(TogetherCopy.linkLost(hostName()), sendBye = false, updateView = true, token = input.token)
                 }
             }
         }
+    }
+
+    private fun startControlResume(token: Long) {
+        if (!controlSnapshot.controlResume || !owns(token) || sessionEnded || byeReceived || linkOpen ||
+            _view.value?.step != GuestStep.IN_GAME || offer?.mode != TogetherMode.STREAM || resumeJob != null
+        ) return
+        val ready = streamReady ?: return
+        val address = playAddress ?: return
+        val port = target?.port ?: return
+        val sessionResources = resources ?: return
+        val expectedEpoch = epoch
+        val serial = ++resumeSerial
+        val playerName = myName
+        resumeJob = launchSession {
+            val resumed = withTimeoutOrNull(timing.controlResumeBudgetMs) {
+                var attemptNumber = 0
+                while (currentCoroutineContext().isActive) {
+                    delay(StreamResumeGuard.delayMs(attemptNumber++))
+                    val attempt = UUID.randomUUID().toString()
+                    var candidate: Link? = null
+                    var transferred = false
+                    try {
+                        val opened = withTimeoutOrNull(timing.controlResumeConnectMs) {
+                            openOnIo<Link>({ mark ->
+                                val next = transport.connect(address, port, timing.controlResumeConnectMs)
+                                candidate = next
+                                mark(next)
+                                next
+                            }) { it.close() }
+                        } ?: continue
+                        candidate = opened
+                        if (!sessionResources.register { opened.close() }) break
+                        if (opened.remoteAddress != address) continue
+                        val hello = withContext(ioDispatcher) {
+                            LinkMsg.Hello(TOGETHER_PROTO, Role.GUEST, platform.deviceId, playerName,
+                                platform.appVersion(), streamProto = StreamWire.VERSION,
+                                streamResume = StreamResume(ready.sessionId, ready.round, ready.token, attempt))
+                        }
+                        val accepted = withTimeoutOrNull(timing.controlResumeHelloMs) {
+                            withContext(ioDispatcher) { opened.send(hello) }
+                            var matched = false
+                            for (event in opened.events) {
+                                when (event) {
+                                    is LinkEvent.Message -> when (val message = event.msg) {
+                                        is LinkMsg.StreamResumed -> {
+                                            matched = message.sessionId == ready.sessionId && message.round == ready.round &&
+                                                message.attempt == attempt && message.audioTimestampOrigin == ready.audioTimestampOrigin
+                                            break
+                                        }
+                                        is LinkMsg.Ping, is LinkMsg.Pong -> Unit
+                                        else -> break
+                                    }
+                                    is LinkEvent.Closed, is LinkEvent.Blob -> break
+                                }
+                            }
+                            matched
+                        } == true
+                        if (accepted) {
+                            transferred = post(Input.ControlResumed(expectedEpoch, token, serial, ready, opened))
+                            if (transferred) return@withTimeoutOrNull true
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Throwable) {
+                        Unit
+                    } finally {
+                        if (!transferred) runCatching { candidate?.close() }
+                    }
+                }
+                false
+            } == true
+            if (!resumed) post(Input.ControlResumeFailed(expectedEpoch, token, serial))
+        }
+    }
+
+    private fun handleControlResumed(input: Input.ControlResumed) {
+        if (!isCurrent(input.epoch) || !owns(input.token) || input.serial != resumeSerial ||
+            byeReceived || linkOpen || _view.value?.step != GuestStep.IN_GAME ||
+            offer?.mode != TogetherMode.STREAM || streamReady != input.ready || input.ready.round != round
+        ) {
+            input.link.close()
+            return
+        }
+        val old = link
+        link = input.link
+        linkOpen = true
+        resumeJob = null
+        startForwarder(input.link, input.token)
+        runCatching { if (old !== input.link) old?.close() }
+        writeIfToken(input.token) { it.copy(linkLost = false, message = null) }
+        startDebugCuts(input.link, input.token)
+        recordControl("control_resumed")
+    }
+
+    private fun handleControlResumeFailed(input: Input.ControlResumeFailed) {
+        if (!isCurrent(input.epoch) || !owns(input.token) || input.serial != resumeSerial) return
+        resumeJob = null
+        recordControl("control_resume_failed")
+    }
+
+    private fun cancelControlResume() {
+        resumeSerial += 1
+        resumeJob?.cancel()
+        resumeJob = null
+        debugCutJob?.cancel()
+        debugCutJob = null
+    }
+
+    private fun startDebugCuts(link: Link, token: Long) {
+        debugCutJob?.cancel()
+        debugCutJob = null
+        val interval = controlSnapshot.linkCutEveryS.coerceIn(0, 120) * 1_000L
+        if (interval == 0L || offer?.mode != TogetherMode.STREAM) return
+        val cutEpoch = epoch
+        val cutRound = round
+        debugCutJob = launchSession {
+            delay(interval)
+            post(Input.DebugCutLink(cutEpoch, cutRound, token, link))
+        }
+    }
+
+    private fun recordControl(event: String) {
+        runCatching { controlLog("event=$event monoNs=${System.nanoTime()} round=$round") }
     }
 
     private suspend fun handleMessage(currentLink: Link, message: LinkMsg, token: Long) {
@@ -552,7 +698,7 @@ internal class GuestEngine(
             is LinkMsg.CoreEnd -> handleCoreEnd(message)
             is LinkMsg.CoreUnavailable -> if (message.sessionId == offer?.sessionId) handleCoreUnavailable()
             is LinkMsg.StreamReady -> handleStreamReady(message)
-            is LinkMsg.Ping, is LinkMsg.Pong, is LinkMsg.GuestState, is LinkMsg.CoreRequest -> Unit
+            is LinkMsg.StreamResumed, is LinkMsg.Ping, is LinkMsg.Pong, is LinkMsg.GuestState, is LinkMsg.CoreRequest -> Unit
         }
     }
 
@@ -568,6 +714,7 @@ internal class GuestEngine(
         val selectedOffer = offer ?: return
         val selectedLocal = local ?: return
         val selectedAddress = playAddress ?: return
+        cancelControlResume()
         epoch += 1
         cancelStepJobs()
         clearCoreTransfer()
@@ -710,6 +857,7 @@ internal class GuestEngine(
                 if (offer?.mode == TogetherMode.RA_NETPLAY) {
                     startRaWatcher(input.epoch, input.round, playAddress ?: return)
                 }
+                link?.let { startDebugCuts(it, publishedToken()) }
             }
             else -> {
                 lastLaunchFailed = true
@@ -1675,6 +1823,7 @@ internal class GuestEngine(
             if (updateView) writeEnded(token, reason)
             return
         }
+        cancelControlResume()
         runCatching {
             cancelStepJobs()
             cancelSessionJobs()
@@ -1703,6 +1852,7 @@ internal class GuestEngine(
             local = null
             sessionCore = null
             playAddress = null
+            streamReady = null
             linkOpen = false
             sessionEnded = true
             epoch += 1
@@ -1830,6 +1980,9 @@ internal class GuestEngine(
         } catch (cancelled: CancellationException) {
             held.getAndSet(null)?.let { runCatching { close(it) } }
             throw cancelled
+        } catch (t: Throwable) {
+            held.getAndSet(null)?.let { runCatching { close(it) } }
+            throw t
         }
     }
 

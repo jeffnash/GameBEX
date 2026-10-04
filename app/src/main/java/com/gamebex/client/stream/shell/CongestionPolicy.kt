@@ -17,17 +17,19 @@ import com.gamebex.client.stream.VideoLevel
  *   during one stream, so quality can't oscillate between sizes.
  */
 class CongestionPolicy(
-    private val levels: List<VideoLevel> = StreamCaps.LEVELS,
+    levels: List<VideoLevel> = StreamCaps.LEVELS,
     startLevel: Int = 0,
     private val minBitrate: Int = StreamCaps.MIN_BITRATE,
     startNs: Long = 0L,
+    allowExperimentalRung: Boolean = false,
 ) {
+    private val ladder = levels.sortedBy { it.index }.filter { allowExperimentalRung || it.index != 2 || it.index == startLevel }
     sealed interface Action {
         data class SetBitrate(val bps: Int) : Action
         data class ChangeLevel(val level: VideoLevel, val bps: Int) : Action
     }
 
-    var level: VideoLevel = levels[startLevel.coerceIn(0, levels.size - 1)]
+    var level: VideoLevel = ladder.firstOrNull { it.index == startLevel } ?: ladder.first()
         private set
     var bitrate: Int = level.maxBitrate
         private set
@@ -49,7 +51,7 @@ class CongestionPolicy(
             return Action.SetBitrate(bitrate)
         }
         if (floorSinceNs == NOT_AT_FLOOR) floorSinceNs = now
-        val next = levels.getOrNull(level.index + 1) ?: return null
+        val next = ladder.firstOrNull { it.index > level.index } ?: return null
         if (now - floorSinceNs < StreamCaps.LEVEL_DOWN_AFTER_MS * MS) return null
         level = next
         bitrate = minOf(next.maxBitrate, minBitrate)

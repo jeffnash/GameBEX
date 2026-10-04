@@ -2,6 +2,11 @@ package com.gamebex.client.stream.guest
 
 import android.content.Context
 import android.net.wifi.WifiManager
+import android.hardware.display.DisplayManager
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.view.Surface
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -37,6 +42,17 @@ class StreamViewerActivity : ComponentActivity() {
     private var session: StreamViewerSession? = null
     private val scope = MainScope()
     private var wifiLock: WifiManager.WifiLock? = null
+    private var options = ViewerOptions()
+    private var oldDisplayMode = 0
+    private var oldRefreshRate = 0f
+    private var displayManager: DisplayManager? = null
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(id: Int) = Unit
+        override fun onDisplayRemoved(id: Int) = Unit
+        override fun onDisplayChanged(id: Int) {
+            if (viewerDisplay()?.displayId == id) logActualDisplay()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,8 +65,13 @@ class StreamViewerActivity : ComponentActivity() {
             return
         }
         val loopback = intent.getBooleanExtra(StreamGuestRuntime.EXTRA_LOOPBACK, false)
+        options = savedInstanceState?.getBundle(VIEWER_OPTIONS)?.let { ViewerOptions.restore(it) }
+            ?: ViewerOptions.sample(StreamDebug::flag, StreamDebug::int)
+        oldDisplayMode = window.attributes.preferredDisplayModeId
+        oldRefreshRate = window.attributes.preferredRefreshRate
+        window.decorView.post { configureUnbufferedInput() }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        preferFastestRefreshRate()
+        configureDisplay()
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())
@@ -64,13 +85,23 @@ class StreamViewerActivity : ComponentActivity() {
                 val ui by s.ui.collectAsState()
                 StreamViewerScreen(
                     ui = ui,
-                    onSurface = { surface -> if (surface != null) s.attachSurface(surface) else s.detachSurface() },
+                    onSurface = { surface ->
+                        if (surface != null) {
+                            voteFrameRate(surface)
+                            s.attachSurface(surface)
+                        } else s.detachSurface()
+                    },
                     onLeave = { s.leave() },
                     onToggleStats = { s.toggleStats() },
                     onBack = { finish() },
                     onTouchKey = s::onTouchKey,
                     onTouchAxes = s::onTouchAxes,
                     onReleaseTouchInput = s::releaseTouchInput,
+                    hudEnabled = !options.hudOff,
+                    touchPadHidden = options.touchPadHidden,
+                    unbufferedInput = options.unbufferedInput,
+                    fixedSurface = options.fixedSurface,
+                    surfaceOpaque = options.surfaceOpaque,
                 )
             }
         }
@@ -87,18 +118,54 @@ class StreamViewerActivity : ComponentActivity() {
     }
 
     @Suppress("DEPRECATION")
-    private fun preferFastestRefreshRate() {
+    private fun viewerDisplay() = if (Build.VERSION.SDK_INT >= 30) display else windowManager.defaultDisplay
+
+    /**
+     * Asks for the display's highest refresh rate at the current resolution while the viewer is in front:
+     * at 120 Hz a decoded frame waits at most ~8 ms for the next vsync instead of ~17 ms.
+     */
+    private fun configureDisplay() {
         runCatching {
-            val d = if (Build.VERSION.SDK_INT >= 30) display else windowManager.defaultDisplay
-            val current = d?.mode ?: return
-            val best = d.supportedModes
-                .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
-                .maxByOrNull { it.refreshRate } ?: return
-            if (best.modeId != current.modeId || best.refreshRate > current.refreshRate) {
-                window.attributes = window.attributes.apply { preferredDisplayModeId = best.modeId }
+            val d = viewerDisplay() ?: return
+            val current = d.mode
+            val modes = d.supportedModes.map { ViewerDisplayMode(it.modeId, it.physicalWidth, it.physicalHeight, it.refreshRate) }
+            Log.i(TAG, "DISPLAY_MODES ${modes.joinToString(prefix = "[", postfix = "]") { "{\"id\":${it.id},\"width\":${it.width},\"height\":${it.height},\"hz\":${it.hz}}" }}")
+            val chosen = selectViewerDisplayMode(modes, current.physicalWidth, current.physicalHeight, options.displayMode)
+            if (options.displayMode > 0 && chosen == null) {
+                Log.w(TAG, "DISPLAY_UNSUPPORTED id=${options.displayMode}")
+            } else {
+                window.attributes = window.attributes.apply {
+                    preferredDisplayModeId = chosen?.id ?: 0
+                    if (options.displayMode != 0) preferredRefreshRate = 0f
+                }
             }
-            Log.i(TAG, "viewer display mode ${best.physicalWidth}x${best.physicalHeight}@${best.refreshRate}")
+            displayManager = getSystemService(DisplayManager::class.java)
+            displayManager?.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
+            logActualDisplay()
         }.onFailure { Log.w(TAG, "refresh rate", it) }
+    }
+
+    private fun logActualDisplay() {
+        val mode = viewerDisplay()?.mode ?: return
+        Log.i(TAG, "DISPLAY_ACTUAL id=${mode.modeId} width=${mode.physicalWidth} height=${mode.physicalHeight} hz=${mode.refreshRate}")
+    }
+
+    private fun voteFrameRate(surface: Surface) {
+        if (Build.VERSION.SDK_INT >= 30 && options.frameRateVote > 0) {
+            runCatching { surface.setFrameRate(options.frameRateVote.toFloat(), Surface.FRAME_RATE_COMPATIBILITY_DEFAULT) }
+                .onFailure { Log.w(TAG, "frame rate vote", it) }
+        }
+    }
+
+    private fun configureUnbufferedInput() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            window.decorView.requestUnbufferedDispatch(unbufferedJoystickSources(Build.VERSION.SDK_INT, options.unbufferedInput))
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBundle(VIEWER_OPTIONS, options.save())
+        super.onSaveInstanceState(outState)
     }
 
     /** RestrictedApi: the same lint false positive as MainActivity.dispatchKeyEvent. */
@@ -114,7 +181,7 @@ class StreamViewerActivity : ComponentActivity() {
         }
         if (event.action != KeyEvent.ACTION_DOWN && event.action != KeyEvent.ACTION_UP) return super.dispatchKeyEvent(event)
         if (event.repeatCount > 0) return true
-        return s.onKey(event.keyCode, event.action == KeyEvent.ACTION_DOWN, event.eventTime * 1_000_000L) ||
+        return s.onKey(event.keyCode, event.action == KeyEvent.ACTION_DOWN, touchSampleNs(event.eventTime, System.nanoTime(), SystemClock.uptimeMillis())) ||
             super.dispatchKeyEvent(event)
     }
 
@@ -123,6 +190,9 @@ class StreamViewerActivity : ComponentActivity() {
         val joystick = event.isFromSource(InputDevice.SOURCE_JOYSTICK) || event.isFromSource(InputDevice.SOURCE_GAMEPAD)
         if (!joystick || event.action != MotionEvent.ACTION_MOVE) return super.dispatchGenericMotionEvent(event)
         if (event.device?.name == StreamCaps.PAD_NAME) return true
+        if (options.unbufferedInput) {
+            Log.d(TAG, "INPUT_DISPATCH history=${event.historySize} source=${event.source} action=${event.action} delayNs=${System.nanoTime() - touchSampleNs(event.eventTime, System.nanoTime(), SystemClock.uptimeMillis())}")
+        }
         val device = event.device
         fun axis(primary: Int, fallback: Int): Float =
             if (device?.getMotionRange(primary, event.source) != null) event.getAxisValue(primary) else event.getAxisValue(fallback)
@@ -136,12 +206,14 @@ class StreamViewerActivity : ComponentActivity() {
             event.getAxisValue(MotionEvent.AXIS_HAT_X),
             event.getAxisValue(MotionEvent.AXIS_HAT_Y),
         )
-        s.onAxes(values, event.eventTime * 1_000_000L)
+        s.onAxes(values, touchSampleNs(event.eventTime, System.nanoTime(), SystemClock.uptimeMillis()))
         return true
     }
 
     override fun onResume() {
         super.onResume()
+        configureUnbufferedInput()
+        logActualDisplay()
         if (wifiLock == null) wifiLock = createWifiLock()
         runCatching { wifiLock?.acquire() }.onFailure { Log.w(TAG, "wifi lock", it) }
     }
@@ -185,6 +257,12 @@ class StreamViewerActivity : ComponentActivity() {
 
     override fun onDestroy() {
         tdlsHost?.let { setTdls(it, false) }
+        displayManager?.unregisterDisplayListener(displayListener)
+        window.attributes = window.attributes.apply {
+            preferredDisplayModeId = oldDisplayMode
+            preferredRefreshRate = oldRefreshRate
+        }
+        if (Build.VERSION.SDK_INT >= 30) window.decorView.requestUnbufferedDispatch(InputDevice.SOURCE_CLASS_NONE)
         super.onDestroy()
         scope.cancel()
         if (isFinishing) session?.let { if (it.ui.value.status != ViewerStatus.ENDED) it.leave() }
@@ -193,9 +271,62 @@ class StreamViewerActivity : ComponentActivity() {
 
     private companion object {
         const val TAG = "GameBEXStream"
+        const val VIEWER_OPTIONS = "stream_viewer_options"
     }
 }
-    /**
-     * Asks for the display's highest refresh rate at the current resolution while the viewer is in front:
-     * at 120 Hz a decoded frame waits at most ~8 ms for the next vsync instead of ~17 ms.
-     */
+
+internal data class ViewerDisplayMode(val id: Int, val width: Int, val height: Int, val hz: Float)
+
+internal fun selectViewerDisplayMode(modes: List<ViewerDisplayMode>, width: Int, height: Int, requested: Int): ViewerDisplayMode? {
+    val matching = modes.filter { it.width == width && it.height == height }
+    return when {
+        requested == 0 -> matching.maxByOrNull { it.hz }
+        requested > 0 -> matching.singleOrNull { it.id == requested }
+        else -> null
+    }
+}
+
+internal fun unbufferedJoystickSources(sdk: Int, enabled: Boolean): Int =
+    if (sdk >= 30 && enabled) InputDevice.SOURCE_CLASS_JOYSTICK else InputDevice.SOURCE_CLASS_NONE
+
+internal data class ViewerOptions(
+    val unbufferedInput: Boolean = false,
+    val displayMode: Int = 0,
+    val frameRateVote: Int = 0,
+    val hudOff: Boolean = false,
+    val touchPadHidden: Boolean = false,
+    val fixedSurface: Boolean = false,
+    val surfaceOpaque: Boolean = false,
+) {
+    fun save() = Bundle().apply {
+        putBoolean("unbuffered_input", unbufferedInput)
+        putInt("display_mode", displayMode)
+        putInt("frame_rate_vote", frameRateVote)
+        putBoolean("hud_off", hudOff)
+        putBoolean("touch_pad_hidden", touchPadHidden)
+        putBoolean("fixed_surface", fixedSurface)
+        putBoolean("surface_opaque", surfaceOpaque)
+    }
+
+    companion object {
+        fun sample(flag: (String, Boolean) -> Boolean, int: (String, Int, IntRange) -> Int) = ViewerOptions(
+            unbufferedInput = flag("unbuffered_input", false),
+            displayMode = int("display_mode", 0, -1..Int.MAX_VALUE),
+            frameRateVote = int("frame_rate_vote", 0, 0..120),
+            hudOff = flag("hud_off", false),
+            touchPadHidden = flag("touch_pad_hidden", false),
+            fixedSurface = flag("fixed_surface", false),
+            surfaceOpaque = flag("surface_opaque", false),
+        )
+
+        fun restore(bundle: Bundle) = ViewerOptions(
+            unbufferedInput = bundle.getBoolean("unbuffered_input"),
+            displayMode = bundle.getInt("display_mode"),
+            frameRateVote = bundle.getInt("frame_rate_vote"),
+            hudOff = bundle.getBoolean("hud_off"),
+            touchPadHidden = bundle.getBoolean("touch_pad_hidden"),
+            fixedSurface = bundle.getBoolean("fixed_surface"),
+            surfaceOpaque = bundle.getBoolean("surface_opaque"),
+        )
+    }
+}

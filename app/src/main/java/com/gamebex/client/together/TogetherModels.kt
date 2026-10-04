@@ -5,7 +5,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /** Link protocol version, sent in [LinkMsg.Hello]. Bump on any incompatible change. */
-const val TOGETHER_PROTO: Int = 1
+const val TOGETHER_PROTO: Int = 2
 
 object TogetherPorts {
     /** GameBEX link (TCP). [LinkTransport.listen] falls back to an ephemeral port. */
@@ -66,6 +66,14 @@ enum class GuestPhase {
 @Serializable
 enum class ByeReason { LEFT, REMOVED, FULL, VERSION, ERROR }
 
+@Serializable
+data class StreamResume(
+    val sessionId: String,
+    val round: Int,
+    val token: String,
+    val attempt: String,
+)
+
 /** Every message on the link. JSON class discriminator is "t". */
 @Serializable
 sealed interface LinkMsg {
@@ -81,6 +89,7 @@ sealed interface LinkMsg {
         val ppssppVersion: String? = null,
         /** StreamWire.VERSION this app speaks; null from apps without Stream. */
         val streamProto: Int? = null,
+        val streamResume: StreamResume? = null,
     ) : LinkMsg
 
     @Serializable @SerialName("offer")
@@ -139,6 +148,14 @@ sealed interface LinkMsg {
         val height: Int,
         val audio: Boolean,
         val audioTimestampOrigin: String = "capture",
+    ) : LinkMsg
+
+    @Serializable @SerialName("stream_resumed")
+    data class StreamResumed(
+        val sessionId: String,
+        val round: Int,
+        val attempt: String,
+        val audioTimestampOrigin: String,
     ) : LinkMsg
 
     @Serializable @SerialName("ping")

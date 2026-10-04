@@ -43,26 +43,36 @@ class StreamHostSession(
     fun start(): StreamStarted = synchronized(lock) {
         if (!StreamToken.isValid(config.token)) return fail(StreamError.BAD_CONFIG, "bad token")
         if (!validGuest(config.guestAddress)) return fail(StreamError.BAD_CONFIG, "bad guest address")
-        val level = StreamCaps.LEVELS.getOrNull(config.level) ?: return fail(StreamError.BAD_CONFIG, "bad level")
+        val effectiveConfig = config.copy(level = com.gamebex.client.stream.StreamDebug.int("start_level", config.level, 0..3))
+        val level = StreamCaps.LEVELS.getOrNull(effectiveConfig.level) ?: return fail(StreamError.BAD_CONFIG, "bad level")
         val openedPad = components.openPad() ?: return fail(StreamError.UHID, "no pad backend")
         pad = openedPad
         try {
-            val channel = components.mediaChannel(config)
+            val channel = components.mediaChannel(effectiveConfig)
             media = channel
             channel.open(config.mediaPort)
             val receiver = InputServer(openedPad, StreamToken.key(config.token), config.guestAddress, clock)
             input = receiver
             receiver.open(config.inputPort)
+            channel.onGuestAttached = { attachId -> receiver.attach(attachId) }
+            channel.onGuestDetached = { attachId -> receiver.detach(attachId) }
             val source = components.videoSource()
             video = source
-            if (config.appCapture) source.captureInto(capture)
+            source.captureInto(capture)
             source.start(level, level.maxBitrate, channel)
             // Audio rides UDP to the guest's input address when it has one (no waiting behind video on TCP),
             // else the media connection.
-            val sink = AudioSink { chunk ->
-                if (!receiver.sendAudio(chunk)) channel.onPcm(chunk)
+            val sink = object : AudioSink {
+                override fun onPcm(chunk: PcmChunk) {
+                    sendPcm(chunk)
+                }
+                override fun sendPcm(chunk: PcmChunk): AudioSendResult =
+                    when (val sent = receiver.sendAudio(chunk)) {
+                        AudioSendResult.NO_ROUTE -> channel.sendPcm(chunk)
+                        else -> sent
+                    }
             }
-            val candidate = if (config.audio) components.audioSource(config) else null
+            val candidate = if (config.audio) components.audioSource(effectiveConfig) else null
             val sound = candidate?.takeIf {
                 if (it.start(sink)) true else {
                     it.stop()
@@ -70,8 +80,8 @@ class StreamHostSession(
                 }
             }
             audio = sound
-            channel.start(source, level, level.maxBitrate, sound != null)
             receiver.start()
+            channel.start(source, level, level.maxBitrate, sound != null)
             startedNs = clock()
             lastPollNs = startedNs
             startWatchdog()
@@ -108,8 +118,13 @@ class StreamHostSession(
             level = m?.level ?: 0,
             framesSent = m?.framesSent ?: 0,
             framesDropped = m?.framesDropped ?: 0,
+            videoConfigDiscarded = m?.videoConfigDiscarded ?: 0,
+            videoRetiredDiscarded = m?.videoRetiredDiscarded ?: 0,
+            tcpAudioEvictedFrames = m?.tcpAudioEvictedFrames ?: 0,
             inputPackets = i?.packets?.get() ?: 0,
             inputRejected = i?.rejected?.get() ?: 0,
+            inputWriteFailures = i?.writeFailures?.get() ?: 0,
+            audioUdpDropped = i?.audioDropped?.get() ?: 0,
             audio = audio != null,
             audioMode = audio?.audioMode ?: "none",
             audioFallback = audio?.fallbackReason,
@@ -131,11 +146,6 @@ class StreamHostSession(
     /** App capture: the app's listener for encoder surfaces (it registers after [start] returns). */
     fun setCaptureListener(listener: CaptureTarget?) {
         capture.setListener(listener)
-    }
-
-    /** App capture was declined or failed on the host: mirror the whole display instead. */
-    fun useMirror() {
-        if (!stopping.get()) video?.useMirror()
     }
 
     private fun stopInternal(error: StreamError?) {

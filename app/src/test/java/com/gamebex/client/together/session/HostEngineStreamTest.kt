@@ -19,6 +19,7 @@ import com.gamebex.client.together.HostStep
 import com.gamebex.client.together.LinkMsg
 import com.gamebex.client.together.OfferedGame
 import com.gamebex.client.together.Role
+import com.gamebex.client.together.TOGETHER_PROTO
 import com.gamebex.client.together.TogetherAlert
 import com.gamebex.client.together.TogetherCopy
 import com.gamebex.client.together.TogetherEmulators
@@ -137,7 +138,7 @@ class HostEngineStreamTest {
 
     private suspend fun Harness.join(scope: TestScope, streamProto: Int? = StreamWire.VERSION): LinkPair {
         val pair = transport.pair()
-        pair.guest.send(LinkMsg.Hello(1, Role.GUEST, "guest-device", "Sam", "1.0", streamProto = streamProto))
+        pair.guest.send(LinkMsg.Hello(TOGETHER_PROTO, Role.GUEST, "guest-device", "Sam", "1.0", streamProto = streamProto))
         scope.advanceUntilIdle()
         return pair
     }

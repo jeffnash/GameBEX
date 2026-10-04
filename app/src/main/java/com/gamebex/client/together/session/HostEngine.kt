@@ -93,6 +93,9 @@ internal class HostEngine(
  /** a game's modes, best first. Tests pass their own. */
     private val modesFor: (GameEntity) -> List<TogetherMode> = TogetherSupport::modesFor,
     private val streamAudioOverride: () -> String? = { StreamDebug.prop("ra_audio") },
+    private val controlOptions: () -> TogetherControlOptions = TogetherControlOptions::read,
+    private val controlLog: (String) -> Unit = { Log.i("GameBEXControl", it) },
+    private val monotonicNs: () -> Long = System::nanoTime,
 ) {
     private sealed interface Input {
         data class HostGame(
@@ -127,7 +130,7 @@ internal class HostEngine(
             val token: Long,
         ) : Input
         data class SetupFailed(val epoch: Int, val problem: Problem, val token: Long) : Input
-        data class Incoming(val link: Link, val hello: LinkMsg.Hello) : Input
+        data class Incoming(val token: Long, val resources: SessionResources, val link: Link, val hello: LinkMsg.Hello) : Input
         data class LinkEvt(val link: Link, val event: LinkEvent) : Input
         data class CoreFetch(
             val install: CoreInstall,
@@ -150,7 +153,8 @@ internal class HostEngine(
         data class HeadStart(val epoch: Int, val round: Int) : Input
         data class SwitchMode(val mode: TogetherMode) : Input
         data class StreamPolled(val epoch: Int, val round: Int, val status: StreamStatus?) : Input
-        data class StreamGraceOver(val epoch: Int, val round: Int) : Input
+        data class StreamGraceOver(val epoch: Int, val round: Int, val serial: Long) : Input
+        data class DebugCutLink(val epoch: Int, val round: Int, val link: Link) : Input
     }
 
  /** Actor-owned identity: old callbacks/completions must never release a replacement install. */
@@ -214,6 +218,11 @@ internal class HostEngine(
     private var streamPoll: Job? = null
  /** STREAM: the guest's link dropped and the stream is being kept for [TogetherTiming.streamLinkGraceMs]. */
     private var streamGrace: Job? = null
+    private var streamGraceSerial = 0L
+    private var streamResumeUntilNs: Long? = null
+    private var streamResumeOwner: StreamResumeGuard.Bound? = null
+    private var controlSnapshot = TogetherControlOptions()
+    private var debugCutJob: Job? = null
     private var streamGuestName: String? = null
     private var streamGuestConnected = false
     private var lastInputPackets = -1L
@@ -330,6 +339,9 @@ internal class HostEngine(
             is Input.SwitchMode -> handleSwitchMode(input.mode)
             is Input.StreamPolled -> handleStreamPolled(input)
             is Input.StreamGraceOver -> handleStreamGraceOver(input)
+            is Input.DebugCutLink -> if (isCurrent(input.epoch) && input.round == round &&
+                input.link === guest && _view.value?.step == HostStep.IN_GAME
+            ) input.link.close()
         }
     }
 
@@ -341,6 +353,7 @@ internal class HostEngine(
 
         epoch += 1
         sessionEnded = false
+        controlSnapshot = withContext(ioDispatcher) { controlOptions() }
         sessionId = ByteArray(4).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it.toInt() and 0xff) }
         gameId = input.gameId
         game = null
@@ -365,6 +378,11 @@ internal class HostEngine(
         streamPoll = null
         streamGrace?.cancel()
         streamGrace = null
+        streamResumeUntilNs = null
+        streamGraceSerial += 1
+        streamResumeOwner = null
+        debugCutJob?.cancel()
+        debugCutJob = null
         refreshPlayerName()
         replaceView(token, HostView(HostStep.CHECKING, input.gameId, "", "", null, myName))
         beginReadiness(input.gameId, epoch, token)
@@ -586,6 +604,8 @@ internal class HostEngine(
     }
 
     private fun startAcceptLoop(setupListener: com.gamebex.client.together.LinkListener) {
+        val acceptToken = publishedToken()
+        val sessionResources = resources ?: return
         launchSession {
             while (!sessionEnded) {
                 val next = try {
@@ -600,17 +620,16 @@ internal class HostEngine(
                     log(t)
                     if (sessionEnded || t is java.io.IOException) break else continue
                 }
-                val sessionResources = resources
-                if (sessionResources == null || !sessionResources.register { next.close() }) {
+                if (!sessionResources.register { next.close() }) {
                     next.close()
                     continue
                 }
-                launchSession { inspectIncoming(next) }
+                launchSession { inspectIncoming(next, acceptToken, sessionResources) }
             }
         }
     }
 
-    private suspend fun inspectIncoming(link: Link) {
+    private suspend fun inspectIncoming(link: Link, acceptToken: Long, sessionResources: SessionResources) {
         val first = try {
             withTimeoutOrNull(timing.helloMs) {
                 for (event in link.events) {
@@ -624,15 +643,19 @@ internal class HostEngine(
             log(t)
             null
         }
-        if (first is LinkMsg.Hello && first.role == Role.GUEST && !sessionEnded) {
-            post(Input.Incoming(link, first))
+        if (first is LinkMsg.Hello && (first.role == Role.GUEST || first.streamResume != null) && !sessionEnded) {
+            post(Input.Incoming(acceptToken, sessionResources, link, first))
         } else {
             link.close()
         }
     }
 
     private suspend fun handleIncoming(input: Input.Incoming) {
-        if (!isCurrent() || _view.value?.step != HostStep.WAITING || guest != null) {
+        if (input.hello.streamResume != null) {
+            handleStreamResume(input)
+            return
+        }
+        if (!isCurrent() || input.token != publishedToken() || input.resources !== resources || _view.value?.step != HostStep.WAITING || guest != null) {
             sendByeAndClose(input.link, com.gamebex.client.together.ByeReason.FULL)
             return
         }
@@ -704,6 +727,68 @@ internal class HostEngine(
                 log(t)
             }
         }
+    }
+
+    private suspend fun handleStreamResume(input: Input.Incoming) {
+        val request = input.hello.streamResume
+        val bound = streamResumeOwner
+        val validIdentity = controlSnapshot.controlResume && isCurrent() && input.token == publishedToken() && input.resources === resources &&
+            mode == TogetherMode.STREAM && _view.value?.step == HostStep.IN_GAME && stream != null &&
+            bound != null && request != null &&
+            input.hello.proto == TOGETHER_PROTO && input.hello.streamProto == StreamWire.VERSION &&
+            input.hello.role == Role.GUEST && StreamResumeGuard.validAttempt(request.attempt) &&
+            StreamResumeGuard.matches(bound, request.sessionId, request.round, request.token,
+                input.hello.deviceId, input.link.remoteAddress)
+        if (guest != null && validIdentity) {
+            sendByeAndClose(input.link, com.gamebex.client.together.ByeReason.FULL)
+            return
+        }
+        if (!validIdentity || streamGrace == null || streamResumeUntilNs?.let { monotonicNs() < it } != true) {
+            sendByeAndClose(input.link, com.gamebex.client.together.ByeReason.ERROR)
+            return
+        }
+        val accepted = requireNotNull(request)
+        val owner = requireNotNull(bound)
+        guest = input.link
+        guestHello = input.hello.copy(streamResume = null)
+        streamGrace?.cancel()
+        streamGrace = null
+        streamResumeUntilNs = null
+        streamGraceSerial += 1
+        _view.value = _view.value?.copy(guestName = input.hello.name, linkLost = false, message = null)
+        startGuestForwarder(input.link)
+        startDebugCuts(input.link)
+        recordControl("control_resumed")
+        launchSession {
+            try {
+                withContext(ioDispatcher) {
+                    input.link.send(LinkMsg.StreamResumed(accepted.sessionId, accepted.round, accepted.attempt, owner.audioTimestampOrigin))
+                }
+            } catch (cancelled: CancellationException) {
+                input.link.close()
+                throw cancelled
+            } catch (_: Throwable) {
+                input.link.close()
+                post(Input.LinkEvt(input.link, LinkEvent.Closed(null)))
+            }
+        }
+    }
+
+    private fun startDebugCuts(link: Link) {
+        debugCutJob?.cancel()
+        debugCutJob = null
+        val interval = controlSnapshot.linkCutEveryS.coerceIn(0, 120) * 1_000L
+        if (interval == 0L) return
+        val cutEpoch = epoch
+        val cutRound = round
+        debugCutJob = launchSession {
+            delay(interval)
+            post(Input.DebugCutLink(cutEpoch, cutRound, link))
+        }
+    }
+
+    private fun recordControl(event: String) {
+        runCatching { controlLog("event=$event monoNs=${System.nanoTime()} round=$round") }
     }
 
     private fun startGuestForwarder(link: Link) {
@@ -817,6 +902,9 @@ internal class HostEngine(
  * An explicit Bye (guestLeft) still stops everything immediately.
  */
     private fun keepStreamAfterLinkLoss(name: String) {
+        recordControl("control_lost")
+        debugCutJob?.cancel()
+        debugCutJob = null
         guest = null
         guestHello = null
         clearGuestFields()
@@ -826,16 +914,23 @@ internal class HostEngine(
         if (!platform.foreground.value) platform.alert(TogetherAlert.LinkLost(name, streamGraceS = seconds))
         val graceEpoch = epoch
         val graceRound = round
+        val graceSerial = ++streamGraceSerial
+        streamResumeUntilNs = monotonicNs() + timing.streamLinkGraceMs * 1_000_000L
         streamGrace?.cancel()
         streamGrace = launchSession {
             kotlinx.coroutines.delay(timing.streamLinkGraceMs)
-            post(Input.StreamGraceOver(graceEpoch, graceRound))
+            post(Input.StreamGraceOver(graceEpoch, graceRound, graceSerial))
         }
     }
 
     private fun handleStreamGraceOver(input: Input.StreamGraceOver) {
-        if (!isCurrent(input.epoch) || input.round != round || stream == null) return
+        if (!isCurrent(input.epoch) || input.round != round || input.serial != streamGraceSerial ||
+            guest != null || stream == null
+        ) return
         streamGrace = null
+        streamResumeUntilNs = null
+        streamResumeOwner = null
+        recordControl("control_resume_failed")
         val name = streamGuestName ?: TogetherCopy.otherPhone
         if (streamGuestConnected) {
  // The guest is still watching, so the stream (and its pad) stay.
@@ -919,6 +1014,11 @@ internal class HostEngine(
         ad = null
         headStartJob?.cancel()
         headStartJob = null
+        streamResumeOwner = null
+        streamResumeUntilNs = null
+        streamGraceSerial += 1
+        debugCutJob?.cancel()
+        debugCutJob = null
         round += 1
         val launchRound = round
         val launchEpoch = epoch
@@ -1069,7 +1169,13 @@ internal class HostEngine(
             )
             if (started != null) {
                 stream = started
+                streamResumeOwner = if (currentSession != null && currentGuest != null && guestHello != null) {
+                    StreamResumeGuard.Bound(currentSession, input.round, started.token,
+                        requireNotNull(guestHello).deviceId, currentGuest.remoteAddress,
+                        if (started.started.rsound) "bridge-arrival" else "capture")
+                } else null
                 startStreamPoll(input.round)
+                currentGuest?.let(::startDebugCuts)
  // The game is in front now: capture only its app (the host picks it in Android's share prompt).
                 launchSession { runCatching { withContext(ioDispatcher) { streamHost.attachCapture() } }.onFailure(::log) }
             }
@@ -1154,6 +1260,11 @@ internal class HostEngine(
         val status = input.status
         if (status == null || !status.running) {
             stream = null
+            streamResumeOwner = null
+            streamResumeUntilNs = null
+            streamGraceSerial += 1
+            debugCutJob?.cancel()
+            debugCutJob = null
             streamPoll = null
             streamGrace?.cancel()
             streamGrace = null
@@ -1190,6 +1301,11 @@ internal class HostEngine(
 
  /** Stops the stream and removes player 2's pad; the host keeps playing. */
     private fun stopStream() {
+        streamResumeOwner = null
+        streamResumeUntilNs = null
+        streamGraceSerial += 1
+        debugCutJob?.cancel()
+        debugCutJob = null
         streamPoll?.cancel()
         streamPoll = null
         streamGrace?.cancel()
@@ -1471,6 +1587,13 @@ internal class HostEngine(
             return
         }
 
+        streamResumeOwner = null
+        streamResumeUntilNs = null
+        streamGraceSerial += 1
+        streamGrace?.cancel()
+        streamGrace = null
+        debugCutJob?.cancel()
+        debugCutJob = null
         runCatching {
             cancelStepJobs()
             cancelSessionJobs()

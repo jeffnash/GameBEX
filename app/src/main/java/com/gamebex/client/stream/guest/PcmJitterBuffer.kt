@@ -26,6 +26,7 @@ class PcmJitterBuffer(
     private val minMs: Int = StreamCaps.AUDIO_MIN_MS,
     private val maxMs: Int = StreamCaps.AUDIO_MAX_MS,
     startupMs: Int = STARTUP_MS,
+    private val onCounter: (String, Long) -> Unit = { _, _ -> },
     private val nowNs: () -> Long = System::nanoTime,
 ) {
     /** Pulls per policy period: the policy is in milliseconds, so it holds for any chunk size. */
@@ -55,19 +56,53 @@ class PcmJitterBuffer(
     @Volatile var dropped: Int = 0
         private set
 
+    @Volatile var generation: Long = 1L
+        private set
+    @Volatile var gapPackets: Long = 0L
+        private set
+    @Volatile var duplicateFrames: Long = 0L
+        private set
+    @Volatile var lateFrames: Long = 0L
+        private set
+    @Volatile var evictedFrames: Long = 0L
+        private set
+    @Volatile var silenceFrames: Long = 0L
+        private set
+    @Volatile var sourceUniqueFrames: Long = 0L
+        private set
+
     val depthMs: Int
         @Synchronized get() = queue.size * chunkMs
 
     @Synchronized
     fun push(seq: Int, captureNs: Long, pcm: ByteArray) {
-        if (haveSeq && seq - lastSeq <= 0) return
+        if (haveSeq) {
+            val delta = seq - lastSeq
+            if (delta <= 0) {
+                val frames = (pcm.size / 4).toLong()
+                if (delta == 0) {
+                    duplicateFrames += frames
+                    count("a_duplicate_frames", frames)
+                } else {
+                    lateFrames += frames
+                    count("a_late_frames", frames)
+                }
+                return
+            }
+            val gaps = (delta - 1).toLong()
+            gapPackets += gaps
+            count("a_gap_pkts", gaps)
+        }
         haveSeq = true
         lastSeq = seq
         if (queue.isEmpty() && missingSinceNs?.let { nowNs() - it > REPRIME_GAP_MS * 1_000_000L } == true) priming = true
         queue.addLast(Chunk(seq, captureNs, pcm))
+        val frames = (pcm.size / 4).toLong()
+        sourceUniqueFrames += frames
+        count("a_source_unique_frames", frames)
         if (queue.size * chunkMs > maxMs) {
             while (queue.size * chunkMs > targetMs) {
-                queue.pollFirst()
+                evictFirst()
                 dropped += 1
             }
         }
@@ -79,11 +114,17 @@ class PcmJitterBuffer(
         val now = nowNs()
         if (queue.isEmpty() && missingSinceNs?.let { now - it > REPRIME_GAP_MS * 1_000_000L } == true) priming = true
         if (priming) {
-            if (queue.size * chunkMs < targetMs) return null
+            if (queue.size * chunkMs < targetMs) {
+                silenceFrames += StreamCaps.AUDIO_CHUNK_FRAMES
+                count("a_silence_frames", StreamCaps.AUDIO_CHUNK_FRAMES.toLong())
+                return null
+            }
             priming = false
         }
         val next = queue.pollFirst()
         if (next == null) {
+            silenceFrames += StreamCaps.AUDIO_CHUNK_FRAMES
+            count("a_silence_frames", StreamCaps.AUDIO_CHUNK_FRAMES.toLong())
             if (missingSinceNs == null) {
                 missingSinceNs = now
                 underruns += 1
@@ -101,7 +142,7 @@ class PcmJitterBuffer(
             if (targetMs - chunkMs >= minMs) {
                 targetMs -= chunkMs
                 if (queue.size * chunkMs > targetMs) {
-                    queue.pollFirst()
+                    evictFirst()
                     dropped += 1
                 }
             }
@@ -110,7 +151,7 @@ class PcmJitterBuffer(
             highPulls += 1
             if (highPulls >= drainEveryPulls) {
                 highPulls = 0
-                queue.pollFirst()
+                evictFirst()
                 dropped += 1
             }
         } else {
@@ -121,7 +162,10 @@ class PcmJitterBuffer(
 
     @Synchronized
     fun reset() {
+        val evicted = queue.sumOf { (it.pcm.size / 4).toLong() }
+        evictedFrames += evicted
         queue.clear()
+        generation += 1L
         haveSeq = false
         priming = true
         missingSinceNs = null
@@ -129,6 +173,17 @@ class PcmJitterBuffer(
         playedPulls = 0
         highPulls = 0
         targetMs = initialTargetMs
+        count("a_evicted_frames", evicted)
+    }
+
+    private fun evictFirst() {
+        val frames = ((queue.pollFirst()?.pcm?.size ?: 0) / 4).toLong()
+        evictedFrames += frames
+        count("a_evicted_frames", frames)
+    }
+
+    private fun count(name: String, delta: Long) {
+        if (delta > 0L) onCounter(name, delta)
     }
 
     companion object {

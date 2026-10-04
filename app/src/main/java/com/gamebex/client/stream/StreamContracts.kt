@@ -16,10 +16,6 @@ interface StreamHost {
     /** Starts capture, encoding, the media and input listeners, and player 2's pad. */
     suspend fun start(config: StreamConfig): StreamStarted
 
-    /**
-     * After the game is in front: capture only its app (the host picks it in Android's share prompt),
-     * falling back to the whole display when that is unavailable or declined.
-     */
     suspend fun attachCapture() {}
 
     suspend fun gameLaunched() {}

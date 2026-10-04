@@ -11,6 +11,8 @@ import com.gamebex.client.stream.proto.MediaFrames
 import com.gamebex.client.stream.proto.StreamHandshake
 import com.gamebex.client.stream.proto.StreamWire
 import com.gamebex.client.stream.proto.Welcome
+import com.gamebex.client.stream.proto.DeliveryWire
+import com.gamebex.client.stream.StreamDebug
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 import java.io.IOException
@@ -40,17 +42,28 @@ class MediaServer(
     private val config: StreamConfig,
     private val clock: () -> Long = System::nanoTime,
     private val tickMs: Long = 100L,
+    private val queueDeadlineMs: Int = StreamDebug.int("queue_deadline_ms", 0, 0..40),
+    private val latencyControl: Boolean = StreamDebug.flag("latency_cc"),
+    private val videoWriteStallMs: Int = StreamDebug.int("video_write_stall_ms", 0, 0..50),
 ) : MediaChannel {
     private val token = StreamToken.bytes(config.token)
     private val lock = Object()
+    private val attachmentLifecycleLock = Any()
     private var server: ServerSocket? = null
     private var guest: Guest? = null
     private var control: VideoControl? = null
     private var policy = CongestionPolicy(StreamCaps.LEVELS, config.level, startNs = clock())
     private var pending: CongestionPolicy.Action? = null
     private var audioOn = false
-    private var csd: ByteArray? = null
-    private var waitingForKey = true
+    private var actualFormat: EncodedFormat? = null
+    private var actualLevel = StreamCaps.LEVELS[config.level.coerceIn(0, StreamCaps.LEVELS.lastIndex)]
+    private var actualBitrate = actualLevel.maxBitrate
+    private var delivery = DeliveryControl(StreamCaps.LEVELS, actualLevel.index, startNs = clock())
+    private var pressureDrops = 0L
+    private var observedPressureDrops = 0L
+    private val writeTimes = ArrayDeque<Pair<Long, Long>>()
+    @Volatile override var onGuestAttached: (Long) -> Unit = {}
+    @Volatile override var onGuestDetached: (Long) -> Unit = {}
     private var lastKeyRequestNs = Long.MIN_VALUE
     private val sentTimes = ArrayDeque<Long>()
     private val threads = mutableListOf<Thread>()
@@ -63,6 +76,11 @@ class MediaServer(
     val framesSent = AtomicLong()
     val framesDropped = AtomicLong()
     val rejectedConnections = AtomicLong()
+    val videoConfigDiscarded = AtomicLong()
+    val videoRetiredDiscarded = AtomicLong()
+    val tcpAudioEvictedFrames = AtomicLong()
+    val deliveryRejected = AtomicLong()
+    val deadlineAgeFallbacks = AtomicLong()
 
     @Volatile override var port: Int = 0
         private set
@@ -88,7 +106,13 @@ class MediaServer(
         val s = server ?: throw IllegalStateException("open() first")
         synchronized(lock) {
             this.control = control
-            policy = CongestionPolicy(StreamCaps.LEVELS, level.index, startNs = clock())
+            val levels = (control as? AvcScreenSource)?.eligibleLevels ?: StreamCaps.LEVELS
+            policy = CongestionPolicy(levels, level.index, startNs = clock())
+            delivery = DeliveryControl(levels, level.index, startNs = clock())
+            if (actualFormat == null) {
+                actualLevel = level
+                actualBitrate = bitrate
+            }
             audioOn = audio
         }
         spawn("gbx-media-accept") { acceptLoop(s) }
@@ -102,13 +126,16 @@ class MediaServer(
             return MediaStats(
                 guestConnected = guest != null,
                 fps = sentTimes.size,
-                bitrate = policy.bitrate,
-                level = policy.level.index,
+                bitrate = actualBitrate,
+                level = actualLevel.index,
                 framesSent = framesSent.get(),
                 framesDropped = framesDropped.get(),
                 guestVideoP95Us = guestP95Us,
                 guestChangedNs = guestChangedNs,
                 failure = failure,
+                videoConfigDiscarded = videoConfigDiscarded.get(),
+                videoRetiredDiscarded = videoRetiredDiscarded.get(),
+                tcpAudioEvictedFrames = tcpAudioEvictedFrames.get(),
             )
         }
     }
@@ -131,11 +158,23 @@ class MediaServer(
 
     override fun onConfig(csd: ByteArray) {
         synchronized(lock) {
-            this.csd = csd
+            val current = actualFormat ?: return
+            onFormat(EncodedFormat(current.level, actualBitrate, csd, current.codecEpoch))
+        }
+    }
+
+    override fun onFormat(format: EncodedFormat) {
+        synchronized(lock) {
+            if (closed || format.codecEpoch <= 0L || format.codecEpoch < (actualFormat?.codecEpoch ?: 0L)) return
+            actualFormat = format
+            actualLevel = format.level
+            actualBitrate = format.bitrate
             val g = guest ?: return
-            g.video.clear()
-            g.control.addLast(Out.Frame(MediaFrames.encode(MediaFrame.VideoConfig(csd))))
-            waitingForKey = true
+            val count = g.video.reset(format.codecEpoch)
+            framesDropped.addAndGet(count.toLong())
+            videoConfigDiscarded.addAndGet(count.toLong())
+            g.latestReport = null
+            g.control.addLast(Out.Format(format))
             lock.notifyAll()
         }
     }
@@ -145,28 +184,21 @@ class MediaServer(
         var askKey = false
         synchronized(lock) {
             val g = guest
-            if (g == null || closed) return
-            if (waitingForKey && !frame.key) {
+            if (g == null || closed) {
                 framesDropped.incrementAndGet()
-                askKey = true
-            } else {
-                val oldest = g.video.peekFirst()
-                val late = oldest != null && now - oldest.queuedNs > StreamCaps.MAX_QUEUE_AGE_MS * MS
-                if (g.video.size >= StreamCaps.MAX_QUEUED_FRAMES || late) {
-                    framesDropped.addAndGet(g.video.size.toLong())
-                    g.video.clear()
-                    policy.onDrop(now)?.let { pending = it }
-                    if (!frame.key) {
-                        framesDropped.incrementAndGet()
-                        waitingForKey = true
-                        askKey = true
-                    }
-                }
-                if (!waitingForKey || frame.key) {
-                    g.video.addLast(Queued(frame, now))
-                    waitingForKey = false
-                }
+                videoRetiredDiscarded.incrementAndGet()
+                return
             }
+            if (actualFormat == null || frame.codecEpoch <= 0L || frame.codecEpoch != g.video.epoch) {
+                framesDropped.incrementAndGet()
+                videoConfigDiscarded.incrementAndGet()
+                return
+            }
+            val fallbacks = g.video.ageFallbacks
+            val result = g.video.offer(frame, now)
+            deadlineAgeFallbacks.addAndGet(g.video.ageFallbacks - fallbacks)
+            account(result, now)
+            askKey = result.requestKeyframe
             lock.notifyAll()
         }
         if (askKey) requestKeyframe(now)
@@ -182,8 +214,10 @@ class MediaServer(
         synchronized(lock) {
             val g = guest ?: return
             if (!audioOn || closed) return
-            while (g.audio.size >= MAX_AUDIO_QUEUE) g.audio.pollFirst()
-            g.audio.addLast(MediaFrames.encode(MediaFrame.Audio(chunk.seq, chunk.captureNs, chunk.frames, chunk.data)))
+            while (g.audio.size >= MAX_AUDIO_QUEUE) {
+                tcpAudioEvictedFrames.addAndGet(g.audio.pollFirst().frames.toLong())
+            }
+            g.audio.addLast(Audio(MediaFrames.encode(MediaFrame.Audio(chunk.seq, chunk.captureNs, chunk.frames, chunk.data)), chunk.frames))
             lock.notifyAll()
         }
     }
@@ -214,14 +248,14 @@ class MediaServer(
         socket.tcpNoDelay = true
         val input = DataInputStream(BufferedInputStream(socket.getInputStream()))
         val out = socket.getOutputStream()
-        val hello = StreamHandshake.decodeHello(StreamHandshake.readExactly(input, StreamWire.HELLO_SIZE))
+        val hello = StreamHandshake.readHello(input)
             ?: throw IOException("not a stream hello")
         val status = when {
             hello.version != StreamWire.VERSION -> StreamWire.STATUS_BAD_VERSION
             !MessageDigest.isEqual(hello.token, token) -> StreamWire.STATUS_BAD_TOKEN
             else -> StreamWire.STATUS_OK
         }
-        val level = synchronized(lock) { policy.level }
+        val level = synchronized(lock) { actualLevel }
         val rate = if (audioOn) StreamCaps.AUDIO_RATE else 0
         val welcome = Welcome(StreamWire.VERSION, status, level.width, level.height, rate, StreamCaps.AUDIO_CHANNELS, clock())
         out.write(StreamHandshake.encodeWelcome(welcome))
@@ -233,22 +267,29 @@ class MediaServer(
         socket.soTimeout = 0
         runCatching { socket.sendBufferSize = SEND_BUFFER }
         StreamSockets.tuneMedia(socket)
-        val g = Guest(socket, out)
-        val old: Guest?
-        synchronized(lock) {
-            if (closed) {
-                socket.close()
-                return
+        val g = Guest(socket, out, hello.attachId, queueDeadlineMs)
+        synchronized(attachmentLifecycleLock) {
+            synchronized(lock) { if (closed) { socket.close(); return } }
+            onGuestAttached(hello.attachId)
+            synchronized(lock) {
+                if (closed) {
+                    socket.close()
+                    return
+                }
+                val old = guest
+                if (old != null) retire(old, StreamWire.BYE_REPLACED)
+                guest = g
+                guestChangedNs = clock()
+                guestP95Us = 0
+                observedPressureDrops = pressureDrops
+                writeTimes.clear()
+                actualFormat?.let {
+                    g.video.reset(it.codecEpoch)
+                    g.control.addLast(Out.Format(it))
+                } ?: g.control.addLast(Out.Frame(infoFrame()))
+                g.writer = spawn("gbx-media-write") { writeLoop(g) }
+                lock.notifyAll()
             }
-            old = guest
-            if (old != null) retire(old, StreamWire.BYE_REPLACED)
-            guest = g
-            guestChangedNs = clock()
-            waitingForKey = true
-            csd?.let { g.control.addLast(Out.Frame(MediaFrames.encode(MediaFrame.VideoConfig(it)))) }
-            g.control.addLast(Out.Frame(infoFrame()))
-            g.writer = spawn("gbx-media-write") { writeLoop(g) }
-            lock.notifyAll()
         }
         spawn("gbx-media-read") { readLoop(g, input) }
         requestKeyframe(clock(), force = true)
@@ -257,12 +298,28 @@ class MediaServer(
     private fun writeLoop(g: Guest) {
         try {
             while (true) {
-                val next: Any = synchronized(lock) {
+                var askKey = false
+                val next: Any? = synchronized(lock) {
                     while (g.isEmpty() && guest === g && !closed) lock.wait(WAIT_MS)
                     if (g.isEmpty()) return
-                    g.control.pollFirst() ?: g.audio.pollFirst() ?: g.video.pollFirst() ?: return
+                    g.control.pollFirst() ?: g.audio.pollFirst() ?: g.video.poll(clock()).let { (entry, result) ->
+                        account(result, clock())
+                        askKey = result.requestKeyframe
+                        entry
+                    }
                 }
+                if (askKey) requestKeyframe(clock())
                 when (next) {
+                    is Out.Format -> {
+                        val f = next.format
+                        val bundle = MediaFrames.encode(MediaFrame.Info(f.level.index, f.level.width, f.level.height, f.bitrate)) +
+                            MediaFrames.encode(MediaFrame.VideoConfig(f.csd))
+                        synchronized(lock) {
+                            g.configCount++
+                            g.sentHostEpoch = f.codecEpoch
+                        }
+                        g.out.write(bundle)
+                    }
                     is Out.Frame -> {
                         g.out.write(next.bytes)
                         if (next.bye) {
@@ -271,13 +328,62 @@ class MediaServer(
                         }
                     }
                     is Out.Pong -> g.out.write(MediaFrames.encode(MediaFrame.Pong(next.id, next.t0, next.t1, clock())))
-                    is ByteArray -> g.out.write(next)
-                    is Queued -> {
+                    is Audio -> {
+                        try {
+                            g.out.write(next.bytes)
+                        } catch (e: IOException) {
+                            tcpAudioEvictedFrames.addAndGet(next.frames.toLong())
+                            throw e
+                        }
+                    }
+                    is DeadlineQueue.Entry -> {
+                        g.videoWrites++
+                        if (videoWriteStallMs > 0 && g.videoWrites % 100 == 0) {
+                            System.err.println("FAULT video_write_stall_ms=$videoWriteStallMs au=${g.videoWrites}")
+                            try {
+                                Thread.sleep(videoWriteStallMs.toLong())
+                            } catch (e: InterruptedException) {
+                                framesDropped.incrementAndGet()
+                                videoRetiredDiscarded.incrementAndGet()
+                                throw e
+                            }
+                        }
                         val f = next.frame
-                        g.out.write(MediaFrames.encode(MediaFrame.Video(f.key, f.seq, f.captureNs, f.encodedNs, clock(), f.data)))
+                        val bytes = MediaFrames.encode(MediaFrame.Video(f.key, f.seq, f.captureNs, f.encodedNs, 0L, f.data))
+                        val valid = synchronized(lock) {
+                            if (guest !== g || closed || !g.video.valid(next, clock())) {
+                                framesDropped.incrementAndGet()
+                                if (guest !== g || closed) videoRetiredDiscarded.incrementAndGet()
+                                else if (f.codecEpoch != g.video.epoch) videoConfigDiscarded.incrementAndGet()
+                                else if (next.revision != g.video.revision) Unit
+                                else {
+                                    val count = g.video.clear()
+                                    account(DeadlineQueue.Result(count, true, true), clock())
+                                    pressureDrops++
+                                    askKey = true
+                                }
+                                false
+                            } else true
+                        }
+                        if (!valid) {
+                            if (askKey) requestKeyframe(clock())
+                            continue
+                        }
+                        val begin = clock()
+                        java.nio.ByteBuffer.wrap(bytes).putLong(26, begin)
+                        try {
+                            g.out.write(bytes)
+                        } catch (e: IOException) {
+                            framesDropped.incrementAndGet()
+                            videoRetiredDiscarded.incrementAndGet()
+                            throw e
+                        }
                         framesSent.incrementAndGet()
                         synchronized(lock) {
-                            sentTimes.addLast(clock())
+                            val end = clock()
+                            writeTimes.addLast(end to (end - begin).coerceAtLeast(0L))
+                            while (writeTimes.size > MAX_SENT_TIMES) writeTimes.pollFirst()
+                            sentTimes.addLast(end)
                             while (sentTimes.size > MAX_SENT_TIMES) sentTimes.pollFirst()
                         }
                     }
@@ -296,21 +402,43 @@ class MediaServer(
                 val frame = MediaFrames.read(input) ?: break
                 when (frame) {
                     is MediaFrame.Ping -> synchronized(lock) {
-                        g.control.addLast(Out.Pong(frame.id, frame.t0, clock()))
-                        lock.notifyAll()
+                        if (guest === g && !closed) {
+                            g.control.addLast(Out.Pong(frame.id, frame.t0, clock()))
+                            lock.notifyAll()
+                        }
                     }
                     MediaFrame.KeyframeRequest -> {
-                        synchronized(lock) {
-                            if (guest === g) {
-                                framesDropped.addAndGet(g.video.size.toLong())
-                                g.video.clear()
-                                waitingForKey = true
+                        val current = synchronized(lock) {
+                            if (guest !== g || closed) false else {
+                                framesDropped.addAndGet(g.video.clear().toLong())
+                                true
                             }
                         }
-                        requestKeyframe(clock())
+                        if (current) requestKeyframe(clock())
                     }
-                    is MediaFrame.Report -> guestP95Us = frame.videoP95Us
-                    is MediaFrame.Bye -> break
+                    is MediaFrame.Delivery -> synchronized(lock) {
+                        val report = frame.report
+                        if (guest === g && !closed && validReport(g, report)) {
+                            g.lastReportSeq = report.seq
+                            g.lastReportEnd = report.endNs
+                            g.latestReport = report to clock()
+                            guestP95Us = if (report.relativeP95Ns < 0L) 0 else (report.relativeP95Ns / 1_000L).toInt()
+                        } else deliveryRejected.incrementAndGet()
+                    }
+                    is MediaFrame.Bye -> {
+                        synchronized(attachmentLifecycleLock) {
+                            val leave = synchronized(lock) {
+                                if (guest === g && frame.reason == StreamWire.BYE_LEAVING) {
+                                    guest = null
+                                    guestChangedNs = clock()
+                                    discardRetired(g)
+                                    true
+                                } else false
+                            }
+                            if (leave) onGuestDetached(g.attachId)
+                        }
+                        break
+                    }
                     else -> Unit
                 }
             }
@@ -326,17 +454,42 @@ class MediaServer(
                 Thread.sleep(tickMs)
                 val now = clock()
                 val action = synchronized(lock) {
-                    val a = pending ?: policy.tick(now)
-                    pending = null
-                    if (a != null) guest?.let { g ->
-                        g.control.addLast(Out.Frame(infoFrame()))
-                        lock.notifyAll()
+                    if (latencyControl) {
+                        val g = guest
+                        val dropped = pressureDrops != observedPressureDrops
+                        observedPressureDrops = pressureDrops
+                        val age = g?.video?.ageNs(now) ?: 0L
+                        val report = g?.latestReport
+                        if (g != null) g.latestReport = null
+                        val a = if (g != null && report != null && now - report.second in 0L..1500 * MS &&
+                            g.sentHostEpoch == actualFormat?.codecEpoch && report.first.codecEpoch == g.configCount) {
+                            while (writeTimes.isNotEmpty() && now - writeTimes.peekFirst().first > 500 * MS) writeTimes.pollFirst()
+                            val samples = writeTimes.map { it.second }.sorted()
+                            val p95 = if (samples.isEmpty()) 0L else samples[((samples.size * 95 + 99) / 100 - 1).coerceAtLeast(0)]
+                            delivery.window(now, report.first.relativeP95Ns.takeIf { it >= 0L }, age, p95, report.first.pending, dropped)
+                        } else delivery.localPressure(now, age, dropped)
+                        when (a) {
+                            is DeliveryControl.Action.Bitrate -> CongestionPolicy.Action.SetBitrate(a.bps)
+                            is DeliveryControl.Action.Level -> CongestionPolicy.Action.ChangeLevel(a.level, a.bps)
+                            null -> null
+                        }
+                    } else {
+                        val a = pending ?: policy.tick(now)
+                        pending = null
+                        a
                     }
-                    a
                 } ?: continue
                 val c = control ?: continue
                 when (action) {
-                    is CongestionPolicy.Action.SetBitrate -> c.setBitrate(action.bps)
+                    is CongestionPolicy.Action.SetBitrate -> {
+                        c.setBitrate(action.bps)
+                        synchronized(lock) {
+                            actualBitrate = action.bps
+                            actualFormat?.let { actualFormat = EncodedFormat(it.level, action.bps, it.csd, it.codecEpoch) }
+                            guest?.control?.addLast(Out.Frame(infoFrame()))
+                            lock.notifyAll()
+                        }
+                    }
                     is CongestionPolicy.Action.ChangeLevel -> c.changeLevel(action.level, action.bps)
                 }
             }
@@ -347,14 +500,13 @@ class MediaServer(
 
     /** Called with [lock] held. */
     private fun infoFrame(): ByteArray {
-        val l = policy.level
-        return MediaFrames.encode(MediaFrame.Info(l.index, l.width, l.height, policy.bitrate))
+        val l = actualLevel
+        return MediaFrames.encode(MediaFrame.Info(l.index, l.width, l.height, actualBitrate))
     }
 
     /** Called with [lock] held: the writer sends BYE after what is already queued for control, then stops. */
     private fun retire(g: Guest, reason: Int) {
-        g.audio.clear()
-        g.video.clear()
+        discardRetired(g)
         g.control.addLast(Out.Frame(MediaFrames.encode(MediaFrame.Bye(reason)), bye = true))
         g.retired = true
         lock.notifyAll()
@@ -366,6 +518,7 @@ class MediaServer(
                 guest = null
                 guestChangedNs = clock()
             }
+            discardRetired(g)
             lock.notifyAll()
         }
         runCatching { g.socket.close() }
@@ -387,21 +540,51 @@ class MediaServer(
         start()
     }
 
-    private class Queued(val frame: EncodedFrame, val queuedNs: Long)
+    private fun account(result: DeadlineQueue.Result, now: Long) {
+        framesDropped.addAndGet(result.dropped.toLong())
+        if (result.pressure) {
+            pressureDrops += result.dropped
+            if (!latencyControl) policy.onDrop(now)?.let { pending = it }
+        }
+    }
+
+    private fun discardRetired(g: Guest) {
+        val count = g.video.clear()
+        framesDropped.addAndGet(count.toLong())
+        videoRetiredDiscarded.addAndGet(count.toLong())
+        g.audio.forEach { tcpAudioEvictedFrames.addAndGet(it.frames.toLong()) }
+        g.audio.clear()
+    }
+
+    private fun validReport(g: Guest, report: DeliveryWire.Report): Boolean =
+        report.codecEpoch == g.configCount && g.sentHostEpoch == actualFormat?.codecEpoch &&
+            report.spanNs in 200_000_000L..2_000_000_000L && report.bytes in 0L..64_000_000L &&
+            report.frames in 0..500 && report.relativeP95Ns in -1L..2_000_000_000L && report.pending in 0..32 &&
+            report.endNs > 0L && report.endNs > g.lastReportEnd &&
+            (g.lastReportSeq == null || report.seq - g.lastReportSeq!! > 0)
+
+    private class Audio(val bytes: ByteArray, val frames: Int)
 
     private sealed interface Out {
         class Frame(val bytes: ByteArray, val bye: Boolean = false) : Out
         class Pong(val id: Int, val t0: Long, val t1: Long) : Out
+        class Format(val format: EncodedFormat) : Out
     }
 
-    private class Guest(val socket: Socket, val out: OutputStream) {
+    private class Guest(val socket: Socket, val out: OutputStream, val attachId: Long, deadlineMs: Int) {
         val control = ArrayDeque<Out>()
-        val audio = ArrayDeque<ByteArray>()
-        val video = ArrayDeque<Queued>()
+        val audio = ArrayDeque<Audio>()
+        val video = DeadlineQueue(deadlineMs)
+        var configCount = 0L
+        var sentHostEpoch: Long? = null
+        var lastReportSeq: Int? = null
+        var lastReportEnd = Long.MIN_VALUE
+        var latestReport: Pair<DeliveryWire.Report, Long>? = null
+        var videoWrites = 0
         @Volatile var writer: Thread? = null
         @Volatile var retired = false
 
-        fun isEmpty(): Boolean = control.isEmpty() && (retired || (audio.isEmpty() && video.isEmpty()))
+        fun isEmpty(): Boolean = control.isEmpty() && (retired || (audio.isEmpty() && video.isEmpty))
     }
 
     private companion object {
