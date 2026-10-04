@@ -14,17 +14,33 @@ import android.os.Bundle
  */
 class StreamCaptureActivity : Activity() {
     private var answered = false
+    private var promptClosed = false
+    private var requestId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (savedInstanceState != null) return
-        val manager = getSystemService(MediaProjectionManager::class.java)
-        val prompt = if (Build.VERSION.SDK_INT >= 34) {
-            manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForUserChoice())
-        } else {
-            manager.createScreenCaptureIntent()
+        val id = savedInstanceState?.getString(EXTRA_REQUEST_ID) ?: intent.getStringExtra(EXTRA_REQUEST_ID)
+        requestId = id
+        if (id == null) {
+            closePrompt()
+            return
         }
-        runCatching { startActivityForResult(prompt, REQUEST) }.onFailure { answer(RESULT_CANCELED, null) }
+        StreamAppCapture.attachConsent(id, this) {
+            runCatching {
+                val manager = getSystemService(MediaProjectionManager::class.java)
+                val prompt = if (Build.VERSION.SDK_INT >= 34) {
+                    manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForUserChoice())
+                } else {
+                    manager.createScreenCaptureIntent()
+                }
+                startActivityForResult(prompt, REQUEST)
+            }.onFailure { answer(RESULT_CANCELED, null) }
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        requestId?.let { outState.putString(EXTRA_REQUEST_ID, it) }
+        super.onSaveInstanceState(outState)
     }
 
     @Deprecated("Activity result API is not used for this one-shot system prompt")
@@ -34,17 +50,27 @@ class StreamCaptureActivity : Activity() {
     }
 
     override fun onDestroy() {
-        if (isFinishing && !answered) StreamAppCapture.onConsent(RESULT_CANCELED, null)
+        requestId?.let { StreamAppCapture.detachConsent(it, this, isFinishing && !answered) }
         super.onDestroy()
     }
 
     private fun answer(code: Int, data: Intent?) {
+        if (answered) return
         answered = true
-        StreamAppCapture.onConsent(code, data)
+        requestId?.let { StreamAppCapture.onConsent(it, this, code, data) }
+        closePrompt()
+    }
+
+    internal fun closePrompt() {
+        if (promptClosed) return
+        promptClosed = true
+        answered = true
+        runCatching { finishActivity(REQUEST) }
         finish()
     }
 
-    private companion object {
-        const val REQUEST = 1
+    internal companion object {
+        const val EXTRA_REQUEST_ID = "com.gamebex.client.stream.host.CONSENT_REQUEST_ID"
+        private const val REQUEST = 1
     }
 }

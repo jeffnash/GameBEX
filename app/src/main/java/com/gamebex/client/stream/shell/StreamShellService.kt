@@ -16,8 +16,10 @@ import kotlin.system.exitProcess
 
 /**
  * Shizuku UserService for Stream: its own process
- * ("com.gamebex.client:stream"), the shell uid, not a daemon, so Shizuku kills
- * it when GameBEX dies. At most one [StreamHostSession] runs at a time.
+ * ("com.gamebex.client:stream"), the shell uid. It is a Shizuku daemon so the
+ * RetroArch audio bridge can outlive GameBEX; it exits on its own about a second
+ * after it has no session and no retained bridge (after a probe-only bind, a
+ * failed start, a stop, or a watchdog stop). At most one [StreamHostSession] runs at a time.
  */
 @Keep
 class StreamShellService() : IStreamShell.Stub() {
@@ -30,10 +32,15 @@ class StreamShellService() : IStreamShell.Stub() {
 
     private val lock = Any()
     private var session: StreamHostSession? = null
-    private val components: ShellComponents by lazy { ShellWiring.components(context) }
+    private val components: ShellComponents by lazy {
+        ShellWiring.components(context).also { parts ->
+            (parts as? RealShellComponents)?.onAudioIdle = { scheduleIdleExit() }
+        }
+    }
 
     override fun destroy() {
         stopSession()
+        (components as? RealShellComponents)?.closeAudioBridge()
         exitProcess(0)
     }
 
@@ -44,6 +51,7 @@ class StreamShellService() : IStreamShell.Stub() {
             Log.w(TAG, "probe failed", t)
             StreamProbe(shellUid = Process.myUid(), sdk = Build.VERSION.SDK_INT)
         }
+        if (synchronized(lock) { session } == null) scheduleIdleExit()
         return StreamJson.json.encodeToString(StreamProbe.serializer(), probe)
     }
 
@@ -62,14 +70,20 @@ class StreamShellService() : IStreamShell.Stub() {
                 } else {
                     val next = StreamHostSession(config, components)
                     val started = next.start()
-                    if (started.ok) session = next
+                    if (started.ok) {
+                        next.onStopped = { scheduleIdleExit() }
+                        session = next
+                    }
                     started
                 }
             }
         } finally {
             Binder.restoreCallingIdentity(identity)
         }
-        if (!result.ok) Log.w(TAG, "stream start failed: ${result.error} ${result.detail}")
+        if (!result.ok) {
+            Log.w(TAG, "stream start failed: ${result.error} ${result.detail}")
+            scheduleIdleExit()
+        }
         return StreamJson.json.encodeToString(StreamStarted.serializer(), result)
     }
 
@@ -97,9 +111,26 @@ class StreamShellService() : IStreamShell.Stub() {
         synchronized(lock) { session }?.useMirror()
     }
 
+    override fun gameLaunched() {
+        synchronized(lock) { session }?.gameLaunched()
+    }
+
     private fun stopSession() {
         val current = synchronized(lock) { session.also { session = null } }
         current?.stop()
+        scheduleIdleExit()
+    }
+
+    private fun scheduleIdleExit() {
+        Thread({
+            Thread.sleep(1_000L)
+            synchronized(lock) {
+                if (session?.stopped != false && (components as? RealShellComponents)?.retainedAudio != true) {
+                    Log.i(TAG, "shell idle: no session or audio bridge")
+                    exitProcess(0)
+                }
+            }
+        }, "gbx-shell-idle").apply { isDaemon = true; start() }
     }
 
     private companion object {

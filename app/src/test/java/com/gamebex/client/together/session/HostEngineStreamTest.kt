@@ -1,14 +1,18 @@
 package com.gamebex.client.together.session
 
+import com.gamebex.client.data.Emu
 import com.gamebex.client.data.local.GameEntity
 import com.gamebex.client.launch.EmuRouter
 import com.gamebex.client.stream.P2Prep
 import com.gamebex.client.stream.StreamError
 import com.gamebex.client.stream.StreamStarted
+import com.gamebex.client.stream.StreamPlayer2
 import com.gamebex.client.stream.StreamStatus
 import com.gamebex.client.stream.StreamToken
 import com.gamebex.client.stream.fakes.FakeStreamHost
 import com.gamebex.client.stream.fakes.FakeStreamPlayer2
+import com.gamebex.client.stream.p2.StreamRaConfig
+import com.gamebex.client.stream.proto.StreamWire
 import com.gamebex.client.together.ByeReason
 import com.gamebex.client.together.GuestPhase
 import com.gamebex.client.together.HostStep
@@ -31,14 +35,17 @@ import com.gamebex.client.together.session.fakes.engineTestScope
 import com.gamebex.client.together.session.fakes.sampleGame
 import com.gamebex.client.together.session.fakes.sampleOffer
 import java.io.File
+import java.nio.file.Files
 import kotlin.coroutines.ContinuationInterceptor
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -61,8 +68,13 @@ class HostEngineStreamTest {
 
     /** Records the order of stream start and emulator launch. */
     private class RecordingEmulators(val events: MutableList<String>, val inner: FakeEmulators = FakeEmulators()) : TogetherEmulators by inner {
+        var onLaunch: ((TogetherLaunch) -> Unit)? = null
+        var launchFailure: Throwable? = null
+
         override suspend fun launch(req: TogetherLaunch): EmuRouter.Outcome {
             events += "launch"
+            onLaunch?.invoke(req)
+            launchFailure?.let { throw it }
             return inner.launch(req)
         }
     }
@@ -75,6 +87,8 @@ class HostEngineStreamTest {
         player2: FakeStreamPlayer2 = FakeStreamPlayer2(P2Prep.RetroArchConfig(File("/sdcard/GameBEX/ra/retroarch-stream.cfg"))),
         modes: ((GameEntity) -> List<TogetherMode>)? = null,
         platform: FakePlatform = FakePlatform(),
+        audioOverride: String? = null,
+        captureGate: CompletableDeferred<Unit>? = null,
     ): Harness {
         val engineScope = scope.engineTestScope()
         val events = mutableListOf<String>()
@@ -82,6 +96,23 @@ class HostEngineStreamTest {
             override suspend fun start(config: com.gamebex.client.stream.StreamConfig): StreamStarted {
                 events += "stream"
                 return stream.start(config)
+            }
+
+            override suspend fun gameLaunched() {
+                events += "gameLaunched"
+                stream.gameLaunched()
+            }
+
+            override suspend fun attachCapture() {
+                events += "capture"
+                captureGate?.await()
+                stream.attachCapture()
+            }
+        }
+        val recordingPlayer2 = object : StreamPlayer2 by player2 {
+            override suspend fun prepare(game: GameEntity, emu: Emu, rsoundReady: Boolean): P2Prep {
+                if (rsoundReady) events += "rsound"
+                return player2.prepare(game, emu, rsoundReady)
             }
         }
         val transport = FakeLinkTransport()
@@ -97,13 +128,14 @@ class HostEngineStreamTest {
             engineScope,
             engineScope.coroutineContext[ContinuationInterceptor] as CoroutineDispatcher,
             recordingStream,
-            player2,
+            recordingPlayer2,
             modes ?: com.gamebex.client.together.TogetherSupport::modesFor,
+            { audioOverride },
         )
         return Harness(engine, transport, discovery, emulators, stream, player2, events, platform)
     }
 
-    private suspend fun Harness.join(scope: TestScope, streamProto: Int? = 1): LinkPair {
+    private suspend fun Harness.join(scope: TestScope, streamProto: Int? = StreamWire.VERSION): LinkPair {
         val pair = transport.pair()
         pair.guest.send(LinkMsg.Hello(1, Role.GUEST, "guest-device", "Sam", "1.0", streamProto = streamProto))
         scope.advanceUntilIdle()
@@ -128,7 +160,7 @@ class HostEngineStreamTest {
         val h = harness(this)
         val pair = h.startGame(this)
         assertEquals(HostStep.IN_GAME, h.engine.view.value?.step)
-        assertEquals(listOf("stream", "launch"), h.events)
+        assertEquals(listOf("stream", "launch", "gameLaunched", "capture"), h.events)
         val config = h.stream.configs.single()
         assertEquals("10.42.1.21", config.guestAddress)
         assertTrue(StreamToken.isValid(config.token))
@@ -142,11 +174,198 @@ class HostEngineStreamTest {
         assertEquals(config.token, ready.token)
         assertEquals(55441, ready.mediaPort)
         assertEquals(55442, ready.inputPort)
-        assertEquals(1, ready.proto)
+        assertEquals(StreamWire.VERSION, ready.proto)
         assertEquals(TogetherCopy.hostStreamWaiting, h.engine.view.value?.streamLine)
         assertEquals(TogetherMode.STREAM, (sent.first { it is LinkMsg.Offer } as LinkMsg.Offer).mode)
         assertNull((sent.first { it is LinkMsg.Offer } as LinkMsg.Offer).game.core)
-        assertEquals(1, (sent.first { it is LinkMsg.Hello } as LinkMsg.Hello).streamProto)
+        assertEquals(StreamWire.VERSION, (sent.first { it is LinkMsg.Hello } as LinkMsg.Hello).streamProto)
+    }
+
+    @Test
+    fun retroArchOnlyEnablesRSoundAfterTheListenerIsReady() = runTest {
+        val tmp = Files.createTempDirectory("gbx-stream-ready").toFile()
+        try {
+            val p2 = FakeStreamPlayer2().apply {
+                prepareHandler = { _, _, ready ->
+                    P2Prep.RetroArchConfig(StreamRaConfig.write(tmp, rsoundReady = ready)!!)
+                }
+            }
+            val host = FakeStreamHost().apply { startValue = startValue.copy(rsound = true) }
+            val h = harness(this, stream = host, player2 = p2)
+            h.emulators.onLaunch = { req ->
+                val text = req.p2Config!!.readText()
+                assertTrue(text.contains("audio_driver = \"rsound\""))
+                assertTrue(text.contains("audio_device = \"127.0.0.1\""))
+            }
+            h.startGame(this)
+            assertEquals(listOf("stream", "rsound", "launch", "gameLaunched", "capture"), h.events)
+            assertTrue(h.stream.configs.single().rsound)
+            assertEquals(listOf(false, true), p2.audioReadiness)
+            assertEquals(listOf(n64.id to Emu.RETROARCH, n64.id to Emu.RETROARCH), p2.prepared)
+            assertEquals(StreamRaConfig.fileUnder(tmp), h.emulators.inner.launches.single().p2Config)
+            assertEquals(1, h.stream.gameLaunches)
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun anUnavailableRSoundListenerKeepsTheOriginalOpenSlConfig() = runTest {
+        val tmp = Files.createTempDirectory("gbx-stream-open-sl").toFile()
+        try {
+            val p2 = FakeStreamPlayer2().apply {
+                prepareHandler = { _, _, ready ->
+                    P2Prep.RetroArchConfig(StreamRaConfig.write(tmp, rsoundReady = ready)!!)
+                }
+            }
+            val h = harness(this, player2 = p2, audioOverride = "rsound")
+            h.emulators.onLaunch = { req ->
+                val text = req.p2Config!!.readText()
+                assertTrue(text.contains("audio_driver = \"opensl\""))
+                assertTrue(text.contains("audio_latency = \"32\""))
+                assertFalse(text.contains("\"127.0.0.1\""))
+            }
+            h.startGame(this)
+            assertTrue(h.stream.configs.single().rsound)
+            assertFalse(h.stream.startValue.rsound)
+            assertEquals(listOf(false), p2.audioReadiness)
+            assertEquals(listOf("stream", "launch", "gameLaunched", "capture"), h.events)
+            assertEquals(HostStep.IN_GAME, h.engine.view.value?.step)
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun aBlankAudioOverrideStillRequestsRSoundForRetroArch() = runTest {
+        val host = FakeStreamHost().apply { startValue = startValue.copy(rsound = true) }
+        val h = harness(this, stream = host, audioOverride = "")
+        h.startGame(this)
+        assertTrue(h.stream.configs.single().rsound)
+        assertEquals(listOf(false, true), h.player2.audioReadiness)
+    }
+
+    @Test
+    fun failedStreamStartNeverRewritesEvenIfItClaimsRSoundReadiness() = runTest {
+        val h = harness(this, stream = FakeStreamHost(startValue = StreamStarted(ok = false, rsound = true, error = StreamError.UHID)))
+        h.startGame(this)
+        assertEquals(listOf(false), h.player2.audioReadiness)
+        assertEquals(listOf("stream"), h.events)
+        assertEquals(0, h.stream.gameLaunches)
+        assertTrue(h.emulators.inner.launches.isEmpty())
+    }
+
+    @Test
+    fun theOpenSlOverrideNeverRequestsOrEnablesRSound() = runTest {
+        val host = FakeStreamHost().apply { startValue = startValue.copy(rsound = true) }
+        val h = harness(this, stream = host, audioOverride = "opensl")
+        h.startGame(this)
+        assertFalse(h.stream.configs.single().rsound)
+        assertEquals(listOf(false), h.player2.audioReadiness)
+        assertEquals(listOf("stream", "launch", "gameLaunched", "capture"), h.events)
+    }
+
+    @Test
+    fun nonRetroArchEmulatorsNeverRequestRSoundEvenWithTheOldDebugOverride() = runTest {
+        for (emu in listOf(Emu.DOLPHIN, Emu.NETHER, Emu.PPSSPP)) {
+            val game = n64.copy(emulatorOverride = emu.pkg)
+            val host = FakeStreamHost().apply { startValue = startValue.copy(rsound = true) }
+            val h = harness(this, game = game, stream = host, player2 = FakeStreamPlayer2(), audioOverride = "rsound", modes = { listOf(TogetherMode.STREAM) })
+            h.startGame(this)
+            assertFalse(h.stream.configs.single().rsound)
+            assertEquals(listOf(game.id to emu), h.player2.prepared)
+            assertEquals(listOf(false), h.player2.audioReadiness)
+            assertNull(h.emulators.inner.launches.single().p2Config)
+            h.engine.end()
+            advanceUntilIdle()
+        }
+    }
+
+    @Test
+    fun theConnectionTimerStartsBeforeShareConsentCompletes() = runTest {
+        val captureGate = CompletableDeferred<Unit>()
+        val h = harness(this, captureGate = captureGate)
+        h.startGame(this)
+        assertEquals(1, h.stream.gameLaunches)
+        assertEquals(0, h.stream.captureAttaches)
+        assertEquals(listOf("stream", "launch", "gameLaunched", "capture"), h.events)
+        captureGate.complete(Unit)
+        runCurrent()
+        assertEquals(1, h.stream.captureAttaches)
+    }
+
+    @Test
+    fun theConnectionTimerWaitsForSuccessfulEmulatorLaunch() = runTest {
+        val h = harness(this)
+        val launchGate = CompletableDeferred<Unit>()
+        h.emulators.inner.launchGate = launchGate
+        h.startGame(this)
+        assertEquals(0, h.stream.gameLaunches)
+        assertEquals(0, h.stream.captureAttaches)
+        launchGate.complete(Unit)
+        runCurrent()
+        assertEquals(1, h.stream.gameLaunches)
+        assertEquals(1, h.stream.captureAttaches)
+    }
+
+    @Test
+    fun aFailedReadyConfigRewriteStopsTheNewStreamAndNeverLaunches() = runTest {
+        val p2 = FakeStreamPlayer2(P2Prep.RetroArchConfig(File("/sdcard/GameBEX/ra/retroarch-stream.cfg"))).apply {
+            prepareHandler = { _, _, ready -> if (ready) P2Prep.Failed("Config rewrite failed") else prep }
+        }
+        val host = FakeStreamHost().apply { startValue = startValue.copy(rsound = true) }
+        val h = harness(this, stream = host, player2 = p2)
+        val pair = h.startGame(this)
+        assertEquals(listOf("stream", "rsound"), h.events)
+        assertEquals(listOf(false, true), p2.audioReadiness)
+        assertEquals(1, h.stream.stops)
+        assertEquals(0, h.stream.gameLaunches)
+        assertTrue(h.emulators.inner.launches.isEmpty())
+        assertTrue(pair.host.sent.none { it is LinkMsg.Launch || it is LinkMsg.StreamReady })
+        assertEquals(TogetherCopy.launchFailed("Config rewrite failed"), h.engine.view.value?.message)
+    }
+
+    @Test
+    fun aThrowingReadyConfigRewriteStillStopsTheNewStream() = runTest {
+        val p2 = FakeStreamPlayer2(P2Prep.RetroArchConfig(File("/sdcard/GameBEX/ra/retroarch-stream.cfg"))).apply {
+            prepareHandler = { _, _, ready ->
+                if (ready) error("Config rewrite failed")
+                prep
+            }
+        }
+        val host = FakeStreamHost().apply { startValue = startValue.copy(rsound = true) }
+        val h = harness(this, stream = host, player2 = p2)
+        h.startGame(this)
+        assertEquals(listOf("stream", "rsound"), h.events)
+        assertEquals(1, h.stream.stops)
+        assertEquals(0, h.stream.gameLaunches)
+        assertEquals(0, h.stream.captureAttaches)
+        assertTrue(h.emulators.inner.launches.isEmpty())
+        assertEquals(HostStep.JOINED, h.engine.view.value?.step)
+    }
+
+    @Test
+    fun aFailedEmulatorLaunchStopsTheStreamWithoutStartingTheConnectionTimer() = runTest {
+        val h = harness(this)
+        h.emulators.inner.launchOutcomes = ArrayDeque(listOf(EmuRouter.Outcome.Failed("Emulator launch failed")))
+        h.startGame(this)
+        assertEquals(listOf("stream", "launch"), h.events)
+        assertEquals(1, h.stream.stops)
+        assertEquals(0, h.stream.gameLaunches)
+        assertEquals(0, h.stream.captureAttaches)
+        assertEquals(HostStep.JOINED, h.engine.view.value?.step)
+    }
+
+    @Test
+    fun aThrowingEmulatorLaunchStopsTheStreamWithoutStartingTheConnectionTimer() = runTest {
+        val h = harness(this)
+        h.emulators.launchFailure = IllegalStateException("Emulator launch failed")
+        h.startGame(this)
+        assertEquals(listOf("stream", "launch"), h.events)
+        assertEquals(1, h.stream.stops)
+        assertEquals(0, h.stream.gameLaunches)
+        assertEquals(0, h.stream.captureAttaches)
+        assertEquals(HostStep.JOINED, h.engine.view.value?.step)
     }
 
     @Test
@@ -154,7 +373,7 @@ class HostEngineStreamTest {
         val h = harness(this)
         h.startGame(this)
         runCurrent()
-        assertEquals(listOf("stream", "launch"), h.events)
+        assertEquals(listOf("stream", "launch", "gameLaunched", "capture"), h.events)
         assertEquals(1, h.stream.captureAttaches)
     }
 
@@ -164,6 +383,8 @@ class HostEngineStreamTest {
         h.startGame(this)
         runCurrent()
         assertEquals(0, h.stream.captureAttaches)
+        assertEquals(0, h.stream.gameLaunches)
+        assertEquals(listOf(false), h.player2.audioReadiness)
     }
 
     @Test
@@ -172,8 +393,40 @@ class HostEngineStreamTest {
         h.engine.hostGame(1)
         advanceUntilIdle()
         val pair = h.join(this, streamProto = null)
-        assertEquals(ByeReason.VERSION, (pair.host.sent.last() as LinkMsg.Bye).reason)
+        h.engine.start()
+        runCurrent()
+        assertEquals(ByeReason.VERSION, pair.host.sent.filterIsInstance<LinkMsg.Bye>().single().reason)
         assertEquals(HostStep.WAITING, h.engine.view.value?.step)
+        assertEquals("Update GameBEX on both phones to play together.", h.engine.view.value?.message)
+        assertNull(h.engine.view.value?.guestName)
+        assertTrue(h.stream.configs.isEmpty())
+        assertEquals(0, h.stream.captureAttaches)
+        assertEquals(0, h.stream.gameLaunches)
+        assertTrue(h.player2.prepared.isEmpty())
+        assertTrue(h.emulators.inner.launches.isEmpty())
+        assertTrue(h.events.isEmpty())
+        assertTrue(pair.host.sent.none { it is LinkMsg.Offer || it is LinkMsg.Launch || it is LinkMsg.StreamReady })
+    }
+
+    @Test
+    fun aGuestWithAnotherStreamProtocolIsTurnedAway() = runTest {
+        val h = harness(this)
+        h.engine.hostGame(1)
+        advanceUntilIdle()
+        val pair = h.join(this, streamProto = StreamWire.VERSION + 1)
+        h.engine.start()
+        runCurrent()
+        assertEquals(ByeReason.VERSION, pair.host.sent.filterIsInstance<LinkMsg.Bye>().single().reason)
+        assertEquals(HostStep.WAITING, h.engine.view.value?.step)
+        assertEquals("Update GameBEX on both phones to play together.", h.engine.view.value?.message)
+        assertNull(h.engine.view.value?.guestName)
+        assertTrue(h.stream.configs.isEmpty())
+        assertEquals(0, h.stream.captureAttaches)
+        assertEquals(0, h.stream.gameLaunches)
+        assertTrue(h.player2.prepared.isEmpty())
+        assertTrue(h.emulators.inner.launches.isEmpty())
+        assertTrue(h.events.isEmpty())
+        assertTrue(pair.host.sent.none { it is LinkMsg.Offer || it is LinkMsg.Launch || it is LinkMsg.StreamReady })
     }
 
     @Test
@@ -191,6 +444,8 @@ class HostEngineStreamTest {
         val h = harness(this, player2 = FakeStreamPlayer2(P2Prep.Failed("Dolphin is busy")))
         h.startGame(this)
         assertTrue(h.events.isEmpty())
+        assertEquals(listOf(false), h.player2.audioReadiness)
+        assertEquals(0, h.stream.gameLaunches)
         assertEquals(TogetherCopy.launchFailed("Dolphin is busy"), h.engine.view.value?.message)
     }
 

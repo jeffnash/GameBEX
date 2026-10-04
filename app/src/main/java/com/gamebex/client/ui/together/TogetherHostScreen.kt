@@ -61,6 +61,7 @@ import com.gamebex.client.ui.console.SecondaryConsoleAction
 import com.gamebex.client.ui.console.consoleKeys
 import com.gamebex.client.ui.console.rememberScreenFocus
 import com.gamebex.client.ui.console.screenFocus
+import com.gamebex.client.ui.game.CoreInstallStatus
 
 /** Test tag on the host's primary (A) button. */
 internal const val HOST_PRIMARY_TAG = "together-host-primary"
@@ -245,20 +246,23 @@ fun TogetherHostScreen(
         if (seenLive && (current == null || current.step == HostStep.ENDED)) popOnce()
     }
     val v = view
+    val coreInstall = v?.coreInstall
     val problemAction = v?.problem?.action
-    val showPrimary = when (v?.step) {
+    val showPrimary = coreInstall != null || when (v?.step) {
         HostStep.NOT_READY -> problemAction != null
         HostStep.IN_GAME -> v?.linkLost != true
         HostStep.CHECKING, HostStep.WAITING, HostStep.JOINED, HostStep.LAUNCHING -> true
         else -> false
     }
-    val primaryEnabled = when (v?.step) {
+    val primaryEnabled = if (coreInstall != null) coreInstall.stalled else when (v?.step) {
         HostStep.NOT_READY -> problemAction != null
         HostStep.JOINED -> v?.canStart == true
         HostStep.IN_GAME -> v?.linkLost != true
         else -> false
     }
-    val primaryLabel = when (v?.step) {
+    val primaryLabel = if (coreInstall != null) {
+        if (coreInstall.stalled) "Retry" else "Installing core…"
+    } else when (v?.step) {
         HostStep.CHECKING -> TogetherCopy.checking
         HostStep.NOT_READY -> problemAction?.let(TogetherCopy::actionLabel).orEmpty()
         HostStep.WAITING -> TogetherCopy.waitingForPlayer2
@@ -268,18 +272,26 @@ fun TogetherHostScreen(
         else -> ""
     }
     // Before a guest joins, X (or a tap) hosts the game in its next mode instead.
-    val altMode = v?.altModes?.firstOrNull()?.takeIf { v.step == HostStep.WAITING || v.step == HostStep.NOT_READY }
-    val secondaryLabel = when (v?.step) {
+    val altMode = v?.altModes?.firstOrNull()?.takeIf {
+        coreInstall == null && (v.step == HostStep.WAITING || v.step == HostStep.NOT_READY)
+    }
+    val secondaryLabel = if (coreInstall != null) TogetherCopy.cancel else when (v?.step) {
         HostStep.JOINED, HostStep.LAUNCHING, HostStep.IN_GAME -> TogetherCopy.end
         else -> TogetherCopy.cancel
     }
+    val cancel: () -> Unit = {
+        if (coreInstall != null) controller.act(TogetherAction.CANCEL_CORE_INSTALL) else controller.end()
+    }
     val primary: () -> Unit = {
-        when (v?.step) {
+        if (coreInstall != null) {
+            controller.act(if (coreInstall.stalled) TogetherAction.RETRY_CORE_INSTALL else TogetherAction.INSTALL_CORE)
+            // Repeated A asks the engine to re-show cached progress, never starts another fetch.
+        } else when (v?.step) {
             HostStep.JOINED -> if (primaryEnabled) controller.hostStart()
             HostStep.NOT_READY -> when (problemAction) {
                 TogetherAction.OPEN_SYSTEM -> onOpenSystem()
                 TogetherAction.OPEN_PPSSPP -> onOpenPpsspp()
-                TogetherAction.OPEN_RETROARCH -> onOpenRetroArch()
+                TogetherAction.OPEN_RETROARCH -> controller.act(TogetherAction.OPEN_RETROARCH)
                 null -> Unit
                 else -> controller.act(problemAction)
             }
@@ -297,19 +309,19 @@ fun TogetherHostScreen(
     Box(
         Modifier.fillMaxSize().screenFocus(rememberScreenFocus()).consoleKeys(
             onLeft = { rail.enterRail() },
-            onA = { if (primaryEnabled) primary(); true },
-            onB = { controller.end(); true },
+            onA = { if (primaryEnabled || coreInstall != null) primary(); true },
+            onB = { cancel(); true },
             onY = { if (v?.step == HostStep.JOINED) { controller.hostRemoveGuest(); true } else false },
             onX = { altMode?.let { controller.hostSwitchMode(it); true } ?: false },
-            onStart = { if (primaryEnabled) primary(); true },
+            onStart = { if (primaryEnabled || coreInstall != null) primary(); true },
         ),
     ) {
         TogetherFrame(
             left = { TogetherStack {
                 TogetherHeader(v?.gameTitle?.takeIf { it.isNotBlank() } ?: "", v?.let { togetherSubtitle(it.folder, it.mode) })
-                Box(Modifier.stackY(188)) {
+                Column(Modifier.stackY(188).width(g.x(560)), verticalArrangement = Arrangement.spacedBy(g.x(10))) {
                     TogetherStatus(
-                        when (v?.step) {
+                        if (coreInstall != null) "Installing core" else when (v?.step) {
                             HostStep.CHECKING -> TogetherCopy.checkingPhone
                             HostStep.NOT_READY -> TogetherCopy.notReady
                             HostStep.WAITING -> TogetherCopy.hostWaitingTitle
@@ -318,7 +330,7 @@ fun TogetherHostScreen(
                             HostStep.IN_GAME -> if (v?.linkLost == true) v?.message ?: "" else TogetherCopy.playingWith(v?.guestName ?: TogetherCopy.otherPhone)
                             HostStep.ENDED, null -> ""
                         },
-                        when (v?.step) {
+                        if (coreInstall != null) null else when (v?.step) {
                             HostStep.NOT_READY -> v?.problem?.text
                             HostStep.WAITING -> TogetherCopy.hostWaitingSub
                             // "Streaming to Sam · 60 fps · 7.9 Mbps".
@@ -326,6 +338,7 @@ fun TogetherHostScreen(
                             else -> null
                         }, null,
                     )
+                    coreInstall?.let { CoreInstallStatus(it) }
                 }
                 if (v?.guestName != null && v?.step in setOf(HostStep.JOINED, HostStep.LAUNCHING, HostStep.IN_GAME)) {
                     Surface(
@@ -350,7 +363,7 @@ fun TogetherHostScreen(
                     if (showPrimary) {
                         PrimaryConsoleAction(primaryLabel, primaryEnabled, { if (primaryEnabled) primary() }, enabled = primaryEnabled, modifier = Modifier.heightIn(min = g.x(84)).testTag(HOST_PRIMARY_TAG))
                     }
-                    SecondaryConsoleAction(secondaryLabel, false, { controller.end() }, Modifier.heightIn(min = g.x(84)))
+                    SecondaryConsoleAction(secondaryLabel, false, cancel, Modifier.heightIn(min = g.x(84)))
                     altMode?.let { mode ->
                         SecondaryConsoleAction(
                             TogetherCopy.useModeInstead(mode),
@@ -360,7 +373,7 @@ fun TogetherHostScreen(
                         )
                     }
                 }
-                v?.message?.let {
+                v?.message?.takeIf { coreInstall == null }?.let {
                     Text(it, color = ConsoleColors.Warning, fontSize = g.t(16), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.stackY(580).width(g.x(560)))
                 }
             } },

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gamebex.client.data.BiosCheck
+import com.gamebex.client.data.Emu
 import com.gamebex.client.data.PlayStates
 import com.gamebex.client.data.local.DownloadRecord
 import com.gamebex.client.data.local.GameEntity
@@ -34,7 +35,9 @@ import com.gamebex.client.ui.home.model.SiteSearch
 import com.gamebex.client.ui.home.model.SiteResult
 import com.gamebex.client.ui.home.model.SizeInfo
 import com.gamebex.client.ui.logW
+import com.gamebex.client.ui.presentation.LaunchAction
 import com.gamebex.client.ui.presentation.LaunchStatus
+import com.gamebex.client.ui.presentation.LocalLaunchJob
 import com.gamebex.client.ui.presentation.LocalGamePresenter
 import com.gamebex.client.ui.presentation.LocalLauncher
 import com.gamebex.source.RomEntry
@@ -95,6 +98,8 @@ class HomeStore internal constructor(
     private val io: CoroutineDispatcher = Dispatchers.IO,
  /** Test seam: counts the library's title normalizations. */
     private val searchKeys: SearchKeysCache = SearchKeysCache(),
+    private val beginInstall: (Emu) -> Unit = {},
+    private val openRetroArch: () -> String? = { "RetroArch isn't available to open." },
 ) : ViewModel() {
 
  /** Production wiring over the services. */
@@ -109,6 +114,8 @@ class HomeStore internal constructor(
         saves, site, downloads, device, db,
         readiness = { g -> productionStatus(appContext, g) },
         launcher = { gameId, fresh, onStatus -> LocalLauncher.play(appContext, gameId, fresh, onStatus) },
+        beginInstall = { LocalLauncher.beginInstall(appContext, it) },
+        openRetroArch = { LocalLauncher.openRetroArch(appContext) },
         rescan = { stale ->
             withContext(Dispatchers.IO) {
                 if (stale) LibraryScanner.refreshIfStale(appContext, db)
@@ -141,6 +148,11 @@ class HomeStore internal constructor(
 
     private val surpriseId = MutableStateFlow<Long?>(null)
     private val statusFlow = MutableStateFlow<LaunchStatus?>(null)
+    private val launchJob = LocalLaunchJob({ launchTarget }, launcher) { status ->
+        statusFlow.value = status
+ // A press and byte ticks must not wait for the library rebuild debounce.
+        _model.update { it.copy(status = status) }
+    }
     private val tickFlow = MutableStateFlow(0)
 
  /** Query the site state belongs to, so stale results never leak. */
@@ -318,15 +330,15 @@ class HomeStore internal constructor(
             selectionTick.incrementAndGet()
             lastMode = result.mode
         }
-        _model.value = HomeScreenModel(
+        val next = HomeScreenModel(
             mode = result.mode,
             header = headerFor(data, ui),
             sections = result.sections,
             query = query,
             defaultKey = result.defaultKey,
-            status = ui.status,
             selectionToken = selectionTick.get(),
         )
+        _model.update { next.copy(status = statusFlow.value) }
     }
 
  /**
@@ -500,8 +512,9 @@ class HomeStore internal constructor(
                     }
                 }
             }
-            HomeIntent.DismissStatus -> statusFlow.value = null
-            HomeIntent.RetryStatus -> statusFlow.value?.let { s -> play(s.gameId, s.fresh) }
+            HomeIntent.DismissStatus -> launchJob.dismiss()
+            HomeIntent.RetryStatus -> statusFlow.value?.action?.let { runStatusAction(it) }
+            HomeIntent.SecondaryStatus -> statusFlow.value?.secondaryAction?.let { runStatusAction(it) }
         }
     }
 
@@ -536,16 +549,22 @@ class HomeStore internal constructor(
         launchTarget.launch { _effects.send(effect) }
     }
 
-    private fun play(gameId: Long, fresh: Boolean) {
-        if (launchBusy()) return
-        launchTarget.launch {
-            try {
-                launcher(gameId, fresh) { st -> statusFlow.value = st }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                logW(TAG, "launch failed", e)
+    private fun play(gameId: Long, fresh: Boolean) = launchJob.play(gameId, fresh)
+
+    private fun runStatusAction(action: LaunchAction) {
+        val current = statusFlow.value ?: return
+        when (action) {
+            LaunchAction.Retry -> launchJob.retry()
+            LaunchAction.OpenDetails -> {
+                launchJob.dismiss()
+                emit(HomeEffect.Navigate(HomeDestination.Game(current.gameId)))
             }
+            is LaunchAction.Install -> {
+                beginInstall(action.emu)
+                launchJob.dismiss()
+                emit(HomeEffect.Navigate(HomeDestination.System))
+            }
+            LaunchAction.OpenRetroArch -> openRetroArch()?.let { emit(HomeEffect.Toast(it)) }
         }
     }
 

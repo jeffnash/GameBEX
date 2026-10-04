@@ -5,6 +5,16 @@ import org.junit.Test
 
 class StreamStatsTextTest {
     @Test
+    fun rsoundTimingIsExplicitlyBridgeArrivalNotSourceAudio() {
+        val stats = LatencyStats()
+        stats.add(LatencyStats.Metric.AUDIO, 121_000_000L)
+        assertEquals(
+            "Bridge arrival → output 121 ms · buffer 0 ms · 0 gaps · 0 track underruns",
+            StreamStatsText.lines(stats.snapshot(0), "bridge-arrival")[2],
+        )
+    }
+
+    @Test
     fun formatsEveryLine() {
         val s = LatencyStats()
         val ms = 1_000_000L

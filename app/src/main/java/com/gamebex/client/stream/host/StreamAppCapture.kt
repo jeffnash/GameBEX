@@ -12,10 +12,8 @@ import android.os.Looper
 import android.util.Log
 import android.view.Surface
 import com.gamebex.client.together.platform.TogetherService
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * App-only capture on the host (Android 14+). Android's share prompt lets the host pick the game's
@@ -43,7 +41,8 @@ object StreamAppCapture {
     private var height = 0
     private var projection: MediaProjection? = null
     private var display: VirtualDisplay? = null
-    private var consent: CompletableDeferred<Pair<Int, Intent?>>? = null
+    private val consent = StreamConsentLifecycle<Pair<Int, Intent?>>(lock)
+    private var captureRequestId: String? = null
     private var stopping = false
 
     /** Called when the host ends sharing from Android's own controls (not when [stop] ends it). */
@@ -66,29 +65,57 @@ object StreamAppCapture {
     }
 
     /** Asks the host to share the game's app and starts capturing it; false when declined or unavailable. */
-    suspend fun start(ctx: Context): Boolean {
+    suspend fun start(ctx: Context, allowed: () -> Boolean = { true }): Boolean {
         if (!supported()) return false
         val app = ctx.applicationContext
-        val pending = CompletableDeferred<Pair<Int, Intent?>>()
-        synchronized(lock) { consent = pending }
+        val pending = consent.openIfAllowed(allowed) ?: return false
+        var started = false
         try {
-            withContext(Dispatchers.Main) {
-                app.startActivity(Intent(app, StreamCaptureActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            val launched = withContext(Dispatchers.Main) {
+                consent.runIfCurrent(pending) {
+                    if (!allowed()) return@runIfCurrent false
+                    app.startActivity(
+                        Intent(app, StreamCaptureActivity::class.java)
+                            .putExtra(StreamCaptureActivity.EXTRA_REQUEST_ID, pending.id)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                    true
+                } ?: false
             }
-            val (code, data) = withTimeoutOrNull(CONSENT_TIMEOUT_MS) { pending.await() } ?: (Activity.RESULT_CANCELED to null)
+            if (!launched) return false
+            val (code, data) = consent.await(pending, CONSENT_TIMEOUT_MS) ?: (Activity.RESULT_CANCELED to null)
             if (code != Activity.RESULT_OK || data == null) {
                 Log.i(TAG, "video: share prompt declined or timed out ($code)")
                 return false
             }
-            return withContext(Dispatchers.Main) { begin(app, code, data) }
+            val captured = withContext(Dispatchers.Main) {
+                consent.runIfCurrent(pending) {
+                    allowed() && begin(app, code, data, pending.id)
+                } ?: false
+            }
+            started = captured
+            return captured
         } finally {
-            synchronized(lock) { if (consent === pending) consent = null }
+            synchronized(lock) {
+                consent.cancel(pending)
+                if (!started && captureRequestId == pending.id) stopLocked()
+            }
         }
     }
 
     /** StreamCaptureActivity's share-prompt result. */
-    internal fun onConsent(code: Int, data: Intent?) {
-        synchronized(lock) { consent }?.complete(code to data)
+    internal fun onConsent(requestId: String, activity: StreamCaptureActivity, code: Int, data: Intent?) {
+        consent.answer(requestId, activity, code to data)
+    }
+
+    internal fun attachConsent(requestId: String, activity: StreamCaptureActivity, launch: () -> Unit) {
+        consent.attach(requestId, activity, {
+            if (Looper.myLooper() == main.looper) activity.closePrompt() else main.post { activity.closePrompt() }
+        }, launch)
+    }
+
+    internal fun detachConsent(requestId: String, activity: StreamCaptureActivity, finishing: Boolean) {
+        consent.detach(requestId, activity, finishing)
     }
 
     /** Ends the capture; the stream itself is stopped by the shell. Idempotent. */
@@ -96,7 +123,7 @@ object StreamAppCapture {
         synchronized(lock) { stopLocked() }
     }
 
-    private fun begin(app: Context, code: Int, data: Intent): Boolean {
+    private fun begin(app: Context, code: Int, data: Intent, requestId: String): Boolean {
         if (!TogetherService.shareScreen(true)) {
             Log.w(TAG, "video: no foreground service for app capture")
             return false
@@ -111,6 +138,7 @@ object StreamAppCapture {
             }
             stopping = false
             projection = p
+            captureRequestId = requestId
             p.registerCallback(callback, main)
             display = runCatching { p.createVirtualDisplay(NAME, width, height, dpi, 0, surface, null, main) }
                 .onFailure { Log.w(TAG, "app capture display failed", it) }
@@ -125,6 +153,8 @@ object StreamAppCapture {
     }
 
     private fun stopLocked() {
+        consent.stop()
+        captureRequestId = null
         stopping = true
         runCatching { display?.release() }
         display = null

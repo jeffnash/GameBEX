@@ -31,6 +31,7 @@ class VideoDecoder(
     private val surface: Surface,
     private val stats: LatencyStats,
     private val clock: ClockSync,
+    private val onVideoReady: () -> Unit = {},
     private val onNeedKeyframe: () -> Unit,
 ) {
     private class Times(val captureNs: Long, val sendNs: Long, val receivedNs: Long)
@@ -195,6 +196,7 @@ class VideoDecoder(
             released[info.presentationTimeUs] = now
             if (released.size > MAX_TIMES) released.keys.minOrNull()?.let { released.remove(it) }
             recordOutputStats(stats, clock, t.captureNs, t.sendNs, t.receivedNs, now)
+            onVideoReady()
         }
 
         override fun onError(codec: MediaCodec, e: MediaCodec.CodecException) {

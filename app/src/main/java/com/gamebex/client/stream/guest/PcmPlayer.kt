@@ -15,6 +15,7 @@ import com.gamebex.client.stream.StreamCaps
  */
 class PcmPlayer(
     private val buffer: PcmJitterBuffer,
+    private val onPcmPlayed: ((StreamPcmPlayed) -> Unit)? = null,
     private val onPlayed: (captureNs: Long, outputNs: Long) -> Unit = { _, _ -> },
 ) {
     private var track: AudioTrack? = null
@@ -101,18 +102,23 @@ class PcmPlayer(
         while (running) {
             val chunk = buffer.pull()
             val data = chunk?.pcm ?: silence
-            val first = writtenBytes / (StreamCaps.AUDIO_CHANNELS * 2)
+            val firstByte = writtenBytes
+            val first = firstByte / (StreamCaps.AUDIO_CHANNELS * 2)
             val n = writePcmFully(
                 size = data.size,
                 keepWriting = { running },
                 write = { offset, remaining -> t.write(data, offset, remaining, AudioTrack.WRITE_BLOCKING) },
                 onWritten = { writtenBytes += it },
             )
+            val wrote = (writtenBytes - firstByte).toInt()
+            val outputNs = if (wrote > 0 && (chunk != null || onPcmPlayed != null)) {
+                playoutNs(t, ts, first, firstByte, chunk, data, wrote)
+            } else 0L
             if (n != data.size) {
                 if (running) Log.w(TAG, "audio write incomplete $n/${data.size}")
                 return
             }
-            if (chunk != null) onPlayed(chunk.captureNs, playoutNs(t, ts, first))
+            if (chunk != null) onPlayed(chunk.captureNs, outputNs)
             val u = t.underrunCount
             trackUnderruns = u
             if (u > underrunsSeen) {
@@ -130,10 +136,40 @@ class PcmPlayer(
  * When the first frame of a chunk written at [firstFrame] reaches the speaker: from the track's
  * presentation timestamp when it has one (it includes the mixer and HAL), else from the frames still queued.
  */
-    private fun playoutNs(t: AudioTrack, ts: AudioTimestamp, firstFrame: Long): Long {
-        if (t.getTimestamp(ts)) return ts.nanoTime + (firstFrame - ts.framePosition) * 1_000_000_000L / StreamCaps.AUDIO_RATE
-        val queued = (firstFrame - t.playbackHeadPosition.toLong()).coerceAtLeast(0)
-        return System.nanoTime() + queued * 1_000_000_000L / StreamCaps.AUDIO_RATE
+    private fun playoutNs(
+        t: AudioTrack,
+        ts: AudioTimestamp,
+        firstFrame: Long,
+        firstByte: Long,
+        chunk: PcmJitterBuffer.Chunk?,
+        data: ByteArray,
+        bytes: Int,
+    ): Long {
+        val valid = t.getTimestamp(ts)
+        val observedNs = System.nanoTime()
+        val timestampNs = if (valid) ts.nanoTime else observedNs
+        val position = if (valid) ts.framePosition else t.playbackHeadPosition.toLong() and 0xffff_ffffL
+        val delta = if (valid) firstFrame - position else (firstFrame - position).coerceAtLeast(0)
+        val outputNs = timestampNs + delta * 1_000_000_000L / StreamCaps.AUDIO_RATE
+        onPcmPlayed?.let { callback ->
+            runCatching {
+                callback(StreamPcmPlayed(
+                    pcm = data,
+                    bytes = bytes,
+                    seq = chunk?.seq,
+                    captureNs = chunk?.captureNs ?: 0L,
+                    outputNs = outputNs,
+                    timestampValid = valid,
+                    timestampNs = timestampNs,
+                    timestampFramePosition = position,
+                    firstWrittenFrame = firstFrame,
+                    firstWrittenByte = firstByte,
+                    observedNs = observedNs,
+                    muted = muted,
+                ))
+            }
+        }
+        return outputNs
     }
 
     private companion object {

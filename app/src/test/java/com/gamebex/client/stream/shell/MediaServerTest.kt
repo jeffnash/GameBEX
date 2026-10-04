@@ -249,6 +249,20 @@ class MediaServerTest {
     }
 
     @Test
+    fun immediateCloseAfterGuestRegistrationStillSendsBye() {
+        repeat(20) {
+            val s = server()
+            val c = Client(s.port)
+            assertEquals(StreamWire.STATUS_OK, c.hello()!!.status)
+            waitFor("guest") { s.stats().guestConnected }
+            s.close()
+            assertEquals(StreamWire.BYE_STOPPING, c.next<MediaFrame.Bye>().reason)
+            assertNull(c.readOrNull())
+            assertFalse(s.stats().guestConnected)
+        }
+    }
+
+    @Test
     fun aGuestThatLeavesIsNoticed() {
         val s = server()
         val c = Client(s.port)

@@ -62,7 +62,13 @@ class StreamHostSession(
             val sink = AudioSink { chunk ->
                 if (!receiver.sendAudio(chunk)) channel.onPcm(chunk)
             }
-            val sound = if (config.audio) components.audioSource()?.takeIf { it.start(sink) } else null
+            val candidate = if (config.audio) components.audioSource(config) else null
+            val sound = candidate?.takeIf {
+                if (it.start(sink)) true else {
+                    it.stop()
+                    false
+                }
+            }
             audio = sound
             channel.start(source, level, level.maxBitrate, sound != null)
             receiver.start()
@@ -76,6 +82,7 @@ class StreamHostSession(
                 width = level.width,
                 height = level.height,
                 audio = sound != null,
+                rsound = sound?.rsoundReady == true,
                 padBackend = openedPad.backend,
             )
         } catch (f: StreamFailure) {
@@ -104,8 +111,17 @@ class StreamHostSession(
             inputPackets = i?.packets?.get() ?: 0,
             inputRejected = i?.rejected?.get() ?: 0,
             audio = audio != null,
+            audioMode = audio?.audioMode ?: "none",
+            audioFallback = audio?.fallbackReason,
+            audioFailureKind = audio?.audioFailureKind,
+            guestAudioDrops = audio?.guestAudioDrops ?: 0,
+            audioTimestampOrigin = if (audio?.audioMode == "rsound") "bridge-arrival" else "capture",
             guestVideoP95Us = m?.guestVideoP95Us ?: 0,
         )
+    }
+
+    fun gameLaunched() {
+        if (!stopping.get()) audio?.gameLaunched()
     }
 
     fun stop() {

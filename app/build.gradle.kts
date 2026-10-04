@@ -37,6 +37,7 @@ android {
         jvmTarget = "17"
     }
     buildFeatures {
+        buildConfig = true
         compose = true
         // IShellFiles: the Shizuku UserService interface.
         aidl = true

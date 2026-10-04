@@ -111,10 +111,32 @@ class GameDetailTwoPTest {
         }
     }
 
-    @Test fun ps2RowDoesNotExposeTwoP() {
+    @Test fun ps2RowRightAInvokesTogetherForStream() {
         val db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), LibraryDb::class.java).build()
         try {
-            val id = runBlocking { db.games().upsert(GameEntity(title = "Shadow", folder = "ps2", volumeId = "internal", relPath = "ps2/shadow.iso", fileName = "shadow.iso", sizeBytes = 10, mtimeMs = 1, ext = "iso")) }
+            val game = GameEntity(title = "Shadow", folder = "ps2", volumeId = "internal", relPath = "ps2/shadow.iso", fileName = "shadow.iso", sizeBytes = 10, mtimeMs = 1, ext = "iso")
+            assertEquals(com.gamebex.client.together.TogetherMode.STREAM, com.gamebex.client.together.TogetherSupport.modeFor(game))
+            val id = runBlocking { db.games().upsert(game) }
+            val vm = LocalDetailViewModel(ApplicationProvider.getApplicationContext(), db)
+            vm.load(id)
+            var selected = 0L
+            rule.setContent { GameBexTheme { ConsoleGeometryRoot { GameDetailScreen(vm, object : RailHost { override fun enterRail() = true }, ConsoleHints(), {}, {}, {}, onPlayTogether = { selected = it }) } } }
+            rule.waitForIdle()
+            rule.onNodeWithContentDescription(TogetherCopy.twoPHint).assertExists()
+            rule.onRoot().performKeyInput {
+                pressKey(Key.DirectionRight)
+                pressKey(Key.ButtonA)
+            }
+            rule.runOnIdle { assertEquals(id, selected) }
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test fun unavailablePs2RowDoesNotExposeTwoP() {
+        val db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), LibraryDb::class.java).build()
+        try {
+            val id = runBlocking { db.games().upsert(GameEntity(title = "Shadow", folder = "ps2", volumeId = "internal", relPath = "ps2/shadow.iso", fileName = "shadow.iso", sizeBytes = 10, mtimeMs = 1, ext = "iso", available = false)) }
             val vm = LocalDetailViewModel(ApplicationProvider.getApplicationContext(), db)
             vm.load(id)
             rule.setContent { GameBexTheme { ConsoleGeometryRoot { GameDetailScreen(vm, object : RailHost { override fun enterRail() = true }, ConsoleHints(), {}, {}, {}) } } }

@@ -58,6 +58,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.gamebex.client.R
 import com.gamebex.client.data.PlatformRegistry
 import com.gamebex.client.data.local.GameEntity
@@ -100,6 +101,18 @@ private const val ZONE_CHIPS = 1
 private const val ZONE_LIST = 2
 private const val ZONE_PREVIEW = 3
 
+internal data class LibrarySearchGeometry(
+    val chipTop: Float,
+    val listTop: Float,
+    val listHeight: Float,
+)
+
+internal fun librarySearchGeometry(scale: Float, searchHeight: Float): LibrarySearchGeometry {
+    val chipTop = maxOf(164f * scale, 92f * scale + searchHeight + 8f * scale)
+    val listTop = maxOf(220f * scale, chipTop + 36f * scale + 16f * scale)
+    return LibrarySearchGeometry(chipTop, listTop, 648f * scale - listTop)
+}
+
 /**
  * Library split view: search, sort and filters over a list, with a preview
  * pane that follows list focus. D-pad: Up/Down moves
@@ -107,8 +120,8 @@ private const val ZONE_PREVIEW = 3
  * fresh; A opens (search: types; sort: cycles; chip: toggles); Start plays;
  * Y favorites; X rescans; Select (or long-press) deletes after a confirm.
  * While typing, Left/Right reach the text cursor and Down/B/IME-Search
- * return to the list. A settled quick-play status panel takes A (its one
- * action) and B (dismiss) while it shows.
+ * return to the list. Quick-play recovery takes A/X for its actions and B
+ * to dismiss, or cancel an in-flight core installation.
  */
 @Composable
 fun ConsoleLibraryScreen(
@@ -121,6 +134,8 @@ fun ConsoleLibraryScreen(
     onInstallEmu: () -> Unit,
 ) {
     val g = LocalConsoleGeometry.current
+    val searchHeight = g.hitMin(g.x(56))
+    val searchGeometry = librarySearchGeometry(g.scale, searchHeight.value)
     val games by vm.games.collectAsState()
     val query by vm.query.collectAsState()
     val folder by vm.folder.collectAsState()
@@ -217,24 +232,27 @@ fun ConsoleLibraryScreen(
         if (p.canStartFresh) vm.play(p.game.id, fresh = true)
     }
 
-    // Quick-play status follows the selected row; moving on dismisses a
-    // settled panel. Busy states never capture keys.
-    val status = allStatus?.takeIf { it.gameId == selected?.id }
-    val settled = status?.takeIf { !it.busy }
+    // In-flight work stays visible; settled recovery follows selection.
+    val status = allStatus?.takeIf { it.busy || it.gameId == selected?.id }
+    val recovery = status?.takeIf { !it.busy || it.canCancel }
     LaunchedEffect(selected?.id) {
         if (allStatus?.let { !it.busy && it.gameId != selected?.id } == true) vm.clearStatus()
     }
-    fun runStatusAction(): Boolean {
-        val st = settled ?: return false
-        val a = st.action ?: return false
-        vm.clearStatus()
+    fun runStatusAction(secondary: Boolean = false): Boolean {
+        val st = recovery ?: return false
+        val a = (if (secondary) st.secondaryAction else st.action) ?: return false
         when (a) {
-            LaunchAction.OpenDetails -> onOpen(st.gameId)
+            LaunchAction.OpenDetails -> {
+                vm.clearStatus()
+                onOpen(st.gameId)
+            }
             is LaunchAction.Install -> {
                 LocalLauncher.beginInstall(context, a.emu)
+                vm.clearStatus()
                 onInstallEmu()
             }
             LaunchAction.Retry -> vm.retry(st)
+            LaunchAction.OpenRetroArch -> vm.openRetroArch()
         }
         return true
     }
@@ -244,9 +262,13 @@ fun ConsoleLibraryScreen(
     val previewA = preview?.let {
         if (previewBtn == 1) "Start fresh" else startLabel
     }
-    val hintList = libraryHints(
+    val hintList = if (!editing && recovery != null) listOfNotNull(
+        recovery.action?.let { ControllerHint(ControllerGlyph.A, it.label()) },
+        recovery.secondaryAction?.let { ControllerHint(ControllerGlyph.X, it.label()) },
+        ControllerHint(ControllerGlyph.B, if (recovery.canCancel) "Cancel" else "Dismiss"),
+    ) else libraryHints(
         zone = zone, topCol = topCol, editing = editing,
-        settled = settled != null, settledAction = settled?.action?.label(),
+        settled = false, settledAction = null,
         previewA = previewA, startLabel = startLabel,
         favorite = selected?.favorite,
         emptyA = if (games.isEmpty()) (if (filtered) "Clear filters" else "Browse games") else null,
@@ -299,7 +321,7 @@ fun ConsoleLibraryScreen(
                     }
                 },
                 onA = {
-                    if (!editing && settled?.action != null) runStatusAction()
+                    if (!editing && recovery?.action != null) runStatusAction()
                     else when (zone) {
                         ZONE_TOP -> {
                             if (editing) stopEditing(toList = true)
@@ -318,7 +340,7 @@ fun ConsoleLibraryScreen(
                 onB = {
                     when {
                         editing -> { stopEditing(toList = false); true }
-                        settled != null -> { vm.clearStatus(); true }
+                        recovery != null -> { vm.clearStatus(); true }
                         zone == ZONE_PREVIEW -> { zone = ZONE_LIST; true }
                         else -> false
                     }
@@ -327,7 +349,10 @@ fun ConsoleLibraryScreen(
                     preview?.takeIf { it.presentation.ctaEnabled }?.let { primary(it); true } ?: false
                 },
                 onY = { selected?.let { vm.toggleFav(it); true } ?: false },
-                onX = { vm.rescan(); true },
+                onX = {
+                    if (!editing && recovery?.secondaryAction != null) runStatusAction(secondary = true)
+                    else { vm.rescan(); true }
+                },
                 onSelect = {
                     if (zone == ZONE_LIST && selected != null) { pendingDelete = selected; true } else false
                 },
@@ -366,7 +391,7 @@ fun ConsoleLibraryScreen(
             onTap = { startEditing() },
             onSubmit = { stopEditing(toList = true) },
             modifier = Modifier.offset(x = g.x(cx(120)), y = g.x(92))
-                .size(g.x(540), g.hitMin(g.x(56))),
+                .size(g.x(540), searchHeight),
         )
         SortControl(
             sort = sort, focused = zone == ZONE_TOP && topCol == 1 && !editing,
@@ -378,7 +403,7 @@ fun ConsoleLibraryScreen(
             state = chipRowState,
             horizontalArrangement = Arrangement.spacedBy(g.x(8)),
             modifier = Modifier
-                .offset(x = g.x(cx(120)), y = g.x(164))
+                .offset(x = g.x(cx(120)), y = searchGeometry.chipTop.dp)
                 .width(g.x(760))
                 .fadeTrailing(g.x(48), enabled = chips.size > 4),
         ) {
@@ -392,8 +417,8 @@ fun ConsoleLibraryScreen(
 
         Box(
             modifier = Modifier
-                .offset(x = g.x(cx(120)), y = g.x(220))
-                .size(g.x(760), g.x(648 - 220)),
+                .offset(x = g.x(cx(120)), y = searchGeometry.listTop.dp)
+                .size(g.x(760), searchGeometry.listHeight.dp),
         ) {
             when {
                 games.isNotEmpty() -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
@@ -438,11 +463,23 @@ fun ConsoleLibraryScreen(
                     freshFocused = zone == ZONE_PREVIEW && previewBtn == 1,
                     onAction = { primary(p) },
                     onFresh = { startFresh(p) },
-                    status = status,
+                    status = status?.takeUnless { it.busy },
                     onStatusAction = { runStatusAction() },
                     onDismissStatus = { vm.clearStatus() },
+                    onSecondaryStatusAction = { runStatusAction(secondary = true) },
                 )
             }
+        }
+        // A core job must remain visible even if filtering removes the preview.
+        status?.takeIf { it.busy }?.let { st ->
+            LaunchStatusPanel(
+                status = st,
+                onAction = { runStatusAction() },
+                onDismiss = { vm.clearStatus() },
+                onSecondaryAction = { runStatusAction(secondary = true) },
+                modifier = Modifier.align(Alignment.BottomEnd)
+                    .padding(end = g.x(24), bottom = g.x(52)),
+            )
         }
     }
 }
@@ -616,6 +653,7 @@ private fun PreviewPane(
     status: LaunchStatus?,
     onStatusAction: () -> Unit,
     onDismissStatus: () -> Unit,
+    onSecondaryStatusAction: () -> Unit,
 ) {
     val g = LocalConsoleGeometry.current
     val game = p.game
@@ -679,6 +717,7 @@ private fun PreviewPane(
                             status = it,
                             onAction = onStatusAction,
                             onDismiss = onDismissStatus,
+                            onSecondaryAction = onSecondaryStatusAction,
                             modifier = Modifier.padding(top = g.x(10)).fillMaxWidth(),
                         )
                     }

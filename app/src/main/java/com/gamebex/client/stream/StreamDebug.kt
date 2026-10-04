@@ -6,7 +6,9 @@ package com.gamebex.client.stream
  *
  * - decoder: MediaCodec decoder name the guest uses instead of its usual pick.
  * - tdls: "1" asks Wi-Fi for a direct TDLS link to the host while the viewer is open.
- * - ra_audio: "rsound" makes the RetroArch session send its sound to an RSound server on 127.0.0.1.
+ * - ra_audio: "opensl" selects loopback for comparisons; otherwise readiness selects RSound.
+ * - ra_log: "1" enables verbose RetroArch session logs in its timestamped log file.
+ * - ra_poll: "0", "1" or "2" selects early, normal or late input polling for diagnosis.
  */
 object StreamDebug {
     fun prop(name: String): String? = runCatching {

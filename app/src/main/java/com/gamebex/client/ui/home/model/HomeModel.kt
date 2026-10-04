@@ -244,6 +244,7 @@ sealed interface HomeIntent {
     data object Entered : HomeIntent
     data object DismissStatus : HomeIntent
     data object RetryStatus : HomeIntent
+    data object SecondaryStatus : HomeIntent
 }
 
 sealed interface HomeEffect {

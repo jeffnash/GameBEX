@@ -42,6 +42,12 @@ class TogetherPlatformImpl(
         app.packageManager.getPackageInfo(pkg, 0).versionName
     }.getOrNull()
 
+    override fun openRetroArch(): Boolean = runCatching {
+        val intent = app.packageManager.getLaunchIntentForPackage("com.retroarch.aarch64") ?: return false
+        app.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        true
+    }.getOrDefault(false)
+
     override fun startService(ongoingText: String) {
         TogetherService.clearStopRequest()
         runCatching {
@@ -112,7 +118,6 @@ class TogetherPlatformImpl(
     override fun cancelAlerts() {
         runCatching {
             notifications?.cancel(43)
-            notifications?.cancel(44)
             notifications?.cancel(45)
         }
     }

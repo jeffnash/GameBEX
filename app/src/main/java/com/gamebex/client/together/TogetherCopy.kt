@@ -135,6 +135,8 @@ object TogetherCopy {
         TogetherAction.DOWNLOAD -> "Download"
         TogetherAction.USE_ANYWAY -> "Use mine anyway"
         TogetherAction.OPEN_STREAM -> openStream
+        TogetherAction.CANCEL_CORE_INSTALL -> "Cancel"
+        TogetherAction.RETRY_CORE_INSTALL -> "Retry"
     }
     fun problemFor(r: Readiness): Problem = when (r) {
         is Readiness.NeedsEmulator -> Problem(needsEmulator(r.emu.label), TogetherAction.OPEN_SYSTEM)
@@ -258,6 +260,7 @@ object TogetherCopy {
     const val streamReplaced = "The stream opened again on this phone, so this copy closed."
     const val tapForMenu = "Tap the screen for Leave and stats"
     const val streamReconnecting = "Reconnecting…"
+    const val streamWaitingForHost = "Waiting for the host to share the game"
     fun streamLinkLostHost(name: String, seconds: Int) = "Lost the connection to $name. The stream stays up for $seconds seconds in case it comes back."
     /** Host: the grace is over and the guest is still watching. */
     fun streamLinkLostStill(name: String) = "Lost the connection to $name, but the stream is still running."

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -27,6 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -45,6 +47,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -86,6 +91,7 @@ import com.gamebex.client.ui.presentation.relativeDay
 import com.gamebex.client.ui.presentation.GamePrimaryAction
 import com.gamebex.client.ui.presentation.LocalGamePresenter
 import com.gamebex.client.ui.presentation.LocalLauncher
+import com.gamebex.client.launch.CoreInstallProgress
 import com.gamebex.client.launch.EmuRouter
 import com.gamebex.client.ui.UserErrors
 import com.gamebex.client.ui.presentation.LocalPresentation
@@ -130,6 +136,7 @@ fun GameDetailScreen(
     onManageSources: () -> Unit,
     onFreeSpace: () -> Unit = {},
     onPlayTogether: (Long) -> Unit = {},
+    onOpenRetroArch: (() -> Unit)? = null,
 ) {
     val g = LocalConsoleGeometry.current
     val ctx = LocalContext.current
@@ -152,6 +159,8 @@ fun GameDetailScreen(
     val assist by vm.assist.collectAsState()
     val coreFetch by vm.coreFetch.collectAsState()
     val launching by vm.launching.collectAsState()
+    val needsRetroArchSetup by vm.needsRetroArchSetup.collectAsState()
+    val coreRetryAvailable by vm.coreRetryAvailable.collectAsState()
     val ssCreds by vm.ssCreds.collectAsState()
 
     // Keyed per game so recomposition never resets focus. Focus starts on the
@@ -193,13 +202,15 @@ fun GameDetailScreen(
         LocalGamePresenter.presentCatalog(it, catalogFolder, catalogDl)
     }
     val pres = lp?.presentation
-    val fetchLabel = coreFetch?.let { (read, total) ->
-        if (total > 0) "Fetching core… ${(read * 100 / total).toInt()}%" else "Fetching core…"
-    }
+    val fetchLabel = coreFetch?.text
+    val coreStalled = coreFetch?.stalled == true
+    val hasCoreCancel = coreFetch != null
+    val hasCoreOpen = needsRetroArchSetup
+    val hasCoreRetry = coreStalled || coreRetryAvailable || needsRetroArchSetup
     // Blocked route: no resolving operation exists, so the CTA parks.
     val unsupported = lp?.playable?.status is PlayStates.Status.Blocked
-    val ctaLabel = if (launching) "Launching…"
-        else fetchLabel ?: (if (unsupported) "Unavailable" else {
+    val ctaLabel = coreInstallActionLabel(coreFetch, launching, needsRetroArchSetup, coreRetryAvailable,
+        if (unsupported) "Unavailable" else {
             val a = pres?.primaryAction
             // A delete tombstone's CTA is "Download again".
             if (a == GamePrimaryAction.Download && ent != null) NOT_ON_PHONE_CTA else a?.label() ?: "Play"
@@ -208,10 +219,12 @@ fun GameDetailScreen(
     // Start fresh: RetroArch-routed games with a resume point only (the
     // standalones expose no per-launch auto-load switch). Hidden mid-launch.
     val canFresh = ent != null && pres?.primaryAction == GamePrimaryAction.Continue &&
-        !launching && fetchLabel == null && EmuRouter.canStartFresh(ent.folder, ent.emulatorOverride)
+        !launching && fetchLabel == null && !needsRetroArchSetup && !coreRetryAvailable &&
+        EmuRouter.canStartFresh(ent.folder, ent.emulatorOverride)
     val togetherMode = remember(ent) { ent?.let { TogetherSupport.modeFor(it) } }
-    val canTogether = ent != null && togetherMode != null && !launching && fetchLabel == null
-    if (!canFresh && ctaBtn == 1) ctaBtn = 0
+    val canTogether = ent != null && togetherMode != null && !launching && fetchLabel == null &&
+        !needsRetroArchSetup && !coreRetryAvailable
+    if (!canFresh && !hasCoreCancel && !hasCoreOpen && ctaBtn == 1) ctaBtn = 0
     if (!canTogether && ctaBtn == 2) ctaBtn = 0
     val freshFocused = zone == 0 && ctaBtn == 1
 
@@ -259,18 +272,23 @@ fun GameDetailScreen(
 
     val downloading = pres?.primaryAction is GamePrimaryAction.Downloading
     val prepRunning = pres?.primaryAction == GamePrimaryAction.Preparing
-    val ctaEnabled = !launching && fetchLabel == null && !downloading && !prepRunning && !unsupported
+    val ctaEnabled = hasCoreRetry || needsRetroArchSetup ||
+        (!launching && fetchLabel == null && !downloading && !prepRunning && !unsupported)
     // Hints follow the focused zone: A names what A does there.
     val hintList = if (lp == null || pres == null) {
         listOf(ControllerHint(ControllerGlyph.B, "Back"))
     } else {
         detailHints(
             zone = zone,
-            ctaA = ctaHint(ctaBtn, zone, ctaLabel, ctaEnabled),
+            ctaA = if (zone == 0 && ctaBtn == 1 && hasCoreCancel) "Cancel"
+                else if (zone == 0 && ctaBtn == 1 && hasCoreOpen) "Open RetroArch"
+                else if (zone == 0 && hasCoreRetry) ctaLabel
+                else ctaHint(ctaBtn, zone, ctaLabel, ctaEnabled),
             advAction = rows.getOrNull(advRow)?.takeIf { it.run != null }?.actionLabel,
             tab = tab,
             downloading = downloading,
             favorite = ent?.favorite,
+            backLabel = if (hasCoreCancel) "Cancel" else "Back",
         )
     }
     LaunchedEffect(hintList) { hints.set(hintList) }
@@ -418,8 +436,15 @@ fun GameDetailScreen(
         if (tab == 0 && zone == 2) zone = 1
     }
 
+    fun openRetroArch() {
+        if (onOpenRetroArch != null) onOpenRetroArch() else vm.openRetroArch(ctx)
+    }
+
     fun primary(): Boolean {
-        if (launching || fetchLabel != null || unsupported) return false
+        if (hasCoreRetry) { vm.retryCoreInstall(); return true }
+        // Repeated A is consumed while the visible install stays in the foreground.
+        if (launching || fetchLabel != null) return true
+        if (unsupported) return false
         return when (pres.primaryAction) {
             GamePrimaryAction.Play, GamePrimaryAction.Continue -> {
                 vm.play(ctx); true
@@ -485,7 +510,7 @@ fun GameDetailScreen(
                 },
                 onRight = {
                     if (zone == 0) when {
-                        ctaBtn == 0 && canFresh -> { ctaBtn = 1; true }
+                        ctaBtn == 0 && (canFresh || hasCoreCancel || hasCoreOpen) -> { ctaBtn = 1; true }
                         ctaBtn == 0 && canTogether -> { ctaBtn = 2; true }
                         ctaBtn == 1 && canTogether -> { ctaBtn = 2; true }
                         else -> false
@@ -526,7 +551,11 @@ fun GameDetailScreen(
                 onA = {
                     when (zone) {
                         0 -> when (ctaBtn) {
-                            1 -> startFresh()
+                            1 -> when {
+                                hasCoreCancel -> { vm.cancelCoreInstall(); true }
+                                hasCoreOpen -> { openRetroArch(); true }
+                                else -> startFresh()
+                            }
                             2 -> if (canTogether) { onPlayTogether(ent!!.id); true } else false
                             else -> primary()
                         }
@@ -536,7 +565,7 @@ fun GameDetailScreen(
                         else -> true
                     }
                 },
-                onB = { onBack(); true },
+                onB = { if (hasCoreCancel) vm.cancelCoreInstall() else onBack(); true },
                 onX = { setTab(1 - tab); zone = 1; true },
                 onY = {
                     if (downloading) {
@@ -624,12 +653,17 @@ fun GameDetailScreen(
                     "Not prepared yet." to ConsoleColors.TextSecondary
                 else stateLine(lp, it)
             } ?: catalogStateLine(lp.playable.status, pres.platformLabel)
-            Text(
-                stateText,
-                color = stateColor, fontSize = g.t(16), lineHeight = g.t(18),
-                maxLines = 2, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = g.x(6)),
-            )
+            if (coreFetch != null) {
+                CoreInstallStatus(coreFetch!!, Modifier.padding(top = g.x(6)))
+            } else {
+                Text(
+                    if (needsRetroArchSetup) message.orEmpty() else stateText,
+                    color = if (needsRetroArchSetup) ConsoleColors.Warning else stateColor,
+                    fontSize = g.t(16), lineHeight = g.t(18),
+                    maxLines = if (needsRetroArchSetup) 3 else 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = g.x(6)),
+                )
+            }
             // Secondary buttons take the width their labels need; the primary gets
             // the rest and ellipsizes. Fixed caps would cut "START FRESH" to "START".
             Row(
@@ -644,8 +678,22 @@ fun GameDetailScreen(
                     controllerGlyph = ControllerGlyph.A,
                     enabled = ctaEnabled,
                     modifier = Modifier.weight(1f, fill = false)
-                        .widthIn(min = g.x(if (canFresh || canTogether) 150 else 250)),
+                        .widthIn(min = g.x(if (canFresh || canTogether || hasCoreCancel || hasCoreOpen) 150 else 250)),
                 )
+                if (hasCoreOpen) {
+                    SecondaryConsoleAction(
+                        label = "Open RetroArch",
+                        focused = zone == 0 && ctaBtn == 1,
+                        onClick = { openRetroArch() },
+                    )
+                }
+                if (hasCoreCancel) {
+                    SecondaryConsoleAction(
+                        label = "Cancel",
+                        focused = zone == 0 && ctaBtn == 1,
+                        onClick = { vm.cancelCoreInstall() },
+                    )
+                }
                 if (canFresh) {
                     SecondaryConsoleAction(
                         label = "Start fresh",
@@ -725,13 +773,13 @@ fun GameDetailScreen(
         }
 
         // Transient status line: clears itself so it never parks on content.
-        LaunchedEffect(message) {
-            if (message != null) {
+        LaunchedEffect(message, needsRetroArchSetup, coreRetryAvailable) {
+            if (message != null && !needsRetroArchSetup && !coreRetryAvailable) {
                 kotlinx.coroutines.delay(5000)
                 vm.clearMessage()
             }
         }
-        message?.let { msg ->
+        message?.takeIf { !needsRetroArchSetup }?.let { msg ->
             Text(
                 msg,
                 color = ConsoleColors.Warning, fontSize = g.t(16),
@@ -743,18 +791,62 @@ fun GameDetailScreen(
     }
 }
 
-/**
- * Detail hint row for the focused zone (0 CTA, 1 tabs, 2 Advanced rows).
- * A shows only where it acts: the CTA ([ctaA] null = parked), nothing on
- * the tabs, the focused row's action. Y shows only when it acts: Cancel
- * mid-download, Favorite for a local game ([favorite] null = catalog face).
- */
+internal const val CORE_INSTALL_SPINNER_TAG = "core-install-spinner"
+internal const val CORE_INSTALL_MESSAGE_TAG = "core-install-message"
+internal const val CORE_INSTALL_PROGRESS_TAG = "core-install-progress"
+
+internal fun coreInstallActionLabel(
+    progress: CoreInstallProgress?,
+    launching: Boolean,
+    needsSetup: Boolean,
+    retryAvailable: Boolean,
+    fallback: String,
+): String = when {
+    progress?.stalled == true || retryAvailable -> "Retry"
+    progress != null -> "Installing core…"
+    needsSetup -> "Retry"
+    launching -> "Launching…"
+    else -> fallback
+}
+
+/** Same palette and compact progress geometry on the solo and together launch surfaces. */
+@Composable
+internal fun CoreInstallStatus(progress: CoreInstallProgress, modifier: Modifier = Modifier) {
+    val g = LocalConsoleGeometry.current
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(g.x(6))) {
+        Row(horizontalArrangement = Arrangement.spacedBy(g.x(10)), verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(g.x(20)).testTag(CORE_INSTALL_SPINNER_TAG),
+                color = ConsoleColors.Accent,
+                strokeWidth = g.x(2),
+            )
+            Text(
+                progress.text, color = if (progress.stalled) ConsoleColors.Warning else ConsoleColors.TextPrimary,
+                fontSize = g.t(16), lineHeight = g.t(20), maxLines = 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag(CORE_INSTALL_MESSAGE_TAG),
+            )
+        }
+        progress.fraction?.let { fraction ->
+            Box(Modifier.fillMaxWidth().height(g.x(6)).background(ConsoleColors.Steel)
+                .testTag(CORE_INSTALL_PROGRESS_TAG)
+                .semantics { progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f) }) {
+                if (fraction > 0f) Box(Modifier.fillMaxWidth(fraction).height(g.x(6)).background(ConsoleColors.Accent))
+            }
+        }
+    }
+}
+
 internal fun ctaHint(ctaBtn: Int, zone: Int, ctaLabel: String, ctaEnabled: Boolean): String? = when {
     zone == 0 && ctaBtn == 1 -> "Start fresh"
     zone == 0 && ctaBtn == 2 -> TogetherCopy.twoPHint
     else -> ctaLabel.takeIf { ctaEnabled }
 }
 
+/**
+ * Detail hint row for the focused zone (0 CTA, 1 tabs, 2 Advanced rows).
+ * A shows only where it acts: enabled CTA, nothing on tabs, focused row action.
+ * Y shows Cancel mid-download and Favorite for a local game.
+ */
 internal fun detailHints(
     zone: Int,
     ctaA: String?,
@@ -762,13 +854,14 @@ internal fun detailHints(
     tab: Int,
     downloading: Boolean,
     favorite: Boolean?,
+    backLabel: String = "Back",
 ): List<ControllerHint> = buildList {
     when (zone) {
         0 -> ctaA
         2 -> advAction
         else -> null
     }?.let { add(ControllerHint(ControllerGlyph.A, it)) }
-    add(ControllerHint(ControllerGlyph.B, "Back"))
+    add(ControllerHint(ControllerGlyph.B, backLabel))
     add(ControllerHint(ControllerGlyph.X, if (tab == 0) "Advanced" else "Overview"))
     when {
         downloading -> add(ControllerHint(ControllerGlyph.Y, "Cancel"))

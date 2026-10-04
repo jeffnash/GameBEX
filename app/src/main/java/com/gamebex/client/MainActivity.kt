@@ -619,6 +619,7 @@ private fun ConsoleNavHost(
                     goHome("allgames")
                 },
                 onPlayTogether = { nav.navigate("together/host/$it") },
+                onOpenRetroArch = { openRetroArchMenu(context) },
             )
         }
         composable("browse") {
@@ -674,6 +675,7 @@ private fun ConsoleNavHost(
                 onInstallEmu = { goHome("emulators") },
                 onManageSources = { nav.navigate("sources") },
                 onPlayTogether = { nav.navigate("together/host/$it") },
+                onOpenRetroArch = { openRetroArchMenu(context) },
             )
         }
         composable("sources") {

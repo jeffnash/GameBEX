@@ -1,6 +1,8 @@
 package com.gamebex.client.together.session
 
 import com.gamebex.client.stream.StreamEndpoint
+import com.gamebex.client.stream.proto.StreamWire
+import com.gamebex.client.together.ByeReason
 import com.gamebex.client.together.GuestPhase
 import com.gamebex.client.together.GuestStep
 import com.gamebex.client.together.GuestView
@@ -61,11 +63,17 @@ class GuestEngineStreamTest {
         return Rig(engine, transport, emulators, library)
     }
 
-    private suspend fun TestScope.open(rig: Rig): GuestLinkPair {
+    private suspend fun TestScope.connect(rig: Rig): GuestLinkPair {
         rig.engine.join(NearbyHost("host-device", SESSION, "J", "Mario Kart 64", "n64", TogetherMode.STREAM, ADDRESS, 55_440))
         val pair = rig.transport.connected.await()
         runCurrent()
-        pair.host.send(LinkMsg.Hello(TOGETHER_PROTO, Role.HOST, "host-device", "J", "1.0", streamProto = 1))
+        assertEquals(GuestStep.WAITING_OFFER, rig.engine.view.value?.step)
+        return pair
+    }
+
+    private suspend fun TestScope.open(rig: Rig): GuestLinkPair {
+        val pair = connect(rig)
+        pair.host.send(LinkMsg.Hello(TOGETHER_PROTO, Role.HOST, "host-device", "J", "1.0", streamProto = StreamWire.VERSION))
         pair.host.send(LinkMsg.Offer(SESSION, TogetherMode.STREAM, offered, null, ADDRESS))
         runCurrent()
         return pair
@@ -76,7 +84,7 @@ class GuestEngineStreamTest {
         return withTimeout(30_000L) { rig.engine.view.filterNotNull().first { it.step == step && predicate(it) } }
     }
 
-    private fun ready(round: Int = 1, proto: Int = 1, tokenHex: String = token) =
+    private fun ready(round: Int = 1, proto: Int = StreamWire.VERSION, tokenHex: String = token) =
         LinkMsg.StreamReady(SESSION, round, proto, tokenHex, 55_441, 55_442, 1600, 720, true)
 
     @Test
@@ -87,7 +95,43 @@ class GuestEngineStreamTest {
         assertEquals(TogetherMode.STREAM, view.mode)
         assertEquals(GuestPhase.READY, view.phase)
         val hello = pair.guest.sent.filterIsInstance<LinkMsg.Hello>().single()
-        assertEquals(1, hello.streamProto)
+        assertEquals(StreamWire.VERSION, hello.streamProto)
+    }
+
+    private suspend fun TestScope.assertVersionRejection(rig: Rig) {
+        val ended = awaitView(rig, GuestStep.ENDED)
+        assertEquals("Update GameBEX on both phones to play together.", ended.message)
+        assertTrue(rig.emulators.launches.isEmpty())
+        rig.engine.act(TogetherAction.OPEN_STREAM)
+        runCurrent()
+        assertEquals(GuestStep.ENDED, rig.engine.view.value?.step)
+        assertEquals("Update GameBEX on both phones to play together.", rig.engine.view.value?.message)
+        assertTrue(rig.emulators.launches.isEmpty())
+    }
+
+    @Test
+    fun aHostVersionRefusalEndsWithoutOpeningTheViewer() = runTest {
+        val rig = rig(this)
+        val pair = connect(rig)
+        pair.host.send(LinkMsg.Bye(ByeReason.VERSION))
+        pair.host.close()
+        assertVersionRejection(rig)
+    }
+
+    @Test
+    fun aHostWithoutTheStreamProtocolEndsWithoutOpeningTheViewer() = runTest {
+        val rig = rig(this)
+        val pair = connect(rig)
+        pair.host.send(LinkMsg.Hello(TOGETHER_PROTO, Role.HOST, "host-device", "J", "1.0", streamProto = null))
+        assertVersionRejection(rig)
+    }
+
+    @Test
+    fun aHostWithAnotherStreamProtocolEndsWithoutOpeningTheViewer() = runTest {
+        val rig = rig(this)
+        val pair = connect(rig)
+        pair.host.send(LinkMsg.Hello(TOGETHER_PROTO, Role.HOST, "host-device", "J", "1.0", streamProto = StreamWire.VERSION + 1))
+        assertVersionRejection(rig)
     }
 
     @Test
@@ -137,7 +181,7 @@ class GuestEngineStreamTest {
         val pair = open(rig)
         awaitView(rig, GuestStep.READY)
         pair.host.send(LinkMsg.Launch(SESSION, 1))
-        pair.host.send(ready(proto = 2))
+        pair.host.send(ready(proto = StreamWire.VERSION + 1))
         pair.host.send(ready(tokenHex = "not-a-token"))
         pair.host.send(ready(round = 7))
         advanceTimeBy(5_100)

@@ -12,6 +12,7 @@ import com.gamebex.source.SourceFailure
 import com.gamebex.source.SourceRef
 import com.gamebex.source.TransferRequest
 import com.gamebex.source.TypeItem
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -33,7 +34,7 @@ open class FakeRomSource(
         throw UnsupportedOperationException("resolveDownload")
     }
 
-    val calls = mutableListOf<String>()
+    val calls: MutableList<String> = CopyOnWriteArrayList()
 
     override suspend fun consoles(): List<ConsoleItem> {
         calls += "consoles"

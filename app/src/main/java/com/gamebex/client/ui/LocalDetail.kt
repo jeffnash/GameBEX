@@ -22,11 +22,16 @@ import com.gamebex.client.data.local.GameEntity
 import com.gamebex.client.data.local.LibraryDb
 import com.gamebex.client.data.local.PrepPipeline
 import com.gamebex.client.data.local.RomStore
+import com.gamebex.client.launch.CoreInstallProgress
 import com.gamebex.client.launch.EmuRouter
 import com.gamebex.client.net.BiosFetcher
 import com.gamebex.client.net.ScreenScraper
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,6 +47,8 @@ class LocalDetailViewModel(
     database: LibraryDb? = null,
     sourceAccess: com.gamebex.client.sources.SourceAccess? = null,
     engine: com.gamebex.client.net.DownloadController? = null,
+    private val launchDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val coreStallMs: Long = 8_000L,
 ) : ViewModel() {
     private val db: LibraryDb by lazy { database ?: LibraryDb.get(appContext!!) }
     private val _game = MutableStateFlow<GameEntity?>(null)
@@ -51,10 +58,18 @@ class LocalDetailViewModel(
     private val _missingEmu = MutableStateFlow<Emu?>(null)
     val missingEmu: StateFlow<Emu?> = _missingEmu
 
-    /** Active core auto-fetch (read, total), or null. */
-    private val _coreFetch = MutableStateFlow<Pair<Long, Long>?>(null)
-    val coreFetch: StateFlow<Pair<Long, Long>?> = _coreFetch
-    /** Core probe / emu launch in flight: CTA shows "Launching…". */
+    /** Visible from Play through download, installation and confirmed launch. */
+    private val _coreFetch = MutableStateFlow<CoreInstallProgress?>(null)
+    val coreFetch: StateFlow<CoreInstallProgress?> = _coreFetch
+    private val _needsRetroArchSetup = MutableStateFlow(false)
+    val needsRetroArchSetup: StateFlow<Boolean> = _needsRetroArchSetup
+    private val _coreRetryAvailable = MutableStateFlow(false)
+    val coreRetryAvailable: StateFlow<Boolean> = _coreRetryAvailable
+    private val launchLock = Any()
+    private var launchJob: Job? = null
+    private var cancelledLaunch: Job? = null
+    private var retryLaunch: (() -> Unit)? = null
+    /** Core probe / emu launch in flight. */
     private val _launching = MutableStateFlow(false)
     val launching: StateFlow<Boolean> = _launching
 
@@ -438,47 +453,148 @@ class LocalDetailViewModel(
      */
     fun play(context: android.content.Context, fresh: Boolean = false) {
         val g = _game.value ?: return
-        if (_launching.value) return
-        _message.value = null
-        _launching.value = true
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val out = EmuRouter.play(context, g, fresh) { read, total ->
-                    _coreFetch.value = read to total
-                }
-                when (out) {
-                    is EmuRouter.Outcome.Launched -> {
-                        // Counted on confirmed boot at next resume, not here.
-                        app.noteLaunch(g.id, out.emuPkg)
-                        _message.value = if (fresh) {
-                            "Started fresh in ${out.emuLabel}. Quitting saves a new resume point."
-                        } else {
-                            "Playing in ${out.emuLabel}."
+        launchGame(g, fresh, launch = { game, startFresh, progress ->
+            EmuRouter.play(context, game, startFresh, onCoreFetch = progress)
+        }, onLaunched = { game, out ->
+            // Counted on confirmed boot at next resume, not here.
+            app.noteLaunch(game.id, out.emuPkg)
+        })
+    }
+
+    /** The launch boundary is injectable so lifecycle tests exercise the real state machine. */
+    internal fun launchGame(
+        g: GameEntity,
+        fresh: Boolean = false,
+        launch: suspend (GameEntity, Boolean, (Long, Long) -> Unit) -> EmuRouter.Outcome,
+        onLaunched: (GameEntity, EmuRouter.Outcome.Launched) -> Unit = { _, _ -> },
+    ) {
+        synchronized(launchLock) {
+            if (launchJob != null) return
+            val route = PlatformRegistry.byFolder[g.folder]?.route as? Route.RetroCore
+            val core = route?.takeIf {
+                g.emulatorOverride == null || g.emulatorOverride == Emu.RETROARCH.pkg
+            }?.let { g.coreOverride ?: it.core }
+            _message.value = null
+            _missingEmu.value = null
+            _needsRetroArchSetup.value = false
+            _coreRetryAvailable.value = false
+            _launching.value = true
+            _coreFetch.value = core?.let { CoreInstallProgress(it) }
+            retryLaunch = { launchGame(g, fresh, launch, onLaunched) }
+            val predecessor = cancelledLaunch
+            lateinit var job: Job
+            job = viewModelScope.launch(launchDispatcher, start = CoroutineStart.LAZY) {
+                var watchdog: Job? = null
+                var progressVersion = 0L
+                fun armWatchdog() {
+                    watchdog?.cancel()
+                    val version = ++progressVersion
+                    watchdog = this.launch {
+                        delay(coreStallMs)
+                        synchronized(launchLock) {
+                            if (launchJob === job && progressVersion == version) {
+                                _coreFetch.value = _coreFetch.value?.copy(stalled = true)
+                            }
                         }
                     }
-                    is EmuRouter.Outcome.MissingEmu -> {
-                        _missingEmu.value = out.emu
+                }
+                try {
+                    synchronized(launchLock) { if (launchJob === job && core != null) armWatchdog() }
+                    // Let cancellation release EmuRouter's in-flight gate before retrying.
+                    predecessor?.join()
+                    ensureActive()
+                    val out = launch(g, fresh) { read, total ->
+                        synchronized(launchLock) {
+                            if (launchJob === job && job.isActive && core != null) {
+                                val old = _coreFetch.value ?: CoreInstallProgress(core)
+                                val next = if (read < 0 && total < 0) old.copy(installing = true)
+                                    else old.copy(read = read.coerceAtLeast(0), total = total.coerceAtLeast(0), installing = false)
+                                // Identical callbacks are not evidence of forward progress.
+                                if (next.copy(stalled = false) != old.copy(stalled = false)) {
+                                    _coreFetch.value = next.copy(stalled = false)
+                                    armWatchdog()
+                                }
+                            }
+                        }
                     }
-                    is EmuRouter.Outcome.Blocked -> {
-                        _message.value = out.reason
+                    ensureActive()
+                    synchronized(launchLock) {
+                        if (launchJob === job) when (out) {
+                            is EmuRouter.Outcome.Launched -> {
+                                onLaunched(g, out)
+                                _message.value = if (fresh) {
+                                    "Started fresh in ${out.emuLabel}. Quitting saves a new resume point."
+                                } else "Playing in ${out.emuLabel}."
+                            }
+                            is EmuRouter.Outcome.MissingEmu -> _missingEmu.value = out.emu
+                            is EmuRouter.Outcome.Blocked -> _message.value = out.reason
+                            is EmuRouter.Outcome.NeedsSetup -> {
+                                _message.value = out.text
+                                _needsRetroArchSetup.value = core != null
+                            }
+                            is EmuRouter.Outcome.Failed -> _message.value = out.msg
+                        }
                     }
-                    is EmuRouter.Outcome.NeedsSetup -> {
-                        _message.value = out.text
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logW("GameBEXPlay", "launch failed", e)
+                    synchronized(launchLock) {
+                        if (launchJob === job) _message.value = UserErrors.launchFailed()
                     }
-                    is EmuRouter.Outcome.Failed -> {
-                        _message.value = out.msg
+                } finally {
+                    watchdog?.cancel()
+                    synchronized(launchLock) {
+                        // A cancelled launch must never clear its replacement's progress.
+                        if (launchJob === job) {
+                            launchJob = null
+                            _launching.value = false
+                            _coreFetch.value = null
+                        }
                     }
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                logW("GameBEXPlay", "launch failed", e)
-                _message.value = UserErrors.launchFailed()
-            } finally {
-                _launching.value = false
-                _coreFetch.value = null
             }
+            launchJob = job
+            job.start()
         }
+    }
+
+    fun cancelCoreInstall() {
+        synchronized(launchLock) {
+            val job = launchJob ?: return
+            if (_coreFetch.value == null) return
+            launchJob = null
+            // A second retry can be cancelled while it is still waiting for the
+            // original backend's cleanup; keep that original gate until it finishes.
+            cancelledLaunch = cancelledLaunch?.takeUnless { it.isCompleted } ?: job
+            job.cancel()
+            _launching.value = false
+            _coreFetch.value = null
+            _needsRetroArchSetup.value = false
+            _coreRetryAvailable.value = true
+            _message.value = "Core installation cancelled. Retry when you're ready."
+        }
+    }
+
+    fun retryCoreInstall() {
+        synchronized(launchLock) {
+            if (_coreFetch.value?.stalled != true && !_coreRetryAvailable.value && !_needsRetroArchSetup.value) return
+            cancelCoreInstall()
+            retryLaunch?.invoke()
+        }
+    }
+
+    /** Open the installed runtime's launcher, never the APK installer. */
+    fun openRetroArch(context: android.content.Context) {
+        runCatching {
+            val intent = context.packageManager.getLaunchIntentForPackage(Emu.RETROARCH.pkg)?.apply {
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            } ?: run {
+                _message.value = "RetroArch isn't available to open."
+                return
+            }
+            context.startActivity(intent)
+        }.onFailure { _message.value = "RetroArch refused to open." }
     }
 
     /** Guided runtimes (Vita3K): open the app so the user imports inside it. */

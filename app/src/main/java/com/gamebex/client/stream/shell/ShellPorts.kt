@@ -114,6 +114,13 @@ fun interface AudioSink {
 interface AudioSource {
     /** False when this phone won't share its game audio; the stream then runs without sound. */
     fun start(sink: AudioSink): Boolean
+    val rsoundReady: Boolean get() = false
+    val audioMode: String get() = "loopback"
+    val fallbackReason: String? get() = null
+    val audioFailureKind: String? get() = null
+    val guestAudioDrops: Long get() = 0
+    fun gameLaunched() {}
+    fun flushGuestAudio() {}
     fun stop()
 }
 
@@ -160,6 +167,7 @@ interface ShellComponents {
 
     /** Null when this Android version can't capture playback. */
     fun audioSource(): AudioSource?
+    fun audioSource(config: StreamConfig): AudioSource? = audioSource()
 
     fun mediaChannel(config: StreamConfig): MediaChannel
 }

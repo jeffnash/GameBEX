@@ -25,7 +25,8 @@ object HomeCopy {
     private val MONTH_DAY: DateTimeFormatter =
         DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH)
 
-    private val SIZE_RE = Regex("""^\s*([0-9][0-9.,]*)\s*([a-zA-Z]*)""")
+    private val SIZE_RE = Regex("""^([0-9][0-9.,]*)\s*([a-zA-Z]+)(?=$|[^a-zA-Z0-9])""")
+    private val BYTE_COUNT_RE = Regex("""^[0-9]+$""")
     private val THOUSANDS = Regex("""^[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?$""")
 
  /**
@@ -68,17 +69,18 @@ object HomeCopy {
  * thousands separator (1234 MB) but `1,2 Go` is a decimal (1.2 Go).
  * Binary units.
  */
-    fun parseSize(text: String?): Long? {
+    fun parseSize(text: String?, allowBareBytes: Boolean = true): Long? {
         val t = text
             ?.replace('\u00A0', ' ')
             ?.replace('\u202F', ' ')
             ?.trim()
             .orEmpty()
         if (t.isEmpty()) return null
+        if (BYTE_COUNT_RE.matches(t)) return if (allowBareBytes) t.toLongOrNull() else null
         val m = SIZE_RE.find(t) ?: return null
         val value = parseDecimal(m.groupValues[1]) ?: return null
         val mult = when (m.groupValues[2].uppercase(Locale.ENGLISH)) {
-            "", "B" -> 1L
+            "B" -> 1L
             "K", "KB", "KO", "KIB" -> KB
             "M", "MB", "MO", "MIB" -> MB
             "G", "GB", "GO", "GIB" -> GB

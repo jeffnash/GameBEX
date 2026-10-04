@@ -22,7 +22,8 @@ object GraphicsTuner {
      * Per-core overrides (config/<Core>/<Core>.cfg, e.g. per-core touch
      * overlays) still load on top — verified via probe override.
      *
-     * Never add video_threaded here: it segfaults Mupen64Plus-Next GLES3 at boot.
+     * Threaded video is explicitly disabled: Android hardware GLES cores can
+     * otherwise start without a current context on fresh RetroArch installs.
      *
      * [resume] false is the per-launch "Start fresh": only the auto-load
      * flips. Auto-save stays on, so quitting a fresh session bookmarks it
@@ -44,6 +45,7 @@ object GraphicsTuner {
         appendLine("video_scale_integer = \"false\"")
         appendLine("video_smooth = \"true\"")
         appendLine("video_vsync = \"true\"")
+        appendLine("video_threaded = \"false\"")
         appendLine("rewind_enable = \"false\"")
         appendLine("input_overlay_enable = \"true\"")
         appendLine("input_overlay_hide_when_gamepad_connected = \"true\"")

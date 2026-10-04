@@ -25,6 +25,7 @@ data class StreamConfig(
  * mirroring the whole display: the shell hands its encoder surface to the app and waits.
  */
     val appCapture: Boolean = false,
+    val rsound: Boolean = false,
 )
 
 /** Result of IStreamShell.start. Ports are the ones really bound (the preferred ones may be taken). */
@@ -41,6 +42,7 @@ data class StreamStarted(
     val error: StreamError? = null,
  /** Shell-side detail for logs; never shown to people. */
     val detail: String? = null,
+    val rsound: Boolean = false,
 )
 
 /** IStreamShell.status, polled by the host app every [StreamCaps.STATUS_POLL_MS]. */
@@ -57,6 +59,11 @@ data class StreamStatus(
     val inputRejected: Long = 0,
     val audio: Boolean = false,
     val guestVideoP95Us: Int = 0,
+    val audioMode: String = "none",
+    val audioFallback: String? = null,
+    val audioFailureKind: String? = null,
+    val guestAudioDrops: Long = 0,
+    val audioTimestampOrigin: String = "capture",
     val error: StreamError? = null,
 )
 
@@ -85,6 +92,7 @@ data class StreamEndpoint(
     val height: Int,
     val audio: Boolean,
     val hostName: String,
+    val audioTimestampOrigin: String = "capture",
 )
 
 object StreamJson {

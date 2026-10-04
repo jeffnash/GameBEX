@@ -2,10 +2,17 @@ package com.gamebex.client.launch
 
 import android.content.ContextWrapper
 import android.content.Intent
-import com.gamebex.client.together.TogetherCaps
 import java.io.File
 import kotlin.io.path.createTempDirectory
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -111,8 +118,7 @@ class RetroCoreFetcherTest {
         assertTrue(RetroCoreFetcher.MAX_CORE_ZIP_BYTES <= 256L * 1024 * 1024)
     }
 
-    @Test fun ensureCoreRefusesMissingRomAndAttachesRomExtraDespiteSideloadWithoutRom() = runBlocking {
-        assertTrue(TogetherCaps.SIDELOAD_WITHOUT_ROM)
+    @Test fun ensureCoreRefusesMissingRomAndSideloadNeverAttachesRom() = runBlocking {
         val ctx = object : ContextWrapper(null) {
             var started = 0
             override fun startActivity(intent: Intent) { started += 1 }
@@ -127,18 +133,224 @@ class RetroCoreFetcherTest {
             RetroCoreFetcher.ensureCore(ctx, "snes9x", missing),
         )
         assertEquals(0, ctx.started)
-        val rom = File(createTempDirectory("ensure-core-rom-extra").toFile(), "game.sfc").apply {
-            writeText("rom")
-        }
+        val so = File("/stage/snes9x_libretro_android.so")
         val intent = object : Intent() {
-            val romExtras = linkedMapOf<String, String>()
+            val sideloadExtras = linkedMapOf<String, String>()
             override fun putExtra(name: String, value: String?): Intent {
-                if (value != null) romExtras[name] = value
+                if (value != null) sideloadExtras[name] = value
                 return this
             }
         }
-        RetroCoreFetcher.applyRomExtra(intent, rom)
-        assertEquals(rom.absolutePath, intent.romExtras["ROM"])
+        RetroCoreFetcher.applySideloadExtras(intent, so)
+        assertEquals(mapOf("LIBRETRO" to so.absolutePath), intent.sideloadExtras)
+        assertFalse(intent.sideloadExtras.containsKey("ROM"))
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun installConfirmsOnlyAfterDelayedMatchingProbeAndThenRecordsOnce() = runTest {
+        var queries = 0
+        var ledgerWrites = 0
+        val starts = mutableListOf<Long>()
+        val confirmed = RetroCoreFetcher.verifyCoreInstall(
+            core = "snes9x",
+            nowMs = { testScheduler.currentTime },
+            probe = { timeout ->
+                assertEquals(1_000L, timeout)
+                assertEquals(0, ledgerWrites)
+                starts += testScheduler.currentTime
+                when (++queries) {
+                    1 -> null
+                    2 -> emptySet()
+                    3 -> setOf("gambatte")
+                    else -> setOf("SNES9X")
+                }
+            },
+            onConfirmed = { ledgerWrites++ },
+        )
+        assertTrue(confirmed)
+        assertEquals(listOf(0L, 1_000L, 2_000L, 3_000L), starts)
+        assertEquals(1, ledgerWrites)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun installTimeoutNeverRecordsOrTreatsEmptyProbeAsSuccess() = runTest {
+        var queries = 0
+        var ledgerWrites = 0
+        val confirmed = RetroCoreFetcher.verifyCoreInstall(
+            core = "snes9x",
+            nowMs = { testScheduler.currentTime },
+            probe = {
+                if (++queries % 2 == 0) emptySet() else null
+            },
+            onConfirmed = { ledgerWrites++ },
+        )
+        assertFalse(confirmed)
+        assertEquals(20, queries)
+        assertEquals(20_000L, testScheduler.currentTime)
+        assertEquals(0, ledgerWrites)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun nonresponsiveQueriesAreIndividuallyBoundedToOneSecond() = runTest {
+        val starts = mutableListOf<Long>()
+        var ledgerWrites = 0
+        val confirmed = RetroCoreFetcher.verifyCoreInstall(
+            core = "snes9x",
+            nowMs = { testScheduler.currentTime },
+            probe = { timeout ->
+                assertTrue(timeout in 1L..1_000L)
+                starts += testScheduler.currentTime
+                delay(60_000L)
+                setOf("snes9x")
+            },
+            onConfirmed = { ledgerWrites++ },
+        )
+        assertFalse(confirmed)
+        assertEquals((0 until 20).map { it * 1_000L }, starts)
+        assertEquals(20_000L, testScheduler.currentTime)
+        assertEquals(0, ledgerWrites)
+    }
+
+    @Test fun matchingReplyAtDeadlineStillCannotPublishLedger() = runBlocking {
+        var now = 0L
+        var ledgerWrites = 0
+        val confirmed = RetroCoreFetcher.verifyCoreInstall(
+            core = "snes9x",
+            nowMs = { now },
+            probe = {
+                now = RetroCoreFetcher.INSTALL_TIMEOUT_MS
+                setOf("snes9x")
+            },
+            onConfirmed = { ledgerWrites++ },
+        )
+        assertFalse(confirmed)
+        assertEquals(0, ledgerWrites)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun cancellationDuringInstallPollPropagatesAndNeverRecords() = runTest {
+        var queries = 0
+        var ledgerWrites = 0
+        var returned = false
+        var cancellationCaught = false
+        val job = launch {
+            try {
+                RetroCoreFetcher.verifyCoreInstall(
+                    core = "snes9x",
+                    nowMs = { testScheduler.currentTime },
+                    probe = { queries++; emptySet() },
+                    onConfirmed = { ledgerWrites++ },
+                )
+                returned = true
+            } catch (e: CancellationException) {
+                cancellationCaught = true
+                throw e
+            }
+        }
+        runCurrent()
+        assertEquals(1, queries)
+        job.cancelAndJoin()
+        assertTrue(cancellationCaught)
+        assertFalse(returned)
+        assertEquals(0, ledgerWrites)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun cancellationDuringProbePropagatesRatherThanBecomingTimeout() = runTest {
+        var ledgerWrites = 0
+        var probing = false
+        var returned = false
+        val job = launch {
+            RetroCoreFetcher.verifyCoreInstall(
+                core = "snes9x",
+                nowMs = { testScheduler.currentTime },
+                probe = {
+                    probing = true
+                    delay(60_000L)
+                    setOf("snes9x")
+                },
+                onConfirmed = { ledgerWrites++ },
+            )
+            returned = true
+        }
+        runCurrent()
+        assertTrue(probing)
+        job.cancelAndJoin()
+        assertTrue(job.isCancelled)
+        assertFalse(returned)
+        assertEquals(0, ledgerWrites)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun cancellingInMatchingProbeDoesNotPublishLedger() = runTest {
+        var ledgerWrites = 0
+        var returned = false
+        val job = launch {
+            RetroCoreFetcher.verifyCoreInstall(
+                core = "snes9x",
+                nowMs = { testScheduler.currentTime },
+                probe = {
+                    kotlinx.coroutines.currentCoroutineContext().cancel()
+                    setOf("snes9x")
+                },
+                onConfirmed = { ledgerWrites++ },
+            )
+            returned = true
+        }
+        job.join()
+        assertTrue(job.isCancelled)
+        assertFalse(returned)
+        assertEquals(0, ledgerWrites)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun foregroundReturnWaitsUntilSideloadCanStart() = runTest {
+        var background = false
+        var returnedAt = -1L
+        RetroCoreFetcher.restoreAfterSideloadStart(
+            waitForBackground = { delay(350L); background = true },
+            restore = { assertTrue(background); returnedAt = testScheduler.currentTime },
+        )
+        assertEquals(550L, returnedAt)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun missingPauseSignalCannotStrandProgressForegroundReturn() = runTest {
+        var returnedAt = -1L
+        RetroCoreFetcher.restoreAfterSideloadStart(
+            waitForBackground = { delay(60_000L) },
+            restore = { returnedAt = testScheduler.currentTime },
+        )
+        assertEquals(2_200L, returnedAt)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun cancelledLaunchWaitDoesNotReturnAsSuccessfulInstall() = runTest {
+        var restored = false
+        val job = launch {
+            RetroCoreFetcher.restoreAfterSideloadStart(
+                waitForBackground = { delay(60_000L) },
+                restore = { restored = true },
+            )
+        }
+        runCurrent()
+        job.cancelAndJoin()
+        assertFalse(restored)
+        assertTrue(job.isCancelled)
+    }
+
+    @Test fun accessibleMissingSetupPathsOnlyAndUnknownPrivatePathsDoNotBlock() {
+        assertFalse(RetroCoreProbe.setupPathsMissing(null as List<String>?))
+        assertFalse(RetroCoreProbe.setupPathsMissing(listOf("cores", "assets")))
+        assertTrue(RetroCoreProbe.setupPathsMissing(emptyList()))
+        assertTrue(RetroCoreProbe.setupPathsMissing(listOf("assets")))
+        assertTrue(RetroCoreProbe.setupPathsMissing(listOf("cores")))
+    }
+
+    @Test fun installTimeoutGuidanceExplicitlyOpensRetroArchSetup() {
+        assertEquals(
+            "RetroArch couldn't install the core. Open RetroArch once to finish its setup, then try again.",
+            RetroCoreFetcher.INSTALL_SETUP_GUIDANCE,
+        )
+    }
 }

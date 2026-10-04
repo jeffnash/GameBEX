@@ -26,8 +26,8 @@ class StreamPlayer2Impl(
     /** True the first time it is called for [key] on this phone. */
     private val firstTime: (key: String) -> Boolean,
 ) : StreamPlayer2 {
-    override suspend fun prepare(game: GameEntity, emu: Emu): P2Prep = when (emu) {
-        Emu.RETROARCH -> StreamRaConfig.write(externalBase())?.let { P2Prep.RetroArchConfig(it) }
+    override suspend fun prepare(game: GameEntity, emu: Emu, rsoundReady: Boolean): P2Prep = when (emu) {
+        Emu.RETROARCH -> StreamRaConfig.write(externalBase(), rsoundReady)?.let { P2Prep.RetroArchConfig(it) }
             ?: P2Prep.Failed(TogetherCopy.configUnwritable)
         Emu.DOLPHIN -> when (val r = dolphin.apply()) {
             DolphinP2Config.Result.Applied -> P2Prep.Written

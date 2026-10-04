@@ -87,6 +87,37 @@ class PadMapperTest {
     }
 
     @Test
+    fun touchResetKeepsPhysicalHoldsAndSharedButtonsPressed() {
+        val physical = PadMapper()
+        val touch = PadMapper()
+        physical.onKey(KeyEvent.KEYCODE_BUTTON_A, true, 0)
+        physical.onAxes(0.5f, -1f, 0f, 0f, 0.8f, 0f, 1f, 0f)
+        touch.onKey(KeyEvent.KEYCODE_BUTTON_A, true, 1)
+        touch.onKey(KeyEvent.KEYCODE_BUTTON_B, true, 1)
+        touch.onAxes(-1f, 1f, 0f, 0f, 0f, 0f, 0f, -1f)
+        touch.reset() // The exact operation used by releaseTouchInput, not a physical reset.
+        assertEquals(physical.state(), mergePadStates(physical.state(), touch.state()))
+        assertEquals(PadState.A or PadState.L2, physical.state().buttons)
+        assertEquals(64, physical.state().lx)
+        assertEquals(PadState.HAT_RIGHT, physical.state().hat)
+    }
+
+    @Test
+    fun releasingPhysicalStillKeepsTouchAndFullResetIsNeutral() {
+        val physical = PadMapper()
+        val touch = PadMapper()
+        physical.onKey(KeyEvent.KEYCODE_BUTTON_A, true, 0)
+        touch.onKey(KeyEvent.KEYCODE_BUTTON_A, true, 1)
+        touch.onKey(KeyEvent.KEYCODE_DPAD_UP, true, 1)
+        physical.onKey(KeyEvent.KEYCODE_BUTTON_A, false, 2)
+        assertEquals(PadState.A, mergePadStates(physical.state(), touch.state()).buttons)
+        assertEquals(PadState.HAT_UP, mergePadStates(physical.state(), touch.state()).hat)
+        physical.reset()
+        touch.reset() // Pause/end resets both.
+        assertEquals(PadState.NEUTRAL, mergePadStates(physical.state(), touch.state()))
+    }
+
+    @Test
     fun resetReleasesEverything() {
         val m = PadMapper()
         m.onKey(KeyEvent.KEYCODE_BUTTON_Y, true, 0)

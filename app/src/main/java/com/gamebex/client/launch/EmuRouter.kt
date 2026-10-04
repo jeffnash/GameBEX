@@ -185,7 +185,7 @@ object EmuRouter {
     fun retroArchNeedsFirstRun(ctx: Context): Boolean = retroArchNeedsFirstRun(
         AndroidPackageFacts(ctx.packageManager, ctx.getSystemService(android.app.AppOpsManager::class.java)),
         android.os.Build.VERSION.SDK_INT,
-    )
+    ) || RetroCoreProbe.setupPathsMissing(ctx)
 
     /** RetroArch's own paths, the way its launcher (MainMenuActivity) derives them; null when unknown. */
     data class RaPaths(val dataDir: String?, val apk: String?, val sdcard: String?, val ime: String?)
@@ -313,8 +313,12 @@ object EmuRouter {
                     // fetch only costs a reinstall, never a hang.
                     val rom = RomStore.resolveLaunchFile(ctx, game)
                     return when (val r = RetroCoreFetcher.ensureCore(ctx, core, rom, onCoreFetch)) {
-                        is RetroCoreFetcher.Result.Fetched ->
-                            Outcome.Launched("RetroArch (${com.gamebex.client.data.CoreNames.display(core)})", RA_PKG, coreFetched = true)
+                        is RetroCoreFetcher.Result.Fetched -> {
+                            // Sideload never boots a ROM: confirmation must
+                            // precede the normal managed config/fresh launch.
+                            val launched = fireRetroArch(ctx, game, core, fresh)
+                            if (launched is Outcome.Launched) launched.copy(coreFetched = true) else launched
+                        }
                         is RetroCoreFetcher.Result.Failed -> Outcome.NeedsSetup(r.reason)
                     }
                 }

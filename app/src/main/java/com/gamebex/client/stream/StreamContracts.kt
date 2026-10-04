@@ -22,6 +22,8 @@ interface StreamHost {
      */
     suspend fun attachCapture() {}
 
+    suspend fun gameLaunched() {}
+
     /** Null when the shell service is gone. */
     suspend fun status(): StreamStatus?
 
@@ -41,7 +43,7 @@ object NoStreamHost : StreamHost {
 /** How player 2 gets bound in the host's emulator. */
 interface StreamPlayer2 {
     /** Prepares [emu]'s player-2 binding for [game] before the host launch. Never throws. */
-    suspend fun prepare(game: GameEntity, emu: Emu): P2Prep
+    suspend fun prepare(game: GameEntity, emu: Emu, rsoundReady: Boolean = false): P2Prep
 
     /** Puts back everything [prepare] changed. Idempotent; also runs after a crash. */
     suspend fun restore(): Boolean
@@ -49,7 +51,7 @@ interface StreamPlayer2 {
 
 /** Default for builds and tests without player-2 binding: every emulator gets a plain refusal. */
 object NoStreamPlayer2 : StreamPlayer2 {
-    override suspend fun prepare(game: GameEntity, emu: Emu): P2Prep = P2Prep.Failed(com.gamebex.client.together.TogetherCopy.streamUnavailable)
+    override suspend fun prepare(game: GameEntity, emu: Emu, rsoundReady: Boolean): P2Prep = P2Prep.Failed(com.gamebex.client.together.TogetherCopy.streamUnavailable)
     override suspend fun restore(): Boolean = true
 }
 

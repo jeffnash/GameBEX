@@ -13,6 +13,7 @@ class GraphicsTunerTest {
             "video_scale_integer = \"false\"",
             "video_smooth = \"true\"",
             "video_vsync = \"true\"",
+            "video_threaded = \"false\"",
             "rewind_enable = \"false\"",
             "input_overlay_enable = \"true\"",
             "input_overlay_hide_when_gamepad_connected = \"true\"",
@@ -34,8 +35,7 @@ class GraphicsTunerTest {
         )) {
             assertTrue("missing $key", cfg.contains(key))
         }
-        // Threaded video segfaults Mupen64Plus-Next GLES3 (device-proven).
-        assertTrue("video_threaded forbidden", !cfg.contains("video_threaded"))
+        assertTrue("threaded video must not be enabled", !cfg.contains("video_threaded = \"true\""))
     }
 
     @Test fun freshConfigOnlyDisablesAutoLoad() {

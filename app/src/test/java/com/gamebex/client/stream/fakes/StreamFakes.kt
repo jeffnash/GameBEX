@@ -37,6 +37,7 @@ class FakeStreamHost(
     @Volatile var stops = 0
     @Volatile var statusCalls = 0
     @Volatile var captureAttaches = 0
+    @Volatile var gameLaunches = 0
 
     override suspend fun probe(): StreamProbe {
         probes += 1
@@ -52,6 +53,10 @@ class FakeStreamHost(
         captureAttaches += 1
     }
 
+    override suspend fun gameLaunched() {
+        gameLaunches += 1
+    }
+
     override suspend fun status(): StreamStatus? {
         statusCalls += 1
         return statusValue
@@ -64,11 +69,14 @@ class FakeStreamHost(
 
 class FakeStreamPlayer2(var prep: P2Prep = P2Prep.Written) : StreamPlayer2 {
     val prepared = Collections.synchronizedList(mutableListOf<Pair<Long, Emu>>())
+    val audioReadiness = Collections.synchronizedList(mutableListOf<Boolean>())
+    var prepareHandler: (suspend (GameEntity, Emu, Boolean) -> P2Prep)? = null
     @Volatile var restores = 0
 
-    override suspend fun prepare(game: GameEntity, emu: Emu): P2Prep {
+    override suspend fun prepare(game: GameEntity, emu: Emu, rsoundReady: Boolean): P2Prep {
         prepared += game.id to emu
-        return prep
+        audioReadiness += rsoundReady
+        return prepareHandler?.invoke(game, emu, rsoundReady) ?: prep
     }
 
     override suspend fun restore(): Boolean {

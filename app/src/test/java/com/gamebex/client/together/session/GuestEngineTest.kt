@@ -2,6 +2,7 @@ package com.gamebex.client.together.session
 
 import com.gamebex.client.data.local.GameEntity
 import com.gamebex.client.data.CoreNames
+import com.gamebex.client.launch.CoreInstallProgress
 import com.gamebex.client.launch.EmuRouter
 import com.gamebex.client.together.ByeReason
 import com.gamebex.client.together.CoreBuild
@@ -24,6 +25,7 @@ import com.gamebex.client.together.TogetherAlert
 import com.gamebex.client.together.TogetherCopy
 import com.gamebex.client.together.TogetherEmulators
 import com.gamebex.client.together.TogetherMode
+import com.gamebex.client.together.TogetherPlatform
 import com.gamebex.client.together.TogetherTiming
 import com.gamebex.client.together.TOGETHER_PROTO
 import com.gamebex.client.together.session.fakes.GuestLinkPair
@@ -40,7 +42,10 @@ import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.ContinuationInterceptor
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
@@ -274,11 +279,11 @@ class GuestEngineTest {
         assertEquals(TogetherCopy.needsCore(CoreNames.display("snes9x")), needed.problem?.text)
 
         started.engine.act(TogetherAction.INSTALL_CORE)
-        val fetching = awaitView(started, GuestStep.ACTION_NEEDED) { it.message == TogetherCopy.fetchingCore(100) }
+        val fetching = awaitView(started, GuestStep.INSTALLING_CORE, GuestPhase.INSTALLING_CORE) { it.coreInstall?.read == 1L }
         assertEquals(100, fetching.progress)
         assertEquals("snes9x", started.emulators.fetchCalls.single().first)
         started.emulators.fetchGate?.complete(Unit)
-        val installing = awaitView(started, GuestStep.INSTALLING_CORE, GuestPhase.INSTALLING_CORE)
+        val installing = awaitView(started, GuestStep.INSTALLING_CORE, GuestPhase.INSTALLING_CORE) { it.coreInstall == null }
         assertNull(installing.message)
         assertNull(installing.progress)
         runCurrent()
@@ -297,6 +302,37 @@ class GuestEngineTest {
     }
 
     @Test
+    fun confirmedCoreInstallAutomaticallyRechecksWithoutAnotherForegroundEvent() = runTest {
+        val offered = guestOffer(folder = "snes", core = "snes9x")
+        val h = rig(this, game = guestGame(folder = "snes"), offered = offered)
+        h.emulators.readinessValue = Readiness.NeedsCore("snes9x")
+        h.emulators.fetchGate = CompletableDeferred()
+        open(h, this, TogetherMode.RA_NETPLAY, offered)
+        awaitView(h, GuestStep.ACTION_NEEDED, GuestPhase.NEEDS_CORE)
+        h.engine.act(TogetherAction.INSTALL_CORE)
+        runCurrent()
+        h.emulators.readinessValue = Readiness.Ready
+        h.emulators.fetchGate!!.complete(Unit)
+        awaitView(h, GuestStep.INSTALLING_CORE) { it.coreInstall == null }
+        advanceTimeBy(1_000L)
+        runCurrent()
+        awaitView(h, GuestStep.READY)
+    }
+
+    @Test
+    fun failedCoreInstallPreservesTheOpenRetroArchRecoveryAction() = runTest {
+        val offered = guestOffer(folder = "snes", core = "snes9x")
+        val h = rig(this, game = guestGame(folder = "snes"), offered = offered)
+        h.emulators.readinessValue = Readiness.NeedsCore("snes9x")
+        h.emulators.fetchResult = CoreResult.Failed("Open RetroArch once to finish setup.", TogetherAction.OPEN_RETROARCH)
+        open(h, this, TogetherMode.RA_NETPLAY, offered)
+        awaitView(h, GuestStep.ACTION_NEEDED, GuestPhase.NEEDS_CORE)
+        h.engine.act(TogetherAction.INSTALL_CORE)
+        runCurrent()
+        assertEquals(TogetherAction.OPEN_RETROARCH, h.engine.view.value?.problem?.action)
+    }
+
+    @Test
     fun foregroundReprepsImmediatelyAndDelaysCoreInstallResume() = runTest {
         val blocked = rig(this)
         blocked.emulators.readinessValue = Readiness.Blocked("hold")
@@ -312,7 +348,7 @@ class GuestEngineTest {
         open(installing, this, TogetherMode.RA_NETPLAY, installingOffer)
         awaitView(installing, GuestStep.ACTION_NEEDED, GuestPhase.NEEDS_CORE)
         installing.engine.act(TogetherAction.INSTALL_CORE)
-        awaitView(installing, GuestStep.INSTALLING_CORE)
+        awaitView(installing, GuestStep.INSTALLING_CORE) { it.coreInstall == null }
         installing.engine.onForeground()
         runCurrent()
         advanceTimeBy(999)
@@ -320,6 +356,371 @@ class GuestEngineTest {
         assertEquals(GuestStep.INSTALLING_CORE, installing.engine.view.value?.step)
         advanceTimeBy(1)
         awaitView(installing, GuestStep.ACTION_NEEDED, GuestPhase.NEEDS_CORE)
+    }
+
+    @Test
+    fun coreInstallPublishesBeforeAnyCallbackAndForegroundOrRepeatedActionsKeepOwnership() = runTest {
+        lateinit var backend: ControlledCoreEmulators
+        val h = rig(this, game = guestGame(folder = "snes"), offered = guestOffer(folder = "snes", core = "snes9x"),
+            emulatorForEngine = { ControlledCoreEmulators(it).also { controlled -> backend = controlled } })
+        h.emulators.readinessValue = Readiness.NeedsCore("snes9x")
+        val pair = open(h, this, TogetherMode.RA_NETPLAY)
+        h.engine.act(TogetherAction.INSTALL_CORE)
+        val busy = awaitView(h, GuestStep.INSTALLING_CORE)
+        assertEquals(CoreInstallProgress("snes9x"), busy.coreInstall)
+        assertNull(busy.problem)
+        assertEquals(1, backend.callbacks.size)
+        repeat(3) { h.engine.act(TogetherAction.INSTALL_CORE) }
+        h.engine.act(TogetherAction.RECHECK)
+        h.engine.onForeground()
+        h.engine.act(TogetherAction.RETRY_CORE_INSTALL)
+        advanceTimeBy(1_000L)
+        runCurrent()
+        assertEquals(1, backend.callbacks.size)
+        assertEquals(1, backend.readinessCalls)
+        assertEquals(busy.coreInstall, h.engine.view.value?.coreInstall)
+        assertTrue(pair.guest.sent.filterIsInstance<LinkMsg.GuestState>().any {
+            it.phase == GuestPhase.INSTALLING_CORE && it.progress == 0 && it.detail == null
+        })
+        h.engine.act(TogetherAction.CANCEL_CORE_INSTALL)
+        runCurrent()
+        assertEquals(GuestStep.ACTION_NEEDED, h.engine.view.value?.step)
+        assertEquals(TogetherAction.RETRY_CORE_INSTALL, h.engine.view.value?.problem?.action)
+        assertNull(h.engine.view.value?.coreInstall)
+        h.engine.onForeground()
+        runCurrent()
+        assertEquals(TogetherAction.RETRY_CORE_INSTALL, h.engine.view.value?.problem?.action)
+    }
+
+    @Test
+    fun coreInstallPreservesBytesBoundsPercentAndDoesNotResetStallForIdenticalCallbacks() = runTest {
+        lateinit var backend: ControlledCoreEmulators
+        val h = rig(this, game = guestGame(folder = "snes"), offered = guestOffer(folder = "snes", core = "snes9x"),
+            emulatorForEngine = { ControlledCoreEmulators(it).also { controlled -> backend = controlled } })
+        h.emulators.readinessValue = Readiness.NeedsCore("snes9x")
+        val pair = open(h, this, TogetherMode.RA_NETPLAY)
+        h.engine.act(TogetherAction.INSTALL_CORE)
+        runCurrent()
+        val callback = backend.callbacks.single()
+        callback(2_097_152L, 8_388_608L)
+        runCurrent()
+        assertEquals("Downloading 2.0 of 8.0 MB", h.engine.view.value?.coreInstall?.text)
+        assertEquals(25, h.engine.view.value?.progress)
+        advanceTimeBy(7_999L)
+        callback(2_097_152L, 8_388_608L)
+        runCurrent()
+        assertFalse(h.engine.view.value!!.coreInstall!!.stalled)
+        advanceTimeBy(1L)
+        runCurrent()
+        assertTrue(h.engine.view.value!!.coreInstall!!.stalled)
+        callback(2_097_152L, 8_388_608L)
+        runCurrent()
+        assertTrue(h.engine.view.value!!.coreInstall!!.stalled)
+        callback(3_145_728L, 0L)
+        runCurrent()
+        assertEquals("Downloading 3.0 MB", h.engine.view.value?.coreInstall?.text)
+        assertFalse(h.engine.view.value!!.coreInstall!!.stalled)
+        assertNull(h.engine.view.value?.coreInstall?.fraction)
+        callback(Long.MAX_VALUE, Long.MAX_VALUE)
+        runCurrent()
+        assertEquals(100, h.engine.view.value?.progress)
+        callback(Long.MAX_VALUE, 100L)
+        runCurrent()
+        assertEquals(100L, h.engine.view.value?.coreInstall?.read)
+        callback(-5L, -2L)
+        runCurrent()
+        assertEquals(0L, h.engine.view.value?.coreInstall?.read)
+        assertEquals(0L, h.engine.view.value?.coreInstall?.total)
+        callback(-1L, -1L)
+        runCurrent()
+        assertTrue(h.engine.view.value!!.coreInstall!!.installing)
+        assertNull(h.engine.view.value?.progress)
+        assertNull(h.engine.view.value?.coreInstall?.fraction)
+        advanceTimeBy(7_999L)
+        callback(-1L, -1L)
+        runCurrent()
+        advanceTimeBy(1L)
+        runCurrent()
+        assertTrue(h.engine.view.value!!.coreInstall!!.stalled)
+        assertTrue(pair.guest.sent.filterIsInstance<LinkMsg.GuestState>().filter { it.phase == GuestPhase.INSTALLING_CORE }
+            .all { it.progress == null || it.progress in 0..100 })
+        h.engine.act(TogetherAction.CANCEL_CORE_INSTALL)
+        runCurrent()
+    }
+
+    @Test
+    fun stalledRetryWaitsForNonCancellablePredecessorAndIgnoresOldCallbacksAndFinally() = runTest {
+        lateinit var backend: ControlledCoreEmulators
+        val gate = CompletableDeferred<Unit>()
+        val h = rig(this, game = guestGame(folder = "snes"), offered = guestOffer(folder = "snes", core = "snes9x"),
+            emulatorForEngine = { ControlledCoreEmulators(it).also { controlled ->
+                backend = controlled
+                controlled.fetch = { call, callback ->
+                    if (call == 1) withContext(NonCancellable) {
+                        gate.await()
+                        callback(99, 100)
+                        CoreResult.Failed("old outcome", TogetherAction.OPEN_RETROARCH)
+                    } else {
+                        callback(4, 10)
+                        awaitCancellation()
+                    }
+                }
+            } })
+        h.emulators.readinessValue = Readiness.NeedsCore("snes9x")
+        open(h, this, TogetherMode.RA_NETPLAY)
+        h.engine.act(TogetherAction.INSTALL_CORE)
+        runCurrent()
+        advanceTimeBy(8_000L)
+        runCurrent()
+        assertTrue(h.engine.view.value!!.coreInstall!!.stalled)
+        h.engine.act(TogetherAction.RETRY_CORE_INSTALL)
+        backend.callbacks[0](8, 10)
+        runCurrent()
+        val replacement = h.engine.view.value?.coreInstall
+        assertEquals(CoreInstallProgress("snes9x"), replacement)
+        assertEquals(1, backend.callbacks.size)
+        repeat(3) { h.engine.act(TogetherAction.RETRY_CORE_INSTALL) }
+        runCurrent()
+        assertEquals(replacement, h.engine.view.value?.coreInstall)
+        gate.complete(Unit)
+        runCurrent()
+        assertEquals(2, backend.callbacks.size)
+        assertEquals(4L, h.engine.view.value?.coreInstall?.read)
+        assertNull(h.engine.view.value?.problem)
+        backend.callbacks[0](-1, -1)
+        runCurrent()
+        assertFalse(h.engine.view.value!!.coreInstall!!.installing)
+        assertEquals(4L, h.engine.view.value?.coreInstall?.read)
+        h.engine.act(TogetherAction.CANCEL_CORE_INSTALL)
+        runCurrent()
+        assertEquals(TogetherAction.RETRY_CORE_INSTALL, h.engine.view.value?.problem?.action)
+    }
+
+    @Test
+    fun eightSecondsWithoutFirstCallbackOffersRetryAndCancel() = runTest {
+        lateinit var backend: ControlledCoreEmulators
+        val h = rig(this, game = guestGame(folder = "snes"), offered = guestOffer(folder = "snes", core = "snes9x"),
+            emulatorForEngine = { ControlledCoreEmulators(it).also { controlled -> backend = controlled } })
+        h.emulators.readinessValue = Readiness.NeedsCore("snes9x")
+        open(h, this, TogetherMode.RA_NETPLAY)
+        h.engine.act(TogetherAction.INSTALL_CORE)
+        runCurrent()
+        advanceTimeBy(7_999L)
+        runCurrent()
+        assertFalse(h.engine.view.value!!.coreInstall!!.stalled)
+        advanceTimeBy(1L)
+        runCurrent()
+        assertEquals("Still working…", h.engine.view.value?.coreInstall?.text)
+        h.engine.act(TogetherAction.RETRY_CORE_INSTALL)
+        runCurrent()
+        assertEquals(2, backend.callbacks.size)
+        assertFalse(h.engine.view.value!!.coreInstall!!.stalled)
+        h.engine.act(TogetherAction.CANCEL_CORE_INSTALL)
+        runCurrent()
+        assertEquals(TogetherAction.RETRY_CORE_INSTALL, h.engine.view.value?.problem?.action)
+        assertNull(h.engine.view.value?.coreInstall)
+    }
+
+    @Test
+    fun alreadyQueuedOldResultAndFinallyCannotClearReplacementProgress() = runTest {
+        lateinit var h: Rig
+        lateinit var backend: ControlledCoreEmulators
+        h = rig(this, game = guestGame(folder = "snes"), offered = guestOffer(folder = "snes", core = "snes9x"),
+            emulatorForEngine = { ControlledCoreEmulators(it).also { controlled ->
+                backend = controlled
+                controlled.fetch = { call, callback ->
+                    if (call == 1) {
+                        h.engine.act(TogetherAction.CANCEL_CORE_INSTALL)
+                        h.engine.act(TogetherAction.RETRY_CORE_INSTALL)
+                        CoreResult.Failed("stale result", TogetherAction.OPEN_RETROARCH)
+                    } else {
+                        callback(6, 10)
+                        awaitCancellation()
+                    }
+                }
+            } })
+        h.emulators.readinessValue = Readiness.NeedsCore("snes9x")
+        open(h, this, TogetherMode.RA_NETPLAY)
+        h.engine.act(TogetherAction.INSTALL_CORE)
+        runCurrent()
+        assertEquals(2, backend.callbacks.size)
+        assertEquals(6L, h.engine.view.value?.coreInstall?.read)
+        assertNull(h.engine.view.value?.problem)
+        advanceTimeBy(1_000L)
+        runCurrent()
+        assertEquals(GuestStep.INSTALLING_CORE, h.engine.view.value?.step)
+        assertEquals(6L, h.engine.view.value?.coreInstall?.read)
+        h.engine.act(TogetherAction.CANCEL_CORE_INSTALL)
+        runCurrent()
+    }
+
+    @Test
+    fun cancellationBeforeBackendEntryCannotStrandBusyMarkerOrEraseRetry() = runTest {
+        lateinit var backend: ControlledCoreEmulators
+        val h = rig(this, game = guestGame(folder = "snes"), offered = guestOffer(folder = "snes", core = "snes9x"),
+            emulatorForEngine = { ControlledCoreEmulators(it).also { controlled -> backend = controlled } })
+        h.emulators.readinessValue = Readiness.NeedsCore("snes9x")
+        open(h, this, TogetherMode.RA_NETPLAY)
+        h.engine.act(TogetherAction.INSTALL_CORE)
+        h.engine.act(TogetherAction.CANCEL_CORE_INSTALL)
+        runCurrent()
+        assertTrue(backend.callbacks.isEmpty())
+        assertEquals(TogetherAction.RETRY_CORE_INSTALL, h.engine.view.value?.problem?.action)
+        assertNull(h.engine.view.value?.coreInstall)
+        h.engine.act(TogetherAction.RETRY_CORE_INSTALL)
+        runCurrent()
+        assertEquals(1, backend.callbacks.size)
+        assertEquals(CoreInstallProgress("snes9x"), h.engine.view.value?.coreInstall)
+        h.engine.act(TogetherAction.CANCEL_CORE_INSTALL)
+        h.engine.act(TogetherAction.RETRY_CORE_INSTALL)
+        runCurrent()
+        assertEquals(2, backend.callbacks.size)
+        assertEquals(CoreInstallProgress("snes9x"), h.engine.view.value?.coreInstall)
+        h.engine.act(TogetherAction.CANCEL_CORE_INSTALL)
+        runCurrent()
+    }
+
+    @Test
+    fun backendCancellationSettlesRetryAndThrownFailuresPreserveRecovery() = runTest {
+        lateinit var backend: ControlledCoreEmulators
+        val h = rig(this, game = guestGame(folder = "snes"), offered = guestOffer(folder = "snes", core = "snes9x"),
+            emulatorForEngine = { ControlledCoreEmulators(it).also { controlled ->
+                backend = controlled
+                controlled.fetch = { call, _ ->
+                    when (call) {
+                        1 -> throw CancellationException("backend cancelled")
+                        2 -> throw IllegalStateException("install crashed")
+                        else -> CoreResult.Failed("Open RetroArch once.", TogetherAction.OPEN_RETROARCH)
+                    }
+                }
+            } })
+        h.emulators.readinessValue = Readiness.NeedsCore("snes9x")
+        open(h, this, TogetherMode.RA_NETPLAY)
+        h.engine.act(TogetherAction.INSTALL_CORE)
+        runCurrent()
+        assertEquals(TogetherAction.RETRY_CORE_INSTALL, h.engine.view.value?.problem?.action)
+        assertNull(h.engine.view.value?.coreInstall)
+        h.engine.act(TogetherAction.RETRY_CORE_INSTALL)
+        runCurrent()
+        assertEquals("install crashed", h.engine.view.value?.problem?.text)
+        assertNull(h.engine.view.value?.coreInstall)
+        h.engine.act(TogetherAction.INSTALL_CORE)
+        runCurrent()
+        assertEquals(3, backend.callbacks.size)
+        assertEquals(TogetherAction.OPEN_RETROARCH, h.engine.view.value?.problem?.action)
+        h.engine.act(TogetherAction.OPEN_RETROARCH)
+        runCurrent()
+        assertEquals("Couldn't open RetroArch. Open it from your launcher, then check again.", h.engine.view.value?.message)
+        assertEquals(TogetherAction.OPEN_RETROARCH, h.engine.view.value?.problem?.action)
+        h.emulators.readinessValue = Readiness.Ready
+        h.engine.onForeground()
+        awaitView(h, GuestStep.READY)
+    }
+
+    @Test
+    fun openRetroArchThrowReportsRecoveryWithoutLosingAction() = runTest {
+        val h = rig(this, game = guestGame(folder = "snes"), offered = guestOffer(folder = "snes", core = "snes9x"),
+            platformForEngine = { platform -> object : TogetherPlatform by platform {
+                override fun openRetroArch(): Boolean = throw IllegalStateException("launcher missing")
+            } })
+        h.emulators.readinessValue = Readiness.NeedsCore("snes9x")
+        h.emulators.fetchResult = CoreResult.Failed("Open RetroArch once.", TogetherAction.OPEN_RETROARCH)
+        open(h, this, TogetherMode.RA_NETPLAY)
+        h.engine.act(TogetherAction.INSTALL_CORE)
+        runCurrent()
+        h.engine.act(TogetherAction.OPEN_RETROARCH)
+        runCurrent()
+        assertEquals("Couldn't open RetroArch. Open it from your launcher, then check again.", h.engine.view.value?.message)
+        assertEquals(TogetherAction.OPEN_RETROARCH, h.engine.view.value?.problem?.action)
+    }
+
+    @Test
+    fun confirmedCoreInstallInBackgroundWaitsForForegroundReadinessLaunch() = runTest {
+        val offered = guestOffer(folder = "snes", core = "snes9x")
+        val h = rig(this, game = guestGame(folder = "snes"), offered = offered)
+        h.emulators.readinessValue = Readiness.NeedsCore("snes9x")
+        h.emulators.fetchGate = CompletableDeferred()
+        open(h, this, TogetherMode.RA_NETPLAY)
+        h.engine.act(TogetherAction.INSTALL_CORE)
+        runCurrent()
+        h.platform.foreground.value = false
+        h.emulators.readinessValue = Readiness.Ready
+        h.emulators.fetchGate!!.complete(Unit)
+        runCurrent()
+        assertNull(h.engine.view.value?.coreInstall)
+        advanceTimeBy(9_000L)
+        runCurrent()
+        assertEquals(GuestStep.INSTALLING_CORE, h.engine.view.value?.step)
+        h.platform.foreground.value = true
+        h.engine.onForeground()
+        runCurrent()
+        advanceTimeBy(999L)
+        runCurrent()
+        assertEquals(GuestStep.INSTALLING_CORE, h.engine.view.value?.step)
+        advanceTimeBy(1L)
+        awaitView(h, GuestStep.READY)
+    }
+
+    @Test
+    fun oldInstallCallbacksResultAndCleanupCannotMutateNewSessionOrOverlapItsInstall() = runTest {
+        lateinit var backend: ControlledCoreEmulators
+        val gate = CompletableDeferred<Unit>()
+        val h = rig(this, game = guestGame(folder = "snes"), offered = guestOffer(folder = "snes", core = "snes9x"),
+            emulatorForEngine = { ControlledCoreEmulators(it).also { controlled ->
+                backend = controlled
+                controlled.fetch = { call, callback ->
+                    if (call == 1) withContext(NonCancellable) {
+                        gate.await()
+                        callback(-1, -1)
+                        CoreResult.Started
+                    } else {
+                        callback(3, 10)
+                        awaitCancellation()
+                    }
+                }
+            } })
+        h.emulators.readinessValue = Readiness.NeedsCore("snes9x")
+        open(h, this, TogetherMode.RA_NETPLAY)
+        h.engine.act(TogetherAction.INSTALL_CORE)
+        runCurrent()
+        h.engine.join(target())
+        backend.callbacks[0](9, 10)
+        runCurrent()
+        assertEquals(GuestStep.WAITING_OFFER, h.engine.view.value?.step)
+        sendOffer(h.transport.pair, TogetherMode.RA_NETPLAY, h.offered)
+        runCurrent()
+        h.engine.act(TogetherAction.INSTALL_CORE)
+        runCurrent()
+        assertEquals(1, backend.callbacks.size)
+        assertEquals(CoreInstallProgress("snes9x"), h.engine.view.value?.coreInstall)
+        gate.complete(Unit)
+        runCurrent()
+        assertEquals(2, backend.callbacks.size)
+        assertEquals(3L, h.engine.view.value?.coreInstall?.read)
+        assertNull(h.engine.view.value?.problem)
+        advanceTimeBy(1_000L)
+        runCurrent()
+        assertEquals(GuestStep.INSTALLING_CORE, h.engine.view.value?.step)
+        assertEquals(3L, h.engine.view.value?.coreInstall?.read)
+        h.engine.act(TogetherAction.CANCEL_CORE_INSTALL)
+        runCurrent()
+    }
+
+    @Test
+    fun synchronousNewJoinDuringCompletionForegroundReadCannotScheduleOldReadiness() = runTest {
+        val h = rig(this, game = guestGame(folder = "snes"), offered = guestOffer(folder = "snes", core = "snes9x"))
+        h.emulators.readinessValue = Readiness.NeedsCore("snes9x")
+        h.emulators.fetchGate = CompletableDeferred()
+        open(h, this, TogetherMode.RA_NETPLAY)
+        h.engine.act(TogetherAction.INSTALL_CORE)
+        runCurrent()
+        h.platform.onForegroundRead.set { h.engine.prepareJoin(target()) }
+        h.emulators.fetchGate!!.complete(Unit)
+        runCurrent()
+        advanceTimeBy(9_000L)
+        runCurrent()
+        assertEquals(GuestStep.CONNECTING, h.engine.view.value?.step)
+        assertNull(h.engine.view.value?.coreInstall)
     }
 
     @Test
@@ -384,6 +785,26 @@ class GuestEngineTest {
         awaitView(cached, GuestStep.INSTALLING_CORE)
         assertTrue(cachedPair.guest.sent.none { it is LinkMsg.CoreRequest })
         assertEquals(build, cached.emulators.installCalls.single().second)
+    }
+
+    @Test
+    fun copiedCoreRecoveryPreservesOpenRetroArchAndOrdinaryFailureStillOffersCopy() = runTest {
+        val offered = guestOffer(folder = "snes", core = "snes9x")
+        val build = coreBuild(byteArrayOf(1, 2, 3))
+        val h = rig(this, game = guestGame(folder = "snes"), offered = offered)
+        h.emulators.readinessValue = Readiness.NeedsCore("snes9x")
+        h.emulators.received = true
+        h.emulators.installResult = CoreResult.Failed("Open RetroArch once.", TogetherAction.OPEN_RETROARCH)
+        open(h, this, TogetherMode.RA_NETPLAY, core = build)
+        h.engine.act(TogetherAction.COPY_CORE)
+        runCurrent()
+        assertEquals(GuestPhase.CORE_SYNC, h.engine.view.value?.phase)
+        assertEquals(TogetherAction.OPEN_RETROARCH, h.engine.view.value?.problem?.action)
+        h.emulators.installResult = CoreResult.Failed("copy failed")
+        h.engine.act(TogetherAction.COPY_CORE)
+        runCurrent()
+        assertEquals(TogetherAction.COPY_CORE, h.engine.view.value?.problem?.action)
+        assertNull(h.engine.view.value?.coreInstall)
     }
 
     @Test
@@ -1273,6 +1694,8 @@ class GuestEngineTest {
         game: GameEntity = guestGame(),
         offered: OfferedGame = guestOffer(),
         timing: TogetherTiming = timing(),
+        emulatorForEngine: (GuestTestEmulators) -> TogetherEmulators = { it },
+        platformForEngine: (GuestTestPlatform) -> TogetherPlatform = { it },
     ): Rig {
         val engineScope = scope.engineTestScope()
         val transport = GuestTestTransport()
@@ -1282,7 +1705,7 @@ class GuestEngineTest {
         val platform = GuestTestPlatform()
         val logs = mutableListOf<String>()
         val engine = GuestEngine(
-            transport, probes, emulators, library, platform, timing, engineScope,
+            transport, probes, emulatorForEngine(emulators), library, platformForEngine(platform), timing, engineScope,
             engineScope.coroutineContext[ContinuationInterceptor] as CoroutineDispatcher,
             logSink = { logs += it },
         )
@@ -1325,6 +1748,22 @@ class GuestEngineTest {
         coreRequestMs = coreRequestMs,
         coreInactivityMs = coreInactivityMs,
     )
+
+    private class ControlledCoreEmulators(private val delegate: GuestTestEmulators) : TogetherEmulators by delegate {
+        val callbacks = mutableListOf<(Long, Long) -> Unit>()
+        var readinessCalls = 0
+        var fetch: suspend (Int, (Long, Long) -> Unit) -> CoreResult = { _, _ -> awaitCancellation() }
+
+        override suspend fun readiness(mode: TogetherMode, role: Role, game: GameEntity, core: String?): Readiness {
+            readinessCalls += 1
+            return delegate.readiness(mode, role, game, core)
+        }
+
+        override suspend fun fetchAndInstallCore(core: String, game: GameEntity, onProgress: (Long, Long) -> Unit): CoreResult {
+            callbacks += onProgress
+            return fetch(callbacks.size, onProgress)
+        }
+    }
 
     private data class Rig(
         val engine: GuestEngine,

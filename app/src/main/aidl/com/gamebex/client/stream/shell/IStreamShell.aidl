@@ -25,4 +25,5 @@ interface IStreamShell {
     void setCaptureListener(IStreamCapture listener) = 6;
     /** App capture streams only: the host declined app capture, so mirror the whole display. */
     void useMirror() = 7;
+    void gameLaunched() = 8;
 }

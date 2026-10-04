@@ -1,17 +1,27 @@
 package com.gamebex.client.ui.together
 
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.gamebex.client.debug.FakeTogetherController
+import com.gamebex.client.launch.CoreInstallProgress
+import com.gamebex.client.ui.game.CORE_INSTALL_MESSAGE_TAG
+import com.gamebex.client.ui.game.CORE_INSTALL_PROGRESS_TAG
+import com.gamebex.client.ui.game.CORE_INSTALL_SPINNER_TAG
 import com.gamebex.client.together.GuestPhase
 import com.gamebex.client.together.GuestStep
 import com.gamebex.client.together.GuestView
 import com.gamebex.client.together.HostStep
 import com.gamebex.client.together.HostView
+import com.gamebex.client.together.Problem
 import com.gamebex.client.together.TogetherAction
 import com.gamebex.client.together.TogetherCopy
 import com.gamebex.client.together.TogetherMode
@@ -76,6 +86,80 @@ class TogetherStreamScreensTest {
         val fake = FakeTogetherController().also { it.setHost(host(HostStep.IN_GAME, line = line)) }
         rule.setTogetherContent { hints -> TogetherHostScreen(fake, 1L, TogetherUiTestSupport.rail, hints, {}, {}, {}) }
         rule.onNodeWithText(line).assertIsDisplayed()
+    }
+
+    @Test
+    fun coreInstallShowsSpinnerBeforeAnyBytesAndRepeatedADoesNotLaunch() {
+        val progress = CoreInstallProgress("mupen64plus_next_gles3")
+        val fake = FakeTogetherController().also {
+            it.setHost(host(HostStep.NOT_READY).copy(coreInstall = progress))
+        }
+        rule.setTogetherContent { hints -> TogetherHostScreen(fake, 1L, TogetherUiTestSupport.rail, hints, {}, {}, {}) }
+        rule.onNodeWithTag(CORE_INSTALL_SPINNER_TAG).assertIsDisplayed()
+        rule.onNodeWithTag(CORE_INSTALL_MESSAGE_TAG).assertIsDisplayed()
+        rule.onNodeWithText("Installing the N64 core…").assertIsDisplayed()
+        rule.onNodeWithTag(HOST_PRIMARY_TAG).assertIsNotEnabled()
+        rule.onRoot().performKeyInput { pressKey(Key.ButtonA); pressKey(Key.ButtonA) }
+        assertEquals(TogetherAction.INSTALL_CORE, fake.lastAction)
+        assertEquals(0, fake.hostStarts)
+        assertEquals(0, fake.hostPlayAgains)
+        rule.onNodeWithText("Installing the N64 core…").assertIsDisplayed()
+    }
+
+    @Test
+    fun downloadHasAByteProgressBarAndCacheInstallReturnsToSpinner() {
+        val progress = CoreInstallProgress("mupen64plus_next_gles3", read = 3_355_443, total = 6_501_171)
+        val fake = FakeTogetherController().also {
+            it.setHost(host(HostStep.NOT_READY).copy(coreInstall = progress))
+        }
+        rule.setTogetherContent { hints -> TogetherHostScreen(fake, 1L, TogetherUiTestSupport.rail, hints, {}, {}, {}) }
+        rule.onNodeWithText("Downloading 3.2 of 6.2 MB").assertIsDisplayed()
+        val bar = rule.onNodeWithTag(CORE_INSTALL_PROGRESS_TAG).assertIsDisplayed().fetchSemanticsNode()
+        assertEquals(ProgressBarRangeInfo(progress.fraction!!, 0f..1f), bar.config[SemanticsProperties.ProgressBarRangeInfo])
+        rule.runOnIdle { fake.setHost(fake.host.value!!.copy(coreInstall = progress.copy(installing = true))) }
+        rule.onNodeWithText("Installing in RetroArch…").assertIsDisplayed()
+        rule.onNodeWithTag(CORE_INSTALL_SPINNER_TAG).assertIsDisplayed()
+        rule.onNodeWithTag(CORE_INSTALL_PROGRESS_TAG).assertDoesNotExist()
+        rule.onNodeWithTag(HOST_PRIMARY_TAG).assertIsNotEnabled()
+    }
+
+    @Test
+    fun stalledInstallOffersRetryAndCancelWithoutEndingOrNavigating() {
+        val fake = FakeTogetherController().also {
+            it.setHost(host(HostStep.NOT_READY).copy(coreInstall = CoreInstallProgress("mupen64plus_next_gles3", stalled = true)))
+        }
+        var backs = 0
+        rule.setTogetherContent { hints -> TogetherHostScreen(fake, 1L, TogetherUiTestSupport.rail, hints, { backs++ }, {}, {}) }
+        rule.onNodeWithText("Still working…").assertIsDisplayed()
+        rule.onNodeWithText("Retry", ignoreCase = true).performClick()
+        assertEquals(TogetherAction.RETRY_CORE_INSTALL, fake.lastAction)
+        rule.onNodeWithText(TogetherCopy.cancel, ignoreCase = true).performClick()
+        assertEquals(TogetherAction.CANCEL_CORE_INSTALL, fake.lastAction)
+        assertEquals(0, fake.ended)
+        assertEquals(0, backs)
+        rule.runOnIdle {
+            fake.setHost(fake.host.value!!.copy(coreInstall = null, problem = Problem("Core installation cancelled.", TogetherAction.RETRY_CORE_INSTALL)))
+        }
+        rule.onNodeWithText("Core installation cancelled.").assertIsDisplayed()
+        rule.onNodeWithTag(HOST_PRIMARY_TAG).performClick()
+        assertEquals(TogetherAction.RETRY_CORE_INSTALL, fake.lastAction)
+        assertEquals(0, backs)
+    }
+
+    @Test
+    fun installTimeoutExplainsTheErrorAndOpenRetroArchUsesTheEngineRecoveryAction() {
+        val text = "RetroArch did not confirm installation. Open RetroArch and try again."
+        val fake = FakeTogetherController().also {
+            it.setHost(host(HostStep.NOT_READY).copy(problem = Problem(text, TogetherAction.OPEN_RETROARCH)))
+        }
+        var opened = 0
+        rule.setTogetherContent { hints ->
+            TogetherHostScreen(fake, 1L, TogetherUiTestSupport.rail, hints, {}, {}, {}, onOpenRetroArch = { opened++ })
+        }
+        rule.onNodeWithText(text).assertIsDisplayed()
+        rule.onNodeWithText(TogetherCopy.actionLabel(TogetherAction.OPEN_RETROARCH), ignoreCase = true).performClick()
+        assertEquals(0, opened)
+        assertEquals(TogetherAction.OPEN_RETROARCH, fake.lastAction)
     }
 
     @Test

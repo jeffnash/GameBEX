@@ -19,6 +19,15 @@ import java.nio.ByteBuffer
  *
  * Input (UDP, guest → host input port): 38-byte [InputPacket]; the host answers
  * each accepted packet with a 28-byte [InputAck].
+ *
+ * One protocol version governs both phones; they must match, without capability negotiation.
+ * Bump [VERSION] for incompatible message sizes, field order, types, units, endianness or value
+ * meanings; required new messages, fields or handshake steps; token/key derivation or authentication;
+ * port roles or TCP/UDP routing; and codec, PCM/chunking or timestamp semantics a peer relies on.
+ * Internal buffering, pacing, bitrate policy, compatible H.264 settings, UI, logging and debug
+ * switches do not require a bump. App-to-shell JSON/AIDL changes use SHELL_SERVICE_VERSION instead.
+ * If the previous build would behave wrongly rather than miss an optional extra, bump; when unsure,
+ * bump and update both phones. Golden vectors are keyed by version and guard every wire encoding.
  */
 object StreamWire {
     const val VERSION: Int = 1

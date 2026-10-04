@@ -50,6 +50,8 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import com.gamebex.client.ui.console.ConsoleFocusMemory
 import com.gamebex.client.ui.console.ConsoleHints
+import com.gamebex.client.ui.console.ControllerGlyph
+import com.gamebex.client.ui.console.ControllerHint
 import com.gamebex.client.ui.console.ConsoleColors
 import com.gamebex.client.ui.console.ConsoleGeometry
 import com.gamebex.client.ui.console.LaunchStatusPanel
@@ -188,10 +190,10 @@ fun HomeRoot(
     }
 
     val selectedCard = model.card(state.selected)
-    // As today: the quick-play panel is shown and owns A/B only for the
-    // focused game, and moving focus dismisses a settled panel.
-    val status = model.status?.takeIf { it.gameId == selectedCard?.gameId }
-    val settled = status?.takeIf { !it.busy }
+    // In-flight work remains visible even when the user moves selection.
+    // Settled recovery follows the focused game as before.
+    val status = model.status?.takeIf { it.busy || it.gameId == selectedCard?.gameId }
+    val recovery = status?.takeIf { !it.busy || it.canCancel }
     val focusGameId = selectedCard?.gameId
     LaunchedEffect(focusGameId) {
         if (model.status?.let { !it.busy && it.gameId != focusGameId } == true) {
@@ -285,11 +287,14 @@ fun HomeRoot(
         return true
     }
 
-    val hintList = HomeFocus.hints(
+    val hintList = if (!state.editing && recovery != null) listOfNotNull(
+        recovery.action?.let { ControllerHint(ControllerGlyph.A, it.label()) },
+        recovery.secondaryAction?.let { ControllerHint(ControllerGlyph.X, it.label()) },
+        ControllerHint(ControllerGlyph.B, if (recovery.canCancel) "Cancel" else "Dismiss"),
+    ) else HomeFocus.hints(
         mode = model.mode,
         state = state,
         selected = selectedCard,
-        settledAction = settled?.action?.label(),
     )
     LaunchedEffect(hintList) { hints.set(hintList) }
 
@@ -330,7 +335,7 @@ fun HomeRoot(
                     if (state.editing) {
                         dispatch(FocusKey.A)
                     } else when {
-                        settled?.action != null -> { onIntent(HomeIntent.RetryStatus); true }
+                        recovery?.action != null -> { onIntent(HomeIntent.RetryStatus); true }
                         else -> dispatch(FocusKey.A)
                     }
                 },
@@ -340,20 +345,25 @@ fun HomeRoot(
                     if (state.editing) {
                         dispatch(FocusKey.B)
                     } else when {
-                        settled != null -> { onIntent(HomeIntent.DismissStatus); true }
+                        recovery != null -> { onIntent(HomeIntent.DismissStatus); true }
                         else -> dispatch(FocusKey.B)
                     }
                 },
                 onX = {
-                    val wasEditing = state.editing
-                    val handled = dispatch(FocusKey.X)
-                    // X while already editing re-opens the IME and re-requests
-                    // the field (fix round F3-2).
-                    if (wasEditing) {
-                        searchFocus.requestFocus()
-                        keyboard?.show()
+                    if (!state.editing && recovery?.secondaryAction != null) {
+                        onIntent(HomeIntent.SecondaryStatus)
+                        true
+                    } else {
+                        val wasEditing = state.editing
+                        val handled = dispatch(FocusKey.X)
+                        // X while already editing re-opens the IME and re-requests
+                        // the field.
+                        if (wasEditing) {
+                            searchFocus.requestFocus()
+                            keyboard?.show()
+                        }
+                        handled
                     }
-                    handled
                 },
                 onY = { dispatch(FocusKey.Y) },
                 onLB = { dispatch(FocusKey.LB) },
@@ -506,6 +516,7 @@ fun HomeRoot(
                 status = st,
                 onAction = { onIntent(HomeIntent.RetryStatus) },
                 onDismiss = { onIntent(HomeIntent.DismissStatus) },
+                onSecondaryAction = { onIntent(HomeIntent.SecondaryStatus) },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = g.x(24), bottom = g.x(52)),

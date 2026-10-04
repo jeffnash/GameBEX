@@ -6,8 +6,12 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.File
 import kotlin.coroutines.resume
 
 /**
@@ -44,6 +48,23 @@ object RetroCoreProbe {
     }
 
     /**
+     * Only an accessible directory listing proves the setup folders absent.
+     * File.exists() on another app's inaccessible private directory says
+     * false too; that is unknown, not evidence of missing first-run assets.
+     */
+    internal fun setupPathsMissing(accessibleNames: List<String>?): Boolean =
+        accessibleNames != null && ("cores" !in accessibleNames || "assets" !in accessibleNames)
+
+    fun setupPathsMissing(ctx: Context): Boolean = try {
+        val dataDir = ctx.packageManager.getApplicationInfo(RA_PKG, 0).dataDir
+        dataDir != null && setupPathsMissing(File(dataDir).list()?.toList())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        false
+    }
+
+    /**
      * Query broadcast. INCLUDE_STOPPED is load-bearing: without it a
      * force-stopped RetroArch never receives the query, the probe times
      * out, and the caller would boot blind into the ANR-on-missing-core
@@ -55,11 +76,12 @@ object RetroCoreProbe {
 
     /**
      * Installed core base names, or null when RetroArch is missing or
-     * doesn't answer in time. Never throws.
+     * doesn't answer in time. Caller cancellation always propagates.
      */
     suspend fun queryInstalledCores(ctx: Context, timeoutMs: Long = 8000): Set<String>? {
-        if (!isRetroArchInstalled(ctx)) return null
         return try {
+            currentCoroutineContext().ensureActive()
+            if (!isRetroArchInstalled(ctx)) return null
             withTimeoutOrNull(timeoutMs) {
                 suspendCancellableCoroutine { cont ->
                     val receiver = object : BroadcastReceiver() {
@@ -75,7 +97,8 @@ object RetroCoreProbe {
                     // Accepted risk: the result action is unauthenticated
                     // (RetroArch sends it without a permission or shared
                     // identity), so a hostile local app could spoof it.
-                    // Worst case is a skipped core fetch, not code exec.
+                    // It can spoof confirmation/skip a fetch, but cannot
+                    // substitute bytes: staged hash-pin checks still apply.
                     ContextCompat.registerReceiver(
                         ctx, receiver, IntentFilter(ACTION_RESULT),
                         ContextCompat.RECEIVER_EXPORTED,
@@ -83,9 +106,16 @@ object RetroCoreProbe {
                     cont.invokeOnCancellation {
                         runCatching { ctx.unregisterReceiver(receiver) }
                     }
-                    ctx.sendBroadcast(queryIntent())
+                    try {
+                        ctx.sendBroadcast(queryIntent())
+                    } catch (e: Exception) {
+                        runCatching { ctx.unregisterReceiver(receiver) }
+                        throw e
+                    }
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             null
         }

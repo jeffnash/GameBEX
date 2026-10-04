@@ -174,9 +174,11 @@ class StreamLabActivity : ComponentActivity() {
                 say("this phone can't host")
                 return@launch
             }
-            val started = host.start(com.gamebex.client.stream.StreamConfig(token = token, guestAddress = "127.0.0.1", level = 1))
+            val rsound = intent.getBooleanExtra("rsound", false)
+            val started = host.start(com.gamebex.client.stream.StreamConfig(token = token, guestAddress = "127.0.0.1", level = 1, rsound = rsound))
             say("start ${com.gamebex.client.stream.StreamJson.json.encodeToString(com.gamebex.client.stream.StreamStarted.serializer(), started)}")
             if (!started.ok) return@launch
+            if (rsound) host.gameLaunched()
             repeat(30) {
                 kotlinx.coroutines.delay(StreamCaps.STATUS_POLL_MS)
                 val status = host.status()

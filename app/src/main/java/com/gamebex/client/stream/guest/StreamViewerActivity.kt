@@ -68,6 +68,9 @@ class StreamViewerActivity : ComponentActivity() {
                     onLeave = { s.leave() },
                     onToggleStats = { s.toggleStats() },
                     onBack = { finish() },
+                    onTouchKey = s::onTouchKey,
+                    onTouchAxes = s::onTouchAxes,
+                    onReleaseTouchInput = s::releaseTouchInput,
                 )
             }
         }

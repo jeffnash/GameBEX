@@ -5,6 +5,7 @@ import com.gamebex.client.data.Emu
 import com.gamebex.client.data.local.GameEntity
 import com.gamebex.client.launch.ControllerRegistry
 import com.gamebex.client.launch.DirectFiles
+import com.gamebex.client.launch.GraphicsTuner
 import com.gamebex.client.stream.P2Prep
 import com.gamebex.client.stream.StreamCaps
 import com.gamebex.client.stream.StreamEmus
@@ -60,13 +61,85 @@ class StreamP2Test {
     @Test
     fun retroArchReservesPlayerTwoByName() {
         val o = StreamRaConfig.overrides()
-        assertEquals("GameBEX Player 2", o["input_player2_reserved_device"])
+        assertEquals("false", o["input_overlay_hide_when_gamepad_connected"])
+        assertEquals(StreamCaps.PAD_NAME, o["input_player2_reserved_device"])
         assertEquals("2", o["input_player2_device_reservation_type"])
         assertEquals("97", o["input_player2_a_btn"])
         assertEquals("h0up", o["input_player2_up_btn"])
         assertEquals("+6", o["input_player2_l2_axis"])
         assertEquals("opensl", o["audio_driver"])
         assertEquals("32", o["audio_latency"])
+    }
+
+    @Test
+    fun streamUsesEarlyPollingWithoutChangingSoloInputConfig() {
+        assertEquals("0", StreamRaConfig.overrides()["input_poll_type_behavior"])
+        assertTrue(StreamRaConfig.cfgText("/sdcard").contains("input_poll_type_behavior = \"0\""))
+        assertFalse(GraphicsTuner.retroArchConfigText("/sdcard", resume = true).contains("input_poll_type_behavior"))
+    }
+
+    @Test
+    fun retroArchDiagnosticsAreOptInAndKeepThePadReservation() {
+        val normal = StreamRaConfig.overrides(diagnostics = false)
+        assertNull(normal["log_verbosity"])
+        assertNull(normal["log_to_file"])
+        val diagnostic = StreamRaConfig.overrides(diagnostics = true)
+        assertEquals("true", diagnostic["log_verbosity"])
+        assertEquals("0", diagnostic["frontend_log_level"])
+        assertEquals("true", diagnostic["log_to_file"])
+        assertEquals("true", diagnostic["log_to_file_timestamp"])
+        assertEquals(StreamCaps.PAD_NAME, diagnostic["input_player2_reserved_device"])
+    }
+
+    @Test
+    fun rsoundRequiresExplicitListenerReadiness() {
+        assertEquals("opensl", StreamRaConfig.overrides()["audio_driver"])
+        assertNull(StreamRaConfig.overrides()["audio_device"])
+        assertEquals("opensl", StreamRaConfig.overrides(rsoundReady = false)["audio_driver"])
+        assertNull(StreamRaConfig.overrides(rsoundReady = false)["audio_device"])
+        val ready = StreamRaConfig.overrides(rsoundReady = true)
+        assertEquals("rsound", ready["audio_driver"])
+        assertEquals("127.0.0.1", ready["audio_device"])
+        assertEquals("32", ready["audio_latency"])
+        assertTrue(StreamRaConfig.cfgText("/sdcard", rsoundReady = true).contains("audio_driver = \"rsound\""))
+        assertFalse(StreamRaConfig.cfgText("/sdcard").contains("\"127.0.0.1\""))
+    }
+
+    @Test
+    fun rewritingReadinessUsesTheSameSessionFile() {
+        val file = StreamRaConfig.write(tmp)!!
+        assertTrue(file.readText().contains("audio_driver = \"opensl\""))
+        assertFalse(file.readText().contains("\"127.0.0.1\""))
+        assertEquals(file, StreamRaConfig.write(tmp, rsoundReady = true))
+        assertTrue(file.readText().contains("audio_driver = \"rsound\""))
+        assertTrue(file.readText().contains("audio_device = \"127.0.0.1\""))
+        assertEquals(file, StreamRaConfig.write(tmp))
+        val text = file.readText()
+        assertTrue(text.contains("audio_driver = \"opensl\""))
+        assertTrue(text.contains("audio_latency = \"32\""))
+        assertFalse(text.contains("\"127.0.0.1\""))
+        assertEquals(1, text.lines().count { it.startsWith("input_player2_reserved_device ") })
+    }
+
+    @Test
+    fun playerTwoForwardsReadinessButDefaultsToOpenSl() = runBlocking {
+        val p2 = StreamPlayer2Impl({ tmp }, dolphin()) { true }
+        val original = p2.prepare(game("n64"), Emu.RETROARCH) as P2Prep.RetroArchConfig
+        assertTrue(original.cfg.readText().contains("audio_driver = \"opensl\""))
+        val ready = p2.prepare(game("n64"), Emu.RETROARCH, rsoundReady = true) as P2Prep.RetroArchConfig
+        assertEquals(original.cfg, ready.cfg)
+        assertTrue(ready.cfg.readText().contains("audio_driver = \"rsound\""))
+        val safeAgain = p2.prepare(game("n64"), Emu.RETROARCH, rsoundReady = false) as P2Prep.RetroArchConfig
+        assertEquals(original.cfg, safeAgain.cfg)
+        assertFalse(safeAgain.cfg.readText().contains("\"127.0.0.1\""))
+    }
+
+    @Test
+    fun readinessDoesNotTurnOtherEmulatorsIntoRetroArch() = runBlocking {
+        val p2 = StreamPlayer2Impl({ tmp }, dolphin()) { true }
+        assertEquals(P2Prep.Guide(listOf(TogetherCopy.netherPlayer2)), p2.prepare(game("ps2"), Emu.NETHER, rsoundReady = true))
+        assertEquals(P2Prep.Guide(listOf(TogetherCopy.streamPlayer2Other("ARMSX2"))), p2.prepare(game("ps2", Emu.ARMSX2.pkg), Emu.ARMSX2, rsoundReady = true))
+        assertFalse(StreamRaConfig.fileUnder(tmp).exists())
     }
 
     @Test

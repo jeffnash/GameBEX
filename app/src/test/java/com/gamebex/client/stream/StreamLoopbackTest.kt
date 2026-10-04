@@ -97,7 +97,7 @@ class StreamLoopbackTest {
     @Test
     fun videoAudioInputAndTeardownWorkEndToEnd() {
         start()
-        waitFor("connected") { states.any { it is StreamClient.State.Connected } }
+        waitFor("connected") { synchronized(states) { states.any { it is StreamClient.State.Connected } } }
         waitFor("guest seen by host") { session.status().guestConnected }
         val csd = byteArrayOf(0, 0, 0, 1, 0x67, 0x42, 0, 0, 0, 1, 0x68, 0x01)
         video.sink!!.onConfig(csd)
@@ -132,6 +132,6 @@ class StreamLoopbackTest {
         stranger.update(PadState(buttons = PadState.B))
         Thread.sleep(200)
         stranger.close()
-        assertTrue(pad.writes.none { it.buttons and PadState.B != 0 })
+        assertTrue(synchronized(pad.writes) { pad.writes.none { it.buttons and PadState.B != 0 } })
     }
 }

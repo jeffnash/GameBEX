@@ -1,7 +1,9 @@
 package com.gamebex.client.together.session
 
 import android.util.Log
+import com.gamebex.client.data.Emu
 import com.gamebex.client.data.local.GameEntity
+import com.gamebex.client.launch.CoreInstallProgress
 import com.gamebex.client.launch.EmuRouter
 import com.gamebex.client.launch.RetroCoreFetcher
 import com.gamebex.client.together.CoreFile
@@ -36,6 +38,7 @@ import com.gamebex.client.stream.NoStreamPlayer2
 import com.gamebex.client.stream.P2Prep
 import com.gamebex.client.stream.StreamCaps
 import com.gamebex.client.stream.StreamConfig
+import com.gamebex.client.stream.StreamDebug
 import com.gamebex.client.stream.StreamEmus
 import com.gamebex.client.stream.StreamHost
 import com.gamebex.client.stream.StreamPlayer2
@@ -60,12 +63,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 
 private const val CONSUMER_FAILURE = "Something went wrong."
+private const val CORE_INSTALL_STALL_MS = 8_000L
+private const val CORE_INSTALL_CANCELLED = "Core installation cancelled."
 
 /** STREAM: status polls (2 s apart) with no new guest input before the host is warned the guest went quiet. */
 private const val SILENT_POLLS = 2
@@ -86,6 +92,7 @@ internal class HostEngine(
     private val player2: StreamPlayer2 = NoStreamPlayer2,
  /** a game's modes, best first. Tests pass their own. */
     private val modesFor: (GameEntity) -> List<TogetherMode> = TogetherSupport::modesFor,
+    private val streamAudioOverride: () -> String? = { StreamDebug.prop("ra_audio") },
 ) {
     private sealed interface Input {
         data class HostGame(
@@ -123,10 +130,14 @@ internal class HostEngine(
         data class Incoming(val link: Link, val hello: LinkMsg.Hello) : Input
         data class LinkEvt(val link: Link, val event: LinkEvent) : Input
         data class CoreFetch(
-            val epoch: Int,
-            val progress: Int? = null,
+            val install: CoreInstall,
+            val read: Long? = null,
+            val total: Long = 0L,
+            val sequence: Long = 0L,
             val result: CoreResult? = null,
         ) : Input
+        data class CoreFetchFinished(val install: CoreInstall) : Input
+        data class CoreFetchStalled(val install: CoreInstall, val sequence: Long) : Input
         data class HostLaunched(
             val epoch: Int,
             val round: Int,
@@ -140,6 +151,15 @@ internal class HostEngine(
         data class SwitchMode(val mode: TogetherMode) : Input
         data class StreamPolled(val epoch: Int, val round: Int, val status: StreamStatus?) : Input
         data class StreamGraceOver(val epoch: Int, val round: Int) : Input
+    }
+
+ /** Actor-owned identity: old callbacks/completions must never release a replacement install. */
+    private class CoreInstall(val epoch: Int, val token: Long, core: String) {
+        val callbackSequence = AtomicLong()
+        var progressSequence = 0L
+        var progress = CoreInstallProgress(core)
+        var job: Job? = null
+        var stallJob: Job? = null
     }
 
  /** A stream the shell runs for one round, with the token the guest needs. */
@@ -185,7 +205,7 @@ internal class HostEngine(
     private var guestHello: LinkMsg.Hello? = null
     private var round = 0
     private var blobSeq = 0
-    private var coreFetchRunning = false
+    private var coreInstall: CoreInstall? = null
     private var resources: SessionResources? = null
     private var headStartJob: Job? = null
     private var forcedMode: TogetherMode? = null
@@ -303,6 +323,8 @@ internal class HostEngine(
             is Input.Incoming -> handleIncoming(input)
             is Input.LinkEvt -> handleLinkEvent(input)
             is Input.CoreFetch -> handleCoreFetch(input)
+            is Input.CoreFetchFinished -> handleCoreFetchFinished(input.install)
+            is Input.CoreFetchStalled -> handleCoreFetchStalled(input)
             is Input.HostLaunched -> handleHostLaunched(input)
             is Input.HeadStart -> handleHeadStart(input)
             is Input.SwitchMode -> handleSwitchMode(input.mode)
@@ -333,7 +355,7 @@ internal class HostEngine(
         guestHello = null
         round = 0
         blobSeq = 0
-        coreFetchRunning = false
+        coreInstall?.let { releaseCoreInstall(it, cancel = true) }
         resources = SessionResources()
         headStartJob?.cancel()
         headStartJob = null
@@ -620,6 +642,7 @@ internal class HostEngine(
         }
  // A STREAM guest must speak this host's stream protocol.
         if (mode == TogetherMode.STREAM && input.hello.streamProto != StreamWire.VERSION) {
+            _view.value = _view.value?.copy(message = TogetherCopy.byeText(com.gamebex.client.together.ByeReason.VERSION, input.hello.name))
             sendByeAndClose(input.link, com.gamebex.client.together.ByeReason.VERSION)
             return
         }
@@ -921,9 +944,18 @@ internal class HostEngine(
                                         playerName = myName,
                                         p2Config = prep.p2Config,
                                     ),
-                                )
+                                ).also { launched ->
+                                    if (launched is EmuRouter.Outcome.Launched && prep.round != null) {
+                                        runCatching { streamHost.gameLaunched() }.onFailure(::log)
+                                    }
+                                }
                             }
                         } catch (cancelled: CancellationException) {
+                            if (prep.round != null) {
+                                withContext(NonCancellable + ioDispatcher) {
+                                    runCatching { streamHost.stop() }.onFailure(::log)
+                                }
+                            }
                             throw cancelled
                         } catch (t: Throwable) {
                             log(t)
@@ -957,18 +989,30 @@ internal class HostEngine(
         if (guestAddress == null) return StreamPrep(failure = EmuRouter.Outcome.Failed(TogetherCopy.streamNetwork))
         val emu = StreamEmus.emuFor(currentGame)
             ?: return StreamPrep(failure = EmuRouter.Outcome.Blocked(TogetherCopy.notSupported))
-        val prepared = player2.prepare(currentGame, emu)
+        var prepared = player2.prepare(currentGame, emu, rsoundReady = false)
         if (prepared is P2Prep.Failed) return StreamPrep(failure = EmuRouter.Outcome.Failed(prepared.text))
+        val rsoundRequested = emu == Emu.RETROARCH && streamAudioOverride() != "opensl"
         val token = StreamToken.generate()
-        val started = streamHost.start(StreamConfig(token = token, guestAddress = guestAddress))
+        val started = streamHost.start(StreamConfig(token = token, guestAddress = guestAddress, rsound = rsoundRequested))
         if (!started.ok) {
             return StreamPrep(failure = EmuRouter.Outcome.Failed(TogetherCopy.streamStartFailed(started.error)))
         }
-        return StreamPrep(
-            round = StreamRound(token, started),
-            p2Config = (prepared as? P2Prep.RetroArchConfig)?.cfg,
-            guide = (prepared as? P2Prep.Guide)?.lines?.joinToString(" "),
-        )
+        var handedOff = false
+        try {
+            if (rsoundRequested && started.rsound) {
+                prepared = player2.prepare(currentGame, emu, rsoundReady = true)
+                if (prepared is P2Prep.Failed) return StreamPrep(failure = EmuRouter.Outcome.Failed(prepared.text))
+            }
+            return StreamPrep(
+                round = StreamRound(token, started),
+                p2Config = (prepared as? P2Prep.RetroArchConfig)?.cfg,
+                guide = (prepared as? P2Prep.Guide)?.lines?.joinToString(" "),
+            ).also { handedOff = true }
+        } finally {
+            if (!handedOff) {
+                withContext(NonCancellable) { runCatching { streamHost.stop() }.onFailure(::log) }
+            }
+        }
     }
 
     private suspend fun handleHostLaunched(input: Input.HostLaunched) {
@@ -1000,6 +1044,7 @@ internal class HostEngine(
                                         width = started.started.width,
                                         height = started.started.height,
                                         audio = started.started.audio,
+                                        audioTimestampOrigin = if (started.started.rsound) "bridge-arrival" else "capture",
                                     ),
                                 )
                             }
@@ -1162,74 +1207,202 @@ internal class HostEngine(
     private suspend fun handleAct(action: TogetherAction) {
         when (action) {
             TogetherAction.RECHECK -> {
-                if (_view.value?.step == HostStep.NOT_READY && _view.value?.problem != null && !coreFetchRunning) {
-                    epoch += 1
-                    cancelStepJobs()
-                    _view.value = _view.value?.copy(step = HostStep.CHECKING, message = null)
-                    val id = gameId ?: return
-                    beginReadiness(id, epoch, publishedToken())
+                if (_view.value?.step == HostStep.NOT_READY && _view.value?.problem != null && coreInstall == null) {
+                    recheckReadiness()
                 }
             }
-            TogetherAction.INSTALL_CORE -> {
-                if (_view.value?.step != HostStep.NOT_READY || coreFetchRunning) return
-                val currentGame = game ?: return
-                val currentCore = core ?: return
-                val launchEpoch = epoch
-                coreFetchRunning = true
-                launchStep {
-                    try {
-                        val result = withContext(ioDispatcher) {
-                            emulators.fetchAndInstallCore(currentCore, currentGame) { read, total ->
-                                val pct = if (total <= 0L) 0 else ((read * 100L / total).toInt().coerceIn(0, 100))
-                                post(Input.CoreFetch(launchEpoch, progress = pct))
-                            }
+            TogetherAction.INSTALL_CORE -> beginCoreInstall()
+            TogetherAction.CANCEL_CORE_INSTALL -> cancelCoreInstall()
+            TogetherAction.RETRY_CORE_INSTALL -> {
+                cancelCoreInstall()
+                beginCoreInstall()
+            }
+            TogetherAction.OPEN_RETROARCH -> {
+                val token = publishedToken()
+                val opened = try {
+                    platform.openRetroArch()
+                } catch (t: Exception) {
+                    if (t is CancellationException) throw t
+                    log(t)
+                    false
+                }
+                if (!opened) {
+                    synchronized(viewLock) {
+                        if (token == publishedToken()) {
+                            _view.value = _view.value?.copy(
+                                message = "Couldn't open RetroArch. Open it from your launcher, then check again.",
+                            )
                         }
-                        post(Input.CoreFetch(launchEpoch, result = result))
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (t: Throwable) {
-                        log(t)
-                        post(
-                            Input.CoreFetch(
-                                launchEpoch,
-                                result = CoreResult.Failed(TogetherCopy.noWifi),
-                            ),
-                        )
                     }
                 }
             }
-            TogetherAction.OPEN_SYSTEM, TogetherAction.OPEN_PPSSPP, TogetherAction.OPEN_RETROARCH -> Unit
+            TogetherAction.OPEN_SYSTEM, TogetherAction.OPEN_PPSSPP -> Unit
             else -> Unit
         }
     }
 
-    private fun handleCoreFetch(input: Input.CoreFetch) {
-        if (!isCurrent(input.epoch) || _view.value?.step != HostStep.NOT_READY) return
-        if (input.progress != null) {
-            _view.value = _view.value?.copy(message = TogetherCopy.fetchingCore(input.progress))
+    private fun beginCoreInstall() {
+        if (!isCurrent() || _view.value?.step != HostStep.NOT_READY) return
+        coreInstall?.let { install ->
+            if (isCurrentCoreInstall(install)) {
+                showCoreInstall(install)
+                return
+            }
         }
-        val result = input.result ?: return
-        coreFetchRunning = false
-        when (result) {
-            CoreResult.Started -> {
-                _view.value = _view.value?.copy(
-                    message = null,
-                    problem = Problem(TogetherCopy.installingCore, TogetherAction.RECHECK),
+        val currentGame = game ?: return
+        val currentCore = core ?: return
+        val install = CoreInstall(epoch, publishedToken(), currentCore)
+        coreInstall = install
+ // Publish before the backend starts, even if it never sends its first callback.
+        showCoreInstall(install)
+        scheduleCoreInstallStall(install)
+        install.job = launchStep {
+            try {
+                val result = withContext(ioDispatcher) {
+                    emulators.fetchAndInstallCore(currentCore, currentGame) { read, total ->
+                        post(Input.CoreFetch(install, read, total, install.callbackSequence.incrementAndGet()))
+                    }
+                }
+                post(Input.CoreFetch(install, result = result))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (t: Throwable) {
+                log(t)
+                post(Input.CoreFetch(install, result = CoreResult.Failed(TogetherCopy.noWifi)))
+            } finally {
+ // Only the actor releases ownership; cancellation cannot strand the running marker.
+                post(Input.CoreFetchFinished(install))
+            }
+        }
+ // Covers a job cancelled before its body (and therefore its finally) ever starts.
+        install.job?.invokeOnCompletion { post(Input.CoreFetchFinished(install)) }
+    }
+
+    private fun isCurrentCoreInstall(install: CoreInstall): Boolean {
+        if (coreInstall !== install) return false
+        if (isCurrent(install.epoch) && install.token == publishedToken() && _view.value?.step == HostStep.NOT_READY) {
+            return true
+        }
+        releaseCoreInstall(install, cancel = true)
+        return false
+    }
+
+    private fun releaseCoreInstall(install: CoreInstall, cancel: Boolean) {
+        if (coreInstall !== install) return
+        coreInstall = null
+        install.stallJob?.cancel()
+        install.stallJob = null
+        if (cancel) install.job?.cancel()
+    }
+
+    private fun showCoreInstall(install: CoreInstall) {
+        val progress = install.progress
+        val message = when {
+            progress.stalled -> "Still working…"
+            progress.installing -> TogetherCopy.installingCoreHeadline
+            else -> TogetherCopy.fetchingCore(
+                if (progress.total <= 0L) 0 else
+                    (progress.read.toDouble() / progress.total * 100).toInt().coerceIn(0, 100),
+            )
+        }
+        synchronized(viewLock) {
+            if (install.token != publishedToken()) return
+            _view.value = _view.value?.copy(coreInstall = progress, message = message, problem = null)
+        }
+    }
+
+    private fun scheduleCoreInstallStall(install: CoreInstall) {
+        install.stallJob?.cancel()
+        val sequence = install.progressSequence
+        install.stallJob = launchStep {
+            delay(CORE_INSTALL_STALL_MS)
+            post(Input.CoreFetchStalled(install, sequence))
+        }
+    }
+
+    private fun handleCoreFetchStalled(input: Input.CoreFetchStalled) {
+        val install = input.install
+        if (!isCurrentCoreInstall(install) || input.sequence != install.progressSequence ||
+            input.sequence != install.callbackSequence.get()) return
+        install.progress = install.progress.copy(stalled = true)
+        showCoreInstall(install)
+    }
+
+    private fun handleCoreFetch(input: Input.CoreFetch) {
+        val install = input.install
+        if (!isCurrentCoreInstall(install)) return
+        input.read?.let { read ->
+            if (input.sequence <= install.progressSequence) return
+            install.progressSequence = input.sequence
+            install.progress = if (read == -1L && input.total == -1L) {
+                install.progress.copy(installing = true, stalled = false)
+            } else {
+                install.progress.copy(
+                    read = read.coerceAtLeast(0L),
+                    total = input.total.coerceAtLeast(0L),
+                    installing = false,
+                    stalled = false,
                 )
             }
+            showCoreInstall(install)
+            scheduleCoreInstallStall(install)
+        }
+        val result = input.result ?: return
+        releaseCoreInstall(install, cancel = false)
+        when (result) {
+            CoreResult.Started -> recheckReadiness(install.token)
             is CoreResult.Failed -> {
-                _view.value = _view.value?.copy(problem = Problem(result.text, TogetherAction.INSTALL_CORE))
+                synchronized(viewLock) {
+                    if (install.token != publishedToken()) return
+                    _view.value = _view.value?.copy(
+                        coreInstall = null,
+                        message = null,
+                        problem = Problem(result.text, result.action),
+                    )
+                }
             }
         }
     }
 
-    private suspend fun handleForeground() {
-        if (_view.value?.step != HostStep.NOT_READY || _view.value?.problem == null || coreFetchRunning) return
+    private fun handleCoreFetchFinished(install: CoreInstall) {
+        if (!isCurrentCoreInstall(install)) return
+        releaseCoreInstall(install, cancel = false)
+        showCoreInstallCancelled(install.token)
+    }
+
+    private fun cancelCoreInstall() {
+        val install = coreInstall ?: return
+        if (!isCurrentCoreInstall(install)) return
         epoch += 1
         cancelStepJobs()
-        _view.value = _view.value?.copy(step = HostStep.CHECKING, message = null)
-        val id = gameId ?: return
-        beginReadiness(id, epoch, publishedToken())
+        showCoreInstallCancelled(install.token)
+    }
+
+    private fun showCoreInstallCancelled(token: Long) {
+        synchronized(viewLock) {
+            if (token != publishedToken()) return
+            _view.value = _view.value?.copy(
+                coreInstall = null,
+                message = null,
+                problem = Problem(CORE_INSTALL_CANCELLED, TogetherAction.RETRY_CORE_INSTALL),
+            )
+        }
+    }
+
+    private fun recheckReadiness(token: Long = publishedToken()) {
+        synchronized(viewLock) {
+            if (token != publishedToken()) return
+            val id = gameId ?: return
+            epoch += 1
+            cancelStepJobs()
+            _view.value = _view.value?.copy(step = HostStep.CHECKING, message = null, problem = null, coreInstall = null)
+            beginReadiness(id, epoch, token)
+        }
+    }
+
+    private suspend fun handleForeground() {
+        if (_view.value?.step != HostStep.NOT_READY || _view.value?.problem == null || coreInstall != null) return
+        recheckReadiness()
     }
 
     private fun sendCore(link: Link, requestedCore: String) {
@@ -1379,6 +1552,14 @@ internal class HostEngine(
     }
 
     private fun cancelStepJobs() {
+        coreInstall?.let { install ->
+            releaseCoreInstall(install, cancel = true)
+            synchronized(viewLock) {
+                if (install.token == publishedToken()) {
+                    _view.value = _view.value?.copy(coreInstall = null, message = null)
+                }
+            }
+        }
         criticalLaunches.cancel(synchronized(stepJobs) { stepJobs.toList() })
     }
     private fun cancelSessionJobs() {

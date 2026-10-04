@@ -5,6 +5,7 @@ import com.gamebex.client.ui.presentation.GamePrimaryAction
 import com.gamebex.client.ui.presentation.LaunchStatus
 import com.gamebex.client.ui.presentation.LocalGamePresenter
 import com.gamebex.client.ui.presentation.LocalLauncher
+import com.gamebex.client.ui.presentation.LocalLaunchJob
 import com.gamebex.client.ui.presentation.Readiness
 import com.gamebex.client.ui.presentation.emulatorLabel
 import com.gamebex.client.ui.presentation.readinessOf
@@ -140,10 +141,17 @@ class LibraryViewModel(private val appContext: android.content.Context) : ViewMo
     /** Quick-play status panel for the last Play; null hides it. */
     private val _status = MutableStateFlow<LaunchStatus?>(null)
     val status: StateFlow<LaunchStatus?> = _status
-    fun clearStatus() { _status.value = null }
+    private val launchJob = LocalLaunchJob(
+        scope = { viewModelScope },
+        launcher = { id, fresh, report -> LocalLauncher.play(appContext, id, fresh, report) },
+        onStatus = { _status.value = it },
+    )
+    fun clearStatus() = launchJob.dismiss()
 
-    fun play(id: Long, fresh: Boolean = false) {
-        viewModelScope.launch { LocalLauncher.play(appContext, id, fresh) { _status.value = it } }
+    fun play(id: Long, fresh: Boolean = false) = launchJob.play(id, fresh)
+
+    fun openRetroArch() {
+        LocalLauncher.openRetroArch(appContext)?.let { _notice.value = it }
     }
 
     /** Delete to free space (after the confirm dialog); the row drops from the list. */
@@ -165,7 +173,9 @@ class LibraryViewModel(private val appContext: android.content.Context) : ViewMo
     }
 
     /** Status-panel Retry: replays the same game and launch mode. */
-    fun retry(status: LaunchStatus) = play(status.gameId, status.fresh)
+    fun retry(status: LaunchStatus) {
+        if (_status.value == status) launchJob.retry()
+    }
 }
 
 data class LibraryPreview(

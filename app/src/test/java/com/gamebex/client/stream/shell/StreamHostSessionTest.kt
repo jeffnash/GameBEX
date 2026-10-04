@@ -72,6 +72,80 @@ class StreamHostSessionTest {
     }
 
     @Test
+    fun rsoundReadinessAndFallbackStatusComeFromTheStartedAudioSource() {
+        val c = FakeShellComponents()
+        var selected: StreamConfig? = null
+        var launched = 0
+        var stopped = false
+        var mode = "rsound-waiting"
+        var fallback: String? = null
+        val sound = object : AudioSource {
+            override val rsoundReady: Boolean get() = true
+            override val audioMode: String get() = mode
+            override val fallbackReason: String? get() = fallback
+            override fun start(sink: AudioSink): Boolean = true
+            override fun gameLaunched() { launched += 1 }
+            override fun stop() { stopped = true }
+        }
+        val components = object : ShellComponents by c {
+            override fun audioSource(config: StreamConfig): AudioSource {
+                selected = config
+                return sound
+            }
+        }
+        val wanted = config().copy(rsound = true)
+        val s = StreamHostSession(components = components, config = wanted, appWatchdog = false).also { sessions += it }
+        val started = s.start()
+        assertTrue(started.ok)
+        assertTrue(started.audio)
+        assertTrue(started.rsound)
+        assertEquals(wanted, selected)
+        assertEquals(0, launched)
+        assertEquals("rsound-waiting", s.status().audioMode)
+        s.gameLaunched()
+        assertEquals(1, launched)
+        mode = "loopback"
+        fallback = "RetroArch did not connect within 5000 ms"
+        assertEquals("loopback", s.status().audioMode)
+        assertEquals(fallback, s.status().audioFallback)
+        s.stop()
+        s.gameLaunched()
+        assertEquals(1, launched)
+        assertTrue(stopped)
+    }
+
+    @Test
+    fun ordinaryAudioNeverAdvertisesAnRsoundListener() {
+        val c = FakeShellComponents()
+        val s = session(c, config().copy(rsound = true))
+        val started = s.start()
+        assertTrue(started.audio)
+        assertFalse(started.rsound)
+        assertEquals("loopback", s.status().audioMode)
+        assertNull(s.status().audioFallback)
+    }
+
+    @Test
+    fun disabledAudioDoesNotEvenSelectAnRsoundSource() {
+        val c = FakeShellComponents()
+        var selected = false
+        val components = object : ShellComponents by c {
+            override fun audioSource(config: StreamConfig): AudioSource? {
+                selected = true
+                return c.audio
+            }
+        }
+        val s = StreamHostSession(config(audio = false).copy(rsound = true), components, appWatchdog = false)
+            .also { sessions += it }
+        val started = s.start()
+        assertTrue(started.ok)
+        assertFalse(started.audio)
+        assertFalse(started.rsound)
+        assertFalse(selected)
+        assertEquals("none", s.status().audioMode)
+    }
+
+    @Test
     fun startsAtTheRequestedLevel() {
         val c = FakeShellComponents()
         val started = session(c, config(level = 2)).start()
@@ -225,6 +299,8 @@ class StreamHostSessionTest {
         assertEquals(5L, status.framesDropped)
         assertEquals(41_000, status.guestVideoP95Us)
         assertTrue(status.audio)
+        assertEquals("loopback", status.audioMode)
+        assertNull(status.audioFallback)
     }
 
     @Test

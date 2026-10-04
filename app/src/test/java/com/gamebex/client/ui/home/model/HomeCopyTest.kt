@@ -54,6 +54,30 @@ class HomeCopyTest {
     }
 
     @Test
+    fun parseSizeRequiresUnitsExceptForWholeByteCounts() {
+        assertEquals(1224L, HomeCopy.parseSize("1224")!!)
+        assertEquals(3L, HomeCopy.parseSize("3")!!)
+        assertEquals(0L, HomeCopy.parseSize("0")!!)
+        assertNull(HomeCopy.parseSize("1224", allowBareBytes = false))
+        assertNull(HomeCopy.parseSize("4", allowBareBytes = false))
+        assertEquals(3L, HomeCopy.parseSize("3 B", allowBareBytes = false)!!)
+        assertEquals(4L, HomeCopy.parseSize("4B", allowBareBytes = false)!!)
+        assertEquals(1224L, HomeCopy.parseSize(" 1224 ")!!)
+        assertEquals(1024L, HomeCopy.parseSize("1 KB", allowBareBytes = false)!!)
+        assertEquals((5.09 * HomeCopy.MB).toLong(), HomeCopy.parseSize("5.09MiB")!!)
+        assertEquals((1.2 * HomeCopy.GB).toLong(), HomeCopy.parseSize("1.2 GB compressed")!!)
+    }
+
+    @Test
+    fun parseSizeRejectsRatingsCountsRangesAndVersions() {
+        listOf(
+            "3.8", "4.6", "1,2", "1.0.2", "v1.0.2",
+            "1-4 players", "3 players", "4 files", "2 downloads",
+            "3 (players)", "4 / 5", "3-4", "3Bottles", "1GB2",
+        ).forEach { text -> assertNull(text, HomeCopy.parseSize(text)) }
+    }
+
+    @Test
     fun etaHasThreeShapes() {
         assertEquals("under a minute", HomeCopy.eta(30))
         assertEquals("3 min", HomeCopy.eta(180))

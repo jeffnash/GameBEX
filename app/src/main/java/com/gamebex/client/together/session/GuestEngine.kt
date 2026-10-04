@@ -2,6 +2,7 @@ package com.gamebex.client.together.session
 
 import android.util.Log
 import com.gamebex.client.data.local.GameEntity
+import com.gamebex.client.launch.CoreInstallProgress
 import com.gamebex.client.launch.EmuRouter
 import com.gamebex.client.together.ByeReason
 import com.gamebex.client.together.CoreBuild
@@ -72,6 +73,8 @@ import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 
 private const val CONSUMER_FAILURE = "Something went wrong."
+private const val CORE_INSTALL_STALL_MS = 8_000L
+private const val CORE_INSTALL_CANCELLED = "Core install cancelled."
 
 /** The guest half of the Play together session actor. */
 internal class GuestEngine(
@@ -100,7 +103,15 @@ internal class GuestEngine(
         data class DownloadProgress(val epoch: Int, val percent: Int) : Input
         data class DownloadDone(val epoch: Int, val gameId: Long) : Input
         data class DownloadFailed(val epoch: Int, val text: String) : Input
-        data class CoreFetch(val epoch: Int, val progress: Int? = null, val result: CoreResult? = null) : Input
+        data class CoreFetch(
+            val install: CoreInstall,
+            val read: Long? = null,
+            val total: Long = 0,
+            val sequence: Long = 0,
+            val result: CoreResult? = null,
+        ) : Input
+        data class CoreFetchFinished(val install: CoreInstall) : Input
+        data class CoreFetchStalled(val install: CoreInstall, val generation: Long) : Input
         data class CorePrepared(
             val epoch: Int,
             val hasReceived: Boolean,
@@ -110,7 +121,7 @@ internal class GuestEngine(
         data class CoreWriteDone(val epoch: Int, val blobId: Int, val failed: Boolean) : Input
         data class CoreFinished(val epoch: Int, val ok: Boolean) : Input
         data class CoreInstalled(val epoch: Int, val result: CoreResult) : Input
-        data class ResumePrep(val epoch: Int) : Input
+        data class ResumePrep(val epoch: Int, val token: Long) : Input
         data class CoreRequestTimeout(val epoch: Int, val generation: Long) : Input
         data class CoreInactivity(val epoch: Int, val generation: Long) : Input
         data class Countdown(val epoch: Int, val n: Int) : Input
@@ -160,6 +171,17 @@ internal class GuestEngine(
     /** Guest states are sent from separate coroutines; only the newest may reach the host. */
     private val stateSeq = AtomicLong()
     private var sentStateSeq = 0L // guarded by sendMutex
+    private val coreInstallMutex = Mutex()
+    private var coreInstall: CoreInstall? = null
+
+    private class CoreInstall(val epoch: Int, val token: Long, core: String) {
+        var progress = CoreInstallProgress(core)
+        val callbackSequence = AtomicLong()
+        var progressSequence = 0L
+        var stallGeneration = 0L
+        var job: Job? = null
+        var stallJob: Job? = null
+    }
 
     private var epoch = 0
     @Volatile
@@ -306,11 +328,13 @@ internal class GuestEngine(
             is Input.DownloadDone -> handleDownloadDone(input)
             is Input.DownloadFailed -> handleDownloadFailed(input)
             is Input.CoreFetch -> handleCoreFetch(input)
+            is Input.CoreFetchFinished -> handleCoreFetchFinished(input.install)
+            is Input.CoreFetchStalled -> handleCoreFetchStalled(input)
             is Input.CorePrepared -> handleCorePrepared(input)
             is Input.CoreWriteDone -> handleCoreWriteDone(input)
             is Input.CoreFinished -> handleCoreFinished(input)
             is Input.CoreInstalled -> handleCoreInstalled(input)
-            is Input.ResumePrep -> if (isCurrent(input.epoch)) startPrep()
+            is Input.ResumePrep -> if (isCurrent(input.epoch) && owns(input.token)) startPrep()
             is Input.CoreRequestTimeout -> if (isCurrent(input.epoch) && input.generation == coreRequestGeneration) handleCoreUnavailable()
             is Input.CoreInactivity -> if (isCurrent(input.epoch) && input.generation == coreInactivityGeneration) handleCoreFailure()
             is Input.Countdown -> if (isCurrent(input.epoch) && _view.value?.step == GuestStep.LAUNCHING) {
@@ -469,12 +493,22 @@ internal class GuestEngine(
         when (message) {
             is LinkMsg.Hello -> {
                 if (_view.value?.step == GuestStep.WAITING_OFFER && message.role == Role.HOST) {
+                    if (message.proto != TOGETHER_PROTO ||
+                        (target?.mode == TogetherMode.STREAM && message.streamProto != StreamWire.VERSION)
+                    ) {
+                        endInternal(TogetherCopy.byeText(ByeReason.VERSION, message.name), sendBye = true, updateView = true, token = token)
+                        return
+                    }
                     hostHello = message
                     _view.value = _view.value?.copy(hostName = message.name)
                 }
             }
             is LinkMsg.Offer -> {
                 if (_view.value?.step != GuestStep.WAITING_OFFER || hostHello == null) return
+                if (message.mode == TogetherMode.STREAM && hostHello?.streamProto != StreamWire.VERSION) {
+                    endInternal(TogetherCopy.byeText(ByeReason.VERSION, hostName()), sendBye = true, updateView = true, token = token)
+                    return
+                }
                 if (!acceptedHostAddress(message.hostAddress, currentLink)) {
                     log("rejected offer hostAddress=${message.hostAddress}")
                     return
@@ -755,6 +789,7 @@ internal class GuestEngine(
         height = ready.height,
         audio = ready.audio,
         hostName = name,
+        audioTimestampOrigin = ready.audioTimestampOrigin,
     )
 
  /** STREAM guests never run the game: a row-less stand-in carries its title and folder. */
@@ -774,19 +809,42 @@ internal class GuestEngine(
         val current = _view.value ?: return
         when (action) {
             TogetherAction.RECHECK -> {
-                if (current.step == GuestStep.ACTION_NEEDED || current.step == GuestStep.INSTALLING_CORE) {
+                if (coreInstall == null && (current.step == GuestStep.ACTION_NEEDED || current.step == GuestStep.INSTALLING_CORE)) {
                     startPrep()
                 }
             }
-            TogetherAction.OPEN_SYSTEM, TogetherAction.OPEN_PPSSPP, TogetherAction.OPEN_RETROARCH -> Unit
+            TogetherAction.OPEN_SYSTEM, TogetherAction.OPEN_PPSSPP -> Unit
+            TogetherAction.OPEN_RETROARCH -> if (current.step == GuestStep.ACTION_NEEDED && coreInstall == null) {
+                val token = publishedToken()
+                val opened = try {
+                    platform.openRetroArch()
+                } catch (t: Exception) {
+                    if (t is CancellationException) throw t
+                    log(t)
+                    false
+                }
+                if (!opened) {
+                    writeIfToken(token) { it.copy(message = "Couldn't open RetroArch. Open it from your launcher, then check again.") }
+                }
+            }
             TogetherAction.USE_ANYWAY -> if (current.step == GuestStep.ACTION_NEEDED && current.phase == GuestPhase.MISMATCH && offer?.mode == TogetherMode.PSP_ADHOC) {
                 useAnyway = true
                 startPrep()
             }
             TogetherAction.DOWNLOAD -> if (current.step == GuestStep.ACTION_NEEDED) startDownload()
-            TogetherAction.INSTALL_CORE -> if (current.step == GuestStep.ACTION_NEEDED) startCoreInstall()
+            TogetherAction.INSTALL_CORE -> startCoreInstall()
             TogetherAction.COPY_CORE -> if (current.step == GuestStep.ACTION_NEEDED) startCoreCopy()
             TogetherAction.OPEN_STREAM -> if (current.step == GuestStep.IN_GAME && offer?.mode == TogetherMode.STREAM) reopenStream()
+            TogetherAction.CANCEL_CORE_INSTALL -> cancelCoreInstall()
+            TogetherAction.RETRY_CORE_INSTALL -> {
+                if (coreInstall?.progress?.stalled == true ||
+                    (current.step == GuestStep.ACTION_NEEDED && current.problem?.action == TogetherAction.RETRY_CORE_INSTALL)) {
+                    cancelCoreInstall()
+                    startCoreInstall()
+                } else {
+                    coreInstall?.let { if (isCurrentCoreInstall(it)) showCoreInstall(it) }
+                }
+            }
         }
     }
 
@@ -798,20 +856,22 @@ internal class GuestEngine(
 
     private suspend fun handleForeground() {
         val current = _view.value ?: return
+        if (coreInstall != null) return
         when (current.step) {
-            GuestStep.ACTION_NEEDED -> startPrep()
+            GuestStep.ACTION_NEEDED -> if (current.problem?.action != TogetherAction.RETRY_CORE_INSTALL) startPrep()
             GuestStep.INSTALLING_CORE -> scheduleResume()
             else -> Unit
         }
     }
 
-    private fun scheduleResume() {
+    private fun scheduleResume(token: Long = publishedToken()) {
+        if (coreInstall != null || !owns(token)) return
         epoch += 1
         cancelStepJobs()
         val scheduledEpoch = epoch
         launchStep {
             delay(timing.returnDelayMs)
-            post(Input.ResumePrep(scheduledEpoch))
+            post(Input.ResumePrep(scheduledEpoch, token))
         }
     }
 
@@ -826,7 +886,7 @@ internal class GuestEngine(
 
     private fun startPrep() {
         val selectedOffer = offer ?: return
-        if (sessionEnded || link == null) return
+        if (sessionEnded || link == null || coreInstall != null) return
         val snapshot = PrepSnapshot(selectedOffer, selectedOffer.mode, sessionCore, pickedGameId, useAnyway, hostName())
         epoch += 1
         cancelStepJobs()
@@ -841,6 +901,7 @@ internal class GuestEngine(
             progress = null,
             choices = emptyList(),
             message = null,
+            coreInstall = null,
         )
         sendState(GuestPhase.CHECKING)
         launchStep {
@@ -1119,7 +1180,18 @@ internal class GuestEngine(
         setActionNeeded(GuestPhase.NEEDS_GAME, Problem(input.text, TogetherAction.DOWNLOAD))
     }
 
-    private suspend fun startCoreInstall() {
+    private fun startCoreInstall() {
+        if (!isCurrent()) return
+        coreInstall?.let { install ->
+            if (isCurrentCoreInstall(install)) {
+                showCoreInstall(install)
+                return
+            }
+        }
+        val token = publishedToken()
+        val current = _view.value ?: return
+        if (current.step != GuestStep.ACTION_NEEDED ||
+            current.problem?.action !in setOf(TogetherAction.INSTALL_CORE, TogetherAction.RETRY_CORE_INSTALL)) return
         val selectedLocal = local ?: return
         val core = requestedCore ?: sessionCore ?: return
         val mode = offer?.mode ?: return
@@ -1129,38 +1201,156 @@ internal class GuestEngine(
         }
         epoch += 1
         cancelStepJobs()
-        val startedEpoch = epoch
-        launchStep {
+        if (!owns(token)) return
+        val install = CoreInstall(epoch, token, core)
+        coreInstall = install
+        showCoreInstall(install)
+        sendState(GuestPhase.INSTALLING_CORE, progress = 0)
+        scheduleCoreInstallStall(install)
+        install.job = launchStep {
             try {
                 val result = withContext(ioDispatcher) {
-                    emulators.fetchAndInstallCore(core, selectedLocal) { read, total ->
-                        val percent = if (total <= 0L) 0 else ((read * 100L) / total).toInt().coerceIn(0, 100)
-                        post(Input.CoreFetch(startedEpoch, progress = percent))
+                    coreInstallMutex.withLock {
+                        currentCoroutineContext().ensureActive()
+                        emulators.fetchAndInstallCore(core, selectedLocal) { read, total ->
+                            post(Input.CoreFetch(install, read, total, install.callbackSequence.incrementAndGet()))
+                        }
                     }
                 }
-                post(Input.CoreFetch(startedEpoch, result = result))
+                currentCoroutineContext().ensureActive()
+                post(Input.CoreFetch(install, result = result))
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (t: Throwable) {
                 log(t)
-                post(Input.CoreFetch(startedEpoch, result = CoreResult.Failed(t.message ?: TogetherCopy.coreInstallBlocked)))
+                post(Input.CoreFetch(install, result = CoreResult.Failed(t.message ?: TogetherCopy.coreInstallBlocked)))
+            } finally {
+                post(Input.CoreFetchFinished(install))
+            }
+        }
+        install.job?.invokeOnCompletion { post(Input.CoreFetchFinished(install)) }
+    }
+
+    private fun isCurrentCoreInstall(install: CoreInstall): Boolean {
+        if (coreInstall !== install) return false
+        if (isCurrent(install.epoch) && owns(install.token) && _view.value?.step == GuestStep.INSTALLING_CORE) return true
+        releaseCoreInstall(install, cancel = true)
+        return false
+    }
+
+    private fun releaseCoreInstall(install: CoreInstall, cancel: Boolean) {
+        if (coreInstall !== install) return
+        coreInstall = null
+        install.stallJob?.cancel()
+        install.stallJob = null
+        if (cancel) install.job?.cancel()
+    }
+
+    private fun coreInstallPercent(progress: CoreInstallProgress): Int? = when {
+        progress.installing -> null
+        progress.total <= 0L -> 0
+        else -> (progress.read.toDouble() / progress.total * 100).toInt().coerceIn(0, 100)
+    }
+
+    private fun showCoreInstall(install: CoreInstall) {
+        val progress = install.progress
+        val percent = coreInstallPercent(progress)
+        writeIfToken(install.token) {
+            it.copy(
+                step = GuestStep.INSTALLING_CORE,
+                phase = GuestPhase.INSTALLING_CORE,
+                problem = null,
+                choices = emptyList(),
+                progress = percent,
+                coreInstall = progress,
+                message = when {
+                    progress.stalled -> "Still working…"
+                    progress.installing -> null
+                    else -> TogetherCopy.fetchingCore(percent ?: 0)
+                },
+            )
+        }
+    }
+
+    private fun scheduleCoreInstallStall(install: CoreInstall) {
+        install.stallJob?.cancel()
+        val generation = ++install.stallGeneration
+        install.stallJob = launchStep {
+            delay(CORE_INSTALL_STALL_MS)
+            post(Input.CoreFetchStalled(install, generation))
+        }
+    }
+
+    private fun handleCoreFetchStalled(input: Input.CoreFetchStalled) {
+        val install = input.install
+        if (!isCurrentCoreInstall(install) || input.generation != install.stallGeneration) return
+        install.progress = install.progress.copy(stalled = true)
+        showCoreInstall(install)
+    }
+
+    private suspend fun handleCoreFetch(input: Input.CoreFetch) {
+        val install = input.install
+        if (!isCurrentCoreInstall(install)) return
+        input.read?.let { read ->
+            if (input.sequence <= install.progressSequence) return
+            install.progressSequence = input.sequence
+            val progress = if (read == -1L && input.total == -1L) {
+                install.progress.copy(installing = true, stalled = false)
+            } else {
+                val total = input.total.coerceAtLeast(0L)
+                install.progress.copy(
+                    read = read.coerceAtLeast(0L).let { if (total > 0L) it.coerceAtMost(total) else it },
+                    total = total,
+                    installing = false,
+                    stalled = false,
+                )
+            }
+            if (progress != install.progress.copy(stalled = false)) {
+                install.progress = progress
+                showCoreInstall(install)
+                sendState(GuestPhase.INSTALLING_CORE, progress = coreInstallPercent(progress))
+                scheduleCoreInstallStall(install)
+            }
+        }
+        val result = input.result ?: return
+        releaseCoreInstall(install, cancel = false)
+        when (result) {
+            CoreResult.Started -> {
+                writeIfToken(install.token) { it.copy(coreInstall = null, progress = null, message = null) }
+                sendState(GuestPhase.INSTALLING_CORE)
+                if (platform.foreground.value) scheduleResume(install.token)
+            }
+            is CoreResult.Failed -> {
+                writeIfToken(install.token) {
+                    it.copy(step = GuestStep.ACTION_NEEDED, phase = GuestPhase.NEEDS_CORE,
+                        problem = Problem(result.text, result.action), coreInstall = null, progress = null, message = null)
+                }
+                if (owns(install.token)) sendState(GuestPhase.NEEDS_CORE)
             }
         }
     }
 
-    private suspend fun handleCoreFetch(input: Input.CoreFetch) {
-        if (!isCurrent(input.epoch)) return
-        input.progress?.let { progress ->
-            _view.value = _view.value?.copy(message = TogetherCopy.fetchingCore(progress), progress = progress)
+    private fun handleCoreFetchFinished(install: CoreInstall) {
+        if (!isCurrentCoreInstall(install)) return
+        releaseCoreInstall(install, cancel = false)
+        showCoreInstallCancelled(install.token)
+    }
+
+    private fun cancelCoreInstall() {
+        val install = coreInstall ?: return
+        if (!isCurrentCoreInstall(install)) return
+        epoch += 1
+        cancelStepJobs()
+        showCoreInstallCancelled(install.token)
+    }
+
+    private fun showCoreInstallCancelled(token: Long) {
+        writeIfToken(token) {
+            it.copy(step = GuestStep.ACTION_NEEDED, phase = GuestPhase.NEEDS_CORE,
+                problem = Problem(CORE_INSTALL_CANCELLED, TogetherAction.RETRY_CORE_INSTALL),
+                coreInstall = null, progress = null, message = null)
         }
-        val result = input.result ?: return
-        when (result) {
-            CoreResult.Started -> {
-                _view.value = _view.value?.copy(step = GuestStep.INSTALLING_CORE, phase = GuestPhase.INSTALLING_CORE, problem = null, progress = null, message = null)
-                sendState(GuestPhase.INSTALLING_CORE)
-            }
-            is CoreResult.Failed -> setActionNeeded(GuestPhase.NEEDS_CORE, Problem(result.text, TogetherAction.INSTALL_CORE))
-        }
+        if (owns(token)) sendState(GuestPhase.NEEDS_CORE)
     }
 
     private suspend fun startCoreCopy() {
@@ -1348,7 +1538,10 @@ internal class GuestEngine(
                     platform.foreground.first { it }
                 }
                 val result = withContext(ioDispatcher) {
-                    emulators.installReceivedCore(file, hostBuild, selectedLocal)
+                    coreInstallMutex.withLock {
+                        currentCoroutineContext().ensureActive()
+                        emulators.installReceivedCore(file, hostBuild, selectedLocal)
+                    }
                 }
                 post(Input.CoreInstalled(startedEpoch, result))
             } catch (cancelled: CancellationException) {
@@ -1366,8 +1559,10 @@ internal class GuestEngine(
             CoreResult.Started -> {
                 _view.value = _view.value?.copy(step = GuestStep.INSTALLING_CORE, phase = GuestPhase.INSTALLING_CORE, problem = null, progress = null, message = null)
                 sendState(GuestPhase.INSTALLING_CORE)
+                if (platform.foreground.value) scheduleResume()
             }
-            is CoreResult.Failed -> setActionNeeded(GuestPhase.CORE_SYNC, Problem(result.text, TogetherAction.COPY_CORE))
+            is CoreResult.Failed -> setActionNeeded(GuestPhase.CORE_SYNC, Problem(result.text,
+                if (result.action == TogetherAction.INSTALL_CORE) TogetherAction.COPY_CORE else result.action))
         }
     }
 
@@ -1390,7 +1585,7 @@ internal class GuestEngine(
     }
 
     private suspend fun setActionNeeded(phase: GuestPhase, problem: Problem) {
-        _view.value = _view.value?.copy(step = GuestStep.ACTION_NEEDED, phase = phase, problem = problem, progress = null, choices = emptyList(), message = null)
+        _view.value = _view.value?.copy(step = GuestStep.ACTION_NEEDED, phase = phase, problem = problem, progress = null, choices = emptyList(), message = null, coreInstall = null)
         sendState(phase, problem.text.takeIf { phase == GuestPhase.NEEDS_SETUP })
     }
 
@@ -1553,7 +1748,7 @@ internal class GuestEngine(
             if (publishedToken != token) return
             val current = _view.value ?: return
             if (current.step == GuestStep.ENDED) return
-            _view.value = current.copy(step = GuestStep.ENDED, message = reason)
+            _view.value = current.copy(step = GuestStep.ENDED, message = reason, coreInstall = null)
         }
     }
 
@@ -1591,6 +1786,7 @@ internal class GuestEngine(
     }
 
     private fun cancelStepJobs() {
+        coreInstall?.let { releaseCoreInstall(it, cancel = true) }
         criticalLaunches.cancel(synchronized(stepJobs) { stepJobs.toList() })
     }
 

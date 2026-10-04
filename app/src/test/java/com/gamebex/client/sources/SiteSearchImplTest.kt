@@ -203,12 +203,90 @@ class SiteSearchImplTest {
 
     @Test
     fun sizeFallsBackToDetailWhenVariantSizeUnparseable() = runTest {
+        listOf("big", "3.8", "1-4 players", "3 players", "4 files", "2 downloads", "1.0.2").forEach { raw ->
+            val src = source().apply {
+                variantsResult = { listOf(CatalogFixtures.file().copy(size = raw)) }
+                detailResult = { CatalogFixtures.detail().copy(size = "1.4 GB") }
+            }
+            val (_, s) = installed(src)
+            assertEquals(HomeCopy.parseSize("1.4 GB"), s.size(entry("g1"))?.bytes)
+            assertEquals(1, src.calls.count { it.startsWith("detail") })
+        }
+    }
+
+    @Test
+    fun sizePreservesWholeByteCountsAndTinyExplicitVariantSizes() = runTest {
+        listOf("1224" to 1224L, "3 B" to 3L, "4B" to 4L).forEach { (raw, bytes) ->
+            val src = source().apply {
+                variantsResult = { listOf(CatalogFixtures.file().copy(size = raw)) }
+            }
+            val (_, s) = installed(src)
+            val info = s.size(entry(raw))
+            assertEquals(bytes, info?.bytes)
+            assertEquals(HomeCopy.size(bytes), info?.label)
+            assertEquals(0, src.calls.count { it.startsWith("detail") })
+        }
+    }
+
+    @Test
+    fun sizeRejectsNumericAndNonSizeDetailMetadata() = runTest {
+        listOf("3.8", "4.6", "3", "4", "1-4 players", "3 players", "4 files", "2 downloads", "1.0.2")
+            .forEach { raw ->
+                val src = source().apply {
+                    variantsResult = {
+                        listOf(
+                            CatalogFixtures.file().copy(size = "5.09 MiB"),
+                            CatalogFixtures.file(variantKey = "v2").copy(size = "10 MB"),
+                        )
+                    }
+                    detailResult = { CatalogFixtures.detail().copy(size = raw) }
+                }
+                val (_, s) = installed(src)
+                val game = entry(raw)
+                assertNull(raw, s.size(game))
+                assertNull(raw, s.size(game))
+                assertEquals(1, src.calls.count { it.startsWith("variants") })
+                assertEquals(1, src.calls.count { it.startsWith("detail") })
+            }
+    }
+
+    @Test
+    fun searchKeepsEntriesWhenAmbiguousVariantDetailSizesAreRatings() = runTest {
+        val games = listOf(
+            entry("original", "Bomberman 64"),
+            entry("second", "Bomberman 64: The Second Attack"),
+            entry("third", "Bomberman 64 (Japan)"),
+        )
         val src = source().apply {
-            variantsResult = { listOf(CatalogFixtures.file().copy(size = "big")) }
-            detailResult = { CatalogFixtures.detail().copy(size = "1.4 GB") }
+            searchResult = { CatalogPage(games) }
+            variantsResult = { ref ->
+                if (ref.itemKey == "second") {
+                    listOf(CatalogFixtures.file().copy(size = "10 MB"))
+                } else {
+                    List(5) { i -> CatalogFixtures.file(variantKey = "v$i").copy(size = "5.09 MiB") }
+                }
+            }
+            detailResult = { ref ->
+                CatalogFixtures.detail().copy(size = if (ref.itemKey == "original") "3.8" else "4.6")
+            }
         }
         val (_, s) = installed(src)
-        assertEquals(HomeCopy.parseSize("1.4 GB"), s.size(entry("g1"))?.bytes)
+        val found = s.search("Bomberman 64") as SiteResult.Found
+        assertEquals(games.toSet(), found.entries.toSet())
+        assertNull(s.size(games[0]))
+        assertEquals("10 MB", s.size(games[1])?.label)
+        assertNull(s.size(games[2]))
+        assertEquals(2, src.calls.count { it.startsWith("detail") })
+    }
+
+    @Test
+    fun sizeFallsBackToExplicitBytesEvenForTinyDetailSizes() = runTest {
+        val src = source().apply {
+            variantsResult = { emptyList() }
+            detailResult = { CatalogFixtures.detail().copy(size = "4 B") }
+        }
+        val (_, s) = installed(src)
+        assertEquals("4 B", s.size(entry("tiny"))?.label)
     }
 
     @Test

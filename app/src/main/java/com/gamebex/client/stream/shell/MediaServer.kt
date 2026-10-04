@@ -247,9 +247,9 @@ class MediaServer(
             waitingForKey = true
             csd?.let { g.control.addLast(Out.Frame(MediaFrames.encode(MediaFrame.VideoConfig(it)))) }
             g.control.addLast(Out.Frame(infoFrame()))
+            g.writer = spawn("gbx-media-write") { writeLoop(g) }
             lock.notifyAll()
         }
-        g.writer = spawn("gbx-media-write") { writeLoop(g) }
         spawn("gbx-media-read") { readLoop(g, input) }
         requestKeyframe(clock(), force = true)
     }

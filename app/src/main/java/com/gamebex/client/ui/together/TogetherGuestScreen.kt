@@ -48,7 +48,9 @@ import com.gamebex.client.ui.console.RailHost
 import com.gamebex.client.ui.console.consoleKeys
 import com.gamebex.client.ui.console.rememberScreenFocus
 import com.gamebex.client.ui.console.screenFocus
+import com.gamebex.client.ui.game.CoreInstallStatus
 
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun TogetherGuestScreen(
     controller: TogetherController,
@@ -85,9 +87,13 @@ fun TogetherGuestScreen(
     val choices = v?.choices.orEmpty()
     val visibleStart = if (picking) togetherWindowStart(selected, choices.size, 6, pickerStart) else pickerStart
     SideEffect { if (picking && pickerStart != visibleStart) pickerStart = visibleStart }
+    val coreInstall = v?.coreInstall
     val action = v?.problem?.action
     val streamClosed = v?.step == GuestStep.IN_GAME && v.mode == com.gamebex.client.together.TogetherMode.STREAM && !streamViewerOpen
-    val primaryLabel = when (v?.step) {
+    val primaryEnabled = coreInstall == null || coreInstall.stalled
+    val primaryLabel = if (coreInstall != null) {
+        if (coreInstall.stalled) "Retry" else "Installing core…"
+    } else when (v?.step) {
         GuestStep.ACTION_NEEDED -> action?.let(TogetherCopy::actionLabel)
         GuestStep.INSTALLING_CORE -> TogetherCopy.recheck
         GuestStep.ENDED -> TogetherCopy.back
@@ -95,14 +101,19 @@ fun TogetherGuestScreen(
         else -> null
     }
     val showLeave = v != null && v.step != GuestStep.ENDED
+    val secondaryLabel = if (coreInstall != null) TogetherCopy.cancel else TogetherCopy.leave
+    val cancel: () -> Unit = {
+        if (coreInstall != null) controller.act(TogetherAction.CANCEL_CORE_INSTALL) else controller.end()
+    }
     val primary: () -> Unit = {
         when {
+            coreInstall != null -> controller.act(if (coreInstall.stalled) TogetherAction.RETRY_CORE_INSTALL else TogetherAction.INSTALL_CORE)
             picking -> choices.getOrNull(selected)?.let { controller.pick(it.gameId) }
             v?.step == GuestStep.ACTION_NEEDED -> action?.let {
                 when (it) {
                     TogetherAction.OPEN_SYSTEM -> onOpenSystem()
                     TogetherAction.OPEN_PPSSPP -> onOpenPpsspp()
-                    TogetherAction.OPEN_RETROARCH -> onOpenRetroArch()
+                    TogetherAction.OPEN_RETROARCH -> controller.act(it)
                     else -> controller.act(it)
                 }
             }
@@ -113,6 +124,7 @@ fun TogetherGuestScreen(
     }
     val hintsList = buildList {
         when {
+            coreInstall != null -> if (coreInstall.stalled) add(ControllerHint(ControllerGlyph.A, "Retry"))
             picking -> add(ControllerHint(ControllerGlyph.A, TogetherCopy.join))
             v?.step == GuestStep.ACTION_NEEDED -> action?.let { add(ControllerHint(ControllerGlyph.A, TogetherCopy.actionLabel(it))) }
             v?.step == GuestStep.INSTALLING_CORE -> add(ControllerHint(ControllerGlyph.A, TogetherCopy.recheck))
@@ -120,7 +132,7 @@ fun TogetherGuestScreen(
             streamClosed -> add(ControllerHint(ControllerGlyph.A, TogetherCopy.openStream))
         }
         // B is hidden in ENDED: A is Back there, and B → onBack() still works silently.
-        if (showLeave) add(ControllerHint(ControllerGlyph.B, TogetherCopy.leave))
+        if (showLeave) add(ControllerHint(ControllerGlyph.B, secondaryLabel))
     }
     LaunchedEffect(hintsList) { hints.set(hintsList) }
     Box(
@@ -129,7 +141,7 @@ fun TogetherGuestScreen(
             onUp = { if (picking && selected > 0) { selected--; true } else false },
             onDown = { if (picking && selected < choices.lastIndex) { selected++; true } else false },
             onA = { primary(); true },
-            onB = { if (v?.step == GuestStep.ENDED) onBack() else controller.end(); true },
+            onB = { if (v?.step == GuestStep.ENDED) onBack() else cancel(); true },
         ),
     ) {
         TogetherFrame(
@@ -140,7 +152,7 @@ fun TogetherGuestScreen(
                         TogetherCopy.withHost(view.hostName) + view.mode?.let { " · ${TogetherCopy.modeLabel(it)}" }.orEmpty()
                     },
                 )
-                Box(Modifier.stackY(188)) {
+                Column(Modifier.stackY(188).width(g.x(560)), verticalArrangement = Arrangement.spacedBy(g.x(10))) {
                     TogetherStatus(
                         when (v?.step) {
                             GuestStep.CONNECTING, GuestStep.WAITING_OFFER -> TogetherCopy.connecting(v?.hostName.orEmpty())
@@ -156,7 +168,7 @@ fun TogetherGuestScreen(
                             GuestStep.ENDED -> TogetherCopy.ended
                             null -> TogetherCopy.joining
                         },
-                        when (v?.step) {
+                        if (coreInstall != null) null else when (v?.step) {
                             GuestStep.ACTION_NEEDED -> v?.problem?.text
                             GuestStep.DOWNLOADING, GuestStep.CORE_SYNC -> v?.progress?.let { "$it%" }
                             GuestStep.INSTALLING_CORE -> TogetherCopy.installingCore
@@ -167,8 +179,9 @@ fun TogetherGuestScreen(
                         },
                         null,
                     )
+                    coreInstall?.let { CoreInstallStatus(it) }
                 }
-                if (v?.progress != null) {
+                if (v?.progress != null && coreInstall == null) {
                     Box(Modifier.stackY(302).width(g.x(560)).height(g.x(6)).background(ConsoleColors.Steel)) {
                         Box(Modifier.fillMaxWidth((v?.progress ?: 0).coerceIn(0, 100) / 100f).height(g.x(6)).background(ConsoleColors.Accent))
                     }
@@ -176,14 +189,14 @@ fun TogetherGuestScreen(
                 if (primaryLabel != null || showLeave) {
                     Row(Modifier.stackY(476), horizontalArrangement = Arrangement.spacedBy(g.x(16))) {
                         primaryLabel?.let { label ->
-                            PrimaryConsoleAction(label, true, { primary() }, modifier = Modifier.heightIn(min = g.x(84)))
+                            PrimaryConsoleAction(label, true, { primary() }, modifier = Modifier.heightIn(min = g.x(84)), enabled = primaryEnabled)
                         }
                         if (showLeave) {
-                            SecondaryConsoleAction(TogetherCopy.leave, false, { controller.end() }, Modifier.heightIn(min = g.x(84)))
+                            SecondaryConsoleAction(secondaryLabel, false, { cancel() }, Modifier.heightIn(min = g.x(84)))
                         }
                     }
                 }
-                v?.message?.takeIf { v?.step != GuestStep.IN_GAME && v?.step != GuestStep.ENDED && v?.step != GuestStep.PICKING_GAME }?.let { message ->
+                v?.message?.takeIf { coreInstall == null && v?.step != GuestStep.IN_GAME && v?.step != GuestStep.ENDED && v?.step != GuestStep.PICKING_GAME }?.let { message ->
                     Text(message, color = ConsoleColors.Warning, fontSize = g.t(16), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.stackY(580).width(g.x(560)))
                 }
             } },

@@ -116,7 +116,7 @@ class SiteSearchImpl(
         val files = withContext(io) { source.variants(entry.ref) }
         files.singleOrNull()?.let { HomeCopy.parseSize(it.size) }?.let { return sizeInfo(it) }
         val detailSize = withContext(io) { source.detail(entry.ref).size }
-        return HomeCopy.parseSize(detailSize)?.let { sizeInfo(it) }
+        return HomeCopy.parseSize(detailSize, allowBareBytes = false)?.let { sizeInfo(it) }
     }
 
     private suspend fun resolveName(id: String?, revision: String?): String? {

@@ -4,7 +4,6 @@ import android.content.Context
 import com.gamebex.client.GameBexApp
 import com.gamebex.client.data.Emu
 import com.gamebex.client.data.local.GameEntity
-import com.gamebex.client.data.local.RomStore
 import com.gamebex.client.launch.EmuRouter
 import com.gamebex.client.launch.GraphicsTuner
 import com.gamebex.client.launch.RetroCoreFetcher
@@ -15,7 +14,7 @@ import com.gamebex.client.together.CoreFile
 import com.gamebex.client.together.CoreResult
 import com.gamebex.client.together.Readiness
 import com.gamebex.client.together.Role
-import com.gamebex.client.together.TogetherCaps
+import com.gamebex.client.together.TogetherAction
 import com.gamebex.client.together.TogetherCopy
 import com.gamebex.client.together.TogetherLaunch
 import com.gamebex.client.together.TogetherMode
@@ -140,16 +139,7 @@ class TogetherEmulatorsImpl(ctx: Context) : TogetherEmulators {
                 is RetroCoreFetcher.StageResult.Staged -> result.file
                 is RetroCoreFetcher.StageResult.Failed -> return@withContext CoreResult.Failed(result.reason)
             }
-            val rom = if (TogetherCaps.SIDELOAD_WITHOUT_ROM) {
-                null
-            } else {
-                RomStore.resolveLaunchFile(context, game)
-            }
-            if (RetroCoreFetcher.sideloadCoreOnly(context, core, staged, rom)) {
-                CoreResult.Started
-            } else {
-                CoreResult.Failed(TogetherCopy.coreInstallBlocked)
-            }
+            installedResult(RetroCoreFetcher.installCore(context, core, staged, onProgress))
         }
     }
 
@@ -177,17 +167,16 @@ class TogetherEmulatorsImpl(ctx: Context) : TogetherEmulators {
                 RetroCoreFetcher.isUsableCore(file.length(), RetroCoreFetcher.readHeader(file)) &&
                 RetroCoreFetcher.readHeader(file, 20)?.let(RetroCoreFetcher::isAarch64Elf) == true
             if (!valid) return@withContext CoreResult.Failed(TogetherCopy.coreCopyFailed)
-            val rom = if (TogetherCaps.SIDELOAD_WITHOUT_ROM) {
-                null
-            } else {
-                RomStore.resolveLaunchFile(context, game)
-            }
-            if (RetroCoreFetcher.sideloadCoreOnly(context, build.core, file, rom)) {
-                CoreResult.Started
-            } else {
-                CoreResult.Failed(TogetherCopy.coreInstallBlocked)
-            }
+            installedResult(RetroCoreFetcher.installCore(context, build.core, file))
         }
+    }
+
+    private fun installedResult(result: RetroCoreFetcher.Result): CoreResult = when (result) {
+        is RetroCoreFetcher.Result.Fetched -> CoreResult.Started
+        is RetroCoreFetcher.Result.Failed -> CoreResult.Failed(
+            result.reason,
+            if (result.needsSetup) TogetherAction.OPEN_RETROARCH else TogetherAction.INSTALL_CORE,
+        )
     }
 
     override suspend fun launch(req: TogetherLaunch): EmuRouter.Outcome {

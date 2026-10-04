@@ -26,10 +26,9 @@ import com.gamebex.client.ui.presentation.Tone
 import com.gamebex.client.ui.presentation.label
 
 /**
- * Compact quick-play status: icon + short text +
- * at most one A action and B to dismiss, ≤520 wide. Busy states show a
- * neutral spinner and no controls (they never capture A/B). Color lives in
- * the icon only; the copy stays cream so the word carries the meaning.
+ * Quick-play status: A recovers, optional X recovery, B dismisses or cancels.
+ * Color lives in the icon only; the copy stays cream so the word carries the
+ * meaning.
  */
 @Composable
 fun LaunchStatusPanel(
@@ -37,6 +36,7 @@ fun LaunchStatusPanel(
     onAction: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    onSecondaryAction: () -> Unit = {},
 ) {
     val g = LocalConsoleGeometry.current
     val shape = RoundedCornerShape(g.x(ConsoleDesign.RADIUS_PANEL))
@@ -52,10 +52,17 @@ fun LaunchStatusPanel(
     ) {
         val iconMod = Modifier.padding(top = g.x(1)).size(g.x(20))
         when {
-            status.busy -> CircularProgressIndicator(
-                color = ConsoleColors.Accent, trackColor = ConsoleColors.Steel,
-                strokeWidth = g.x(2), modifier = iconMod,
-            )
+            status.busy -> {
+                val fraction = status.coreProgress?.fraction
+                if (fraction == null) CircularProgressIndicator(
+                    color = ConsoleColors.Accent, trackColor = ConsoleColors.Steel,
+                    strokeWidth = g.x(2), modifier = iconMod,
+                ) else CircularProgressIndicator(
+                    progress = { fraction },
+                    color = ConsoleColors.Accent, trackColor = ConsoleColors.Steel,
+                    strokeWidth = g.x(2), modifier = iconMod,
+                )
+            }
             status.tone == Tone.Blocked -> Icon(
                 Icons.Filled.Close, "Blocked", tint = ConsoleColors.Error, modifier = iconMod,
             )
@@ -69,12 +76,15 @@ fun LaunchStatusPanel(
                 color = if (status.busy) ConsoleColors.TextSecondary else ConsoleColors.TextPrimary,
                 fontSize = g.t(16), lineHeight = g.t(20), maxLines = 3,
             )
-            if (!status.busy) {
+            if (!status.busy || status.canCancel) {
                 Row(horizontalArrangement = Arrangement.spacedBy(g.x(20))) {
                     status.action?.let { a ->
                         PanelControl(ControllerGlyph.A, a.label(), strong = true, onClick = onAction)
                     }
-                    PanelControl(ControllerGlyph.B, "Dismiss", strong = false, onClick = onDismiss)
+                    status.secondaryAction?.let { a ->
+                        PanelControl(ControllerGlyph.X, a.label(), strong = true, onClick = onSecondaryAction)
+                    }
+                    PanelControl(ControllerGlyph.B, if (status.canCancel) "Cancel" else "Dismiss", strong = false, onClick = onDismiss)
                 }
             }
         }

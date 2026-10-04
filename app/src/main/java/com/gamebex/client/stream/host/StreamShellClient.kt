@@ -24,6 +24,7 @@ import com.gamebex.client.stream.shell.IStreamShell
 import com.gamebex.client.stream.shell.StreamShellService
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
@@ -42,6 +43,7 @@ class StreamShellClient private constructor(ctx: Context) : StreamHost {
     private var pending: CountDownLatch? = null
     @Volatile private var streaming = false
     @Volatile private var appCapture = false
+    private val captureEpoch = AtomicLong()
     @Volatile private var unboundAtMs = 0L
 
     /** The shell hands its encoder surfaces here; StreamAppCapture renders the shared app into them. */
@@ -54,7 +56,7 @@ class StreamShellClient private constructor(ctx: Context) : StreamHost {
     private val args: Shizuku.UserServiceArgs by lazy {
         val debuggable = (app.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
         Shizuku.UserServiceArgs(ComponentName(app.packageName, StreamShellService::class.java.name))
-            .daemon(false)
+            .daemon(true)
             .processNameSuffix("stream")
             .tag("gamebex-stream")
             .debuggable(debuggable)
@@ -86,6 +88,10 @@ class StreamShellClient private constructor(ctx: Context) : StreamHost {
     }
 
     override suspend fun start(config: StreamConfig): StreamStarted = withContext(Dispatchers.IO) {
+        val epoch = captureEpoch.incrementAndGet()
+        appCapture = false
+        StreamAppCapture.onEnded = null
+        withContext(Dispatchers.Main) { StreamAppCapture.stop() }
         if (ShizukuFiles.state(app) != ShizukuFiles.State.READY) {
             return@withContext StreamStarted(ok = false, error = StreamError.SHELL_UNAVAILABLE)
         }
@@ -100,31 +106,46 @@ class StreamShellClient private constructor(ctx: Context) : StreamHost {
         streaming = started.ok
         appCapture = started.ok && wanted.appCapture
         if (appCapture) {
-            StreamAppCapture.onEnded = { runCatching { remote?.stop() } }
+            StreamAppCapture.onEnded = { if (captureEpoch.get() == epoch) runCatching { svc.stop() } }
             runCatching { svc.setCaptureListener(captureListener) }.onFailure { Log.w(TAG, "capture listener failed", it) }
         }
         if (!started.ok) unbind()
         started
     }
 
+    override suspend fun gameLaunched() = withContext(Dispatchers.IO) {
+        remote?.let { svc -> runCatching { svc.gameLaunched() }.onFailure { Log.w(TAG, "audio launch notification failed", it) } }
+        Unit
+    }
+
     override suspend fun attachCapture() {
+        val epoch = captureEpoch.get()
         if (!appCapture) return
-        val shared = runCatching { StreamAppCapture.start(app) }
+        val shared = runCatching { StreamAppCapture.start(app) { appCapture && captureEpoch.get() == epoch } }
             .onFailure { Log.w(TAG, "app capture failed", it) }
             .getOrDefault(false)
-        if (!shared) {
+        if (!shared && appCapture && captureEpoch.get() == epoch) {
             withContext(Dispatchers.IO) { runCatching { remote?.useMirror() }.onFailure { Log.w(TAG, "mirror fallback failed", it) } }
         }
     }
 
     override suspend fun status(): StreamStatus? = withContext(Dispatchers.IO) {
-        val svc = remote ?: return@withContext null
-        runCatching { StreamJson.json.decodeFromString(StreamStatus.serializer(), svc.status()) }
-            .onFailure { Log.w(TAG, "status failed", it) }
-            .getOrNull()
+        val epoch = captureEpoch.get()
+        val status = remote?.let { svc ->
+            runCatching { StreamJson.json.decodeFromString(StreamStatus.serializer(), svc.status()) }
+                .onFailure { Log.w(TAG, "status failed", it) }
+                .getOrNull()
+        }
+        if (status?.running != true && appCapture && captureEpoch.compareAndSet(epoch, epoch + 1)) {
+            appCapture = false
+            StreamAppCapture.onEnded = null
+            withContext(Dispatchers.Main) { StreamAppCapture.stop() }
+        }
+        status
     }
 
     override suspend fun stop() = withContext(Dispatchers.IO) {
+        captureEpoch.incrementAndGet()
         streaming = false
         if (appCapture) {
             appCapture = false
@@ -168,7 +189,7 @@ class StreamShellClient private constructor(ctx: Context) : StreamHost {
         remote = null
         unboundAtMs = SystemClock.elapsedRealtime()
         main.post {
-            runCatching { Shizuku.unbindUserService(args, conn, true) }
+            runCatching { Shizuku.unbindUserService(args, conn, false) }
                 .onFailure { Log.w(TAG, "unbindUserService failed", it) }
         }
     }

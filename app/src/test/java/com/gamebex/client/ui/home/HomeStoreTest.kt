@@ -2,7 +2,14 @@ package com.gamebex.client.ui.home
 
 import com.gamebex.client.MainDispatcherRule
 import com.gamebex.client.awaitTrue
+import com.gamebex.client.data.Emu
 import com.gamebex.client.data.PlayStates
+import com.gamebex.client.launch.CoreInstallProgress
+import com.gamebex.client.launch.EmuRouter
+import com.gamebex.client.launch.RetroCoreFetcher
+import com.gamebex.client.ui.presentation.LaunchAction
+import com.gamebex.client.ui.presentation.LaunchStatus
+import com.gamebex.client.ui.presentation.launchStatusFor
 import com.gamebex.client.data.local.DownloadRecord
 import com.gamebex.client.data.local.FakeLibraryDb
 import com.gamebex.client.data.local.GameEntity
@@ -29,6 +36,7 @@ import com.gamebex.client.ui.home.model.SiteResult
 import com.gamebex.client.ui.home.model.SizeInfo
 import com.gamebex.source.RomEntry
 import com.gamebex.source.SourceRef
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -148,6 +156,12 @@ class HomeStoreTest {
         val downloads = FakeHomeDownloads()
         val device = FakeDeviceStatus()
         val launched = mutableListOf<Long>()
+        val launchModes = mutableListOf<Boolean>()
+        val installed = mutableListOf<Emu>()
+        var runtimeOpens = 0
+        var launchBehavior: suspend (Long, Boolean, (LaunchStatus?) -> Unit) -> Unit = { id, fresh, report ->
+            report(LaunchStatus.progress(id, "Launching…", fresh))
+        }
         val rescans = mutableListOf<Boolean>()
         var status: PlayStates.Status = ready
         var readinessCalls = 0
@@ -163,10 +177,13 @@ class HomeStoreTest {
                 if (readinessError) throw IllegalStateException("probe failed")
                 status
             },
-            launcher = { id, _, onStatus ->
+            launcher = { id, fresh, onStatus ->
                 launched += id
-                onStatus(com.gamebex.client.ui.presentation.LaunchStatus.progress(id, "Launching…"))
+                launchModes += fresh
+                launchBehavior(id, fresh, onStatus)
             },
+            beginInstall = { installed += it },
+            openRetroArch = { runtimeOpens++; null },
             rescan = { rescans += it },
             scope = scope,
             io = io,
@@ -348,8 +365,11 @@ class HomeStoreTest {
         awaitTrue { effects.isNotEmpty() }
         assertEquals(HomeEffect.Navigate(HomeDestination.Downloads), effects.last())
 
+        h.launchBehavior = { id, fresh, report ->
+            report(launchStatusFor(id, EmuRouter.Outcome.Failed("Try again."), fresh))
+        }
         h.store.onIntent(HomeIntent.Activate(CardKey.local(1)))
-        awaitTrue { h.store.model.value.status != null }
+        awaitTrue { h.store.model.value.status?.busy == false }
         h.store.onIntent(HomeIntent.DismissStatus)
         awaitTrue { h.store.model.value.status == null }
     }
@@ -479,6 +499,10 @@ class HomeStoreTest {
     /** A does nothing while a launch is in progress. */
     @Test fun activateIsIgnoredWhileALaunchIsBusy() = runTest {
         val h = vh(games = listOf(game(1, playCount = 1, lastPlayedMs = 1)))
+        h.launchBehavior = { id, fresh, report ->
+            report(LaunchStatus.coreInstall(id, CoreInstallProgress("snes9x"), fresh))
+            awaitCancellation()
+        }
         spin()
         h.store.onIntent(HomeIntent.Activate(CardKey.local(1)))
         spin()
@@ -491,6 +515,86 @@ class HomeStoreTest {
         h.store.onIntent(HomeIntent.DismissStatus)
         h.store.onIntent(HomeIntent.Activate(CardKey.local(1)))
         spin()
+        assertEquals(listOf(1L, 1L), h.launched)
+    }
+
+    @Test fun pressShowsProgressBeforeDispatchAndRejectsRapidDoubleResume() = runTest {
+        val h = vh(games = listOf(game(1, playCount = 1, lastPlayedMs = 1)))
+        spin()
+        h.store.onIntent(HomeIntent.Activate(CardKey.local(1)))
+        val status = h.store.model.value.status!!
+        assertEquals("Launching…", status.text)
+        assertTrue(status.busy)
+        h.store.onIntent(HomeIntent.Activate(CardKey.local(1)))
+        testScheduler.runCurrent()
+        assertEquals(listOf(1L), h.launched)
+    }
+
+    @Test fun homeCancelCancelsTheRealJobAndRetryPreservesResumeMode() = runTest {
+        val h = vh(games = listOf(game(1, playCount = 1, lastPlayedMs = 1)))
+        var cancelled = 0
+        h.launchBehavior = { id, fresh, report ->
+            report(LaunchStatus.coreInstall(id, CoreInstallProgress("snes9x", 1_048_576, 4_194_304), fresh))
+            try { awaitCancellation() } finally { cancelled++ }
+        }
+        spin()
+        h.store.onIntent(HomeIntent.Activate(CardKey.local(1)))
+        testScheduler.runCurrent()
+        assertEquals("Downloading 1.0 of 4.0 MB", h.store.model.value.status!!.text)
+        assertTrue(h.store.model.value.status!!.canCancel)
+        h.store.onIntent(HomeIntent.DismissStatus)
+        testScheduler.runCurrent()
+        assertEquals(1, cancelled)
+        assertEquals(LaunchAction.Retry, h.store.model.value.status!!.action)
+        h.store.onIntent(HomeIntent.RetryStatus)
+        testScheduler.runCurrent()
+        assertEquals(listOf(1L, 1L), h.launched)
+        assertEquals(listOf(false, false), h.launchModes)
+        h.store.onIntent(HomeIntent.DismissStatus)
+        testScheduler.runCurrent()
+    }
+
+    @Test fun setupGuidanceOpensRetroArchOnceWithoutInstallingOrSilentlyReplayingResume() = runTest {
+        val h = vh(games = listOf(game(1, playCount = 1, lastPlayedMs = 1)))
+        h.launchBehavior = { id, fresh, report ->
+            report(launchStatusFor(id, EmuRouter.Outcome.NeedsSetup(RetroCoreFetcher.INSTALL_SETUP_GUIDANCE), fresh, retroCore = true))
+        }
+        spin()
+        h.store.onIntent(HomeIntent.Activate(CardKey.local(1)))
+        testScheduler.runCurrent()
+        assertEquals(RetroCoreFetcher.INSTALL_SETUP_GUIDANCE, h.store.model.value.status!!.text)
+        h.store.onIntent(HomeIntent.RetryStatus) // A is the advertised Open RetroArch action.
+        testScheduler.runCurrent()
+        assertEquals(1, h.runtimeOpens)
+        assertTrue(h.installed.isEmpty())
+        assertEquals(listOf(1L), h.launched)
+        h.store.onIntent(HomeIntent.SecondaryStatus)
+        testScheduler.runCurrent()
+        assertEquals(listOf(1L, 1L), h.launched)
+        assertEquals(listOf(false, false), h.launchModes)
+    }
+
+    @Test fun homeStatusActionsRouteDetailsAndInstallationInsteadOfRetrying() = runTest {
+        val h = vh(games = listOf(game(1, playCount = 1, lastPlayedMs = 1)))
+        val effects = mutableListOf<HomeEffect>()
+        backgroundScope.launch { h.store.effects.collect { effects += it } }
+        h.launchBehavior = { id, fresh, report ->
+            report(launchStatusFor(id, EmuRouter.Outcome.NeedsSetup("Import it first."), fresh))
+        }
+        spin()
+        h.store.onIntent(HomeIntent.Activate(CardKey.local(1)))
+        testScheduler.runCurrent()
+        h.store.onIntent(HomeIntent.RetryStatus)
+        testScheduler.runCurrent()
+        assertTrue(effects.contains(HomeEffect.Navigate(HomeDestination.Game(1))))
+        assertEquals(listOf(1L), h.launched)
+        h.launchBehavior = { id, fresh, report -> report(launchStatusFor(id, EmuRouter.Outcome.MissingEmu(Emu.RETROARCH), fresh)) }
+        h.store.onIntent(HomeIntent.Activate(CardKey.local(1)))
+        testScheduler.runCurrent()
+        h.store.onIntent(HomeIntent.RetryStatus)
+        testScheduler.runCurrent()
+        assertEquals(listOf(Emu.RETROARCH), h.installed)
+        assertTrue(effects.contains(HomeEffect.Navigate(HomeDestination.System)))
         assertEquals(listOf(1L, 1L), h.launched)
     }
 

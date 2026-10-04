@@ -1,5 +1,6 @@
 package com.gamebex.client.together
 
+import com.gamebex.client.launch.CoreInstallProgress
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -137,6 +138,7 @@ sealed interface LinkMsg {
         val width: Int,
         val height: Int,
         val audio: Boolean,
+        val audioTimestampOrigin: String = "capture",
     ) : LinkMsg
 
     @Serializable @SerialName("ping")
@@ -174,6 +176,7 @@ enum class TogetherAction {
     RECHECK, OPEN_SYSTEM, OPEN_PPSSPP, OPEN_RETROARCH, INSTALL_CORE, COPY_CORE, DOWNLOAD, USE_ANYWAY,
     /** Guest, STREAM: reopen the stream viewer. */
     OPEN_STREAM,
+    CANCEL_CORE_INSTALL, RETRY_CORE_INSTALL,
 }
 
 data class Problem(val text: String, val action: TogetherAction?)
@@ -208,6 +211,7 @@ data class HostView(
     val altModes: List<TogetherMode> = emptyList(),
     /** STREAM, IN_GAME: "Streaming to Sam · 60 fps · 7.9 Mbps", refreshed every 2 s. */
     val streamLine: String? = null,
+    val coreInstall: CoreInstallProgress? = null,
 ) {
     val canStart: Boolean get() = step == HostStep.JOINED && guestPhase == GuestPhase.READY
 }
@@ -239,4 +243,5 @@ data class GuestView(
     val linkLost: Boolean = false,
     /** ENDED reason, or a transient line (e.g. roomOpen). */
     val message: String? = null,
+    val coreInstall: CoreInstallProgress? = null,
 )

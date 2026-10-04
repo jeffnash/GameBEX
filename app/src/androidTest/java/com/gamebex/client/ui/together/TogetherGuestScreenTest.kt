@@ -4,6 +4,9 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -17,12 +20,18 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 
+import com.gamebex.client.launch.CoreInstallProgress
 import com.gamebex.client.together.GuestStep
+import com.gamebex.client.together.Problem
+import com.gamebex.client.together.TogetherAction
 import com.gamebex.client.together.TogetherCopy
 import com.gamebex.client.together.TogetherMode
 import com.gamebex.client.ui.console.ConsoleDesign
 import com.gamebex.client.ui.console.ConsoleHints
 import com.gamebex.client.ui.console.ControllerGlyph
+import com.gamebex.client.ui.game.CORE_INSTALL_MESSAGE_TAG
+import com.gamebex.client.ui.game.CORE_INSTALL_PROGRESS_TAG
+import com.gamebex.client.ui.game.CORE_INSTALL_SPINNER_TAG
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
@@ -50,6 +59,99 @@ class TogetherGuestScreenTest {
         rule.setTogetherContent { hints -> TogetherGuestScreen(fake, TogetherUiTestSupport.rail, hints, {}, {}, {}) }
         rule.onRoot().performKeyInput { pressKey(Key.ButtonA) }
         assertEquals(com.gamebex.client.together.TogetherAction.DOWNLOAD, fake.lastAction)
+    }
+
+    @Test fun ownedCoreInstallShowsImmediateSpinnerAndRepeatedAOnlyReShowsProgress() {
+        val fake = FakeTogetherController().also {
+            it.setGuest(TogetherFixtures.guest("installing-core").copy(coreInstall = CoreInstallProgress("snes9x")))
+        }
+        var captured: ConsoleHints? = null
+        rule.setTogetherContent { hints ->
+            captured = hints
+            TogetherGuestScreen(fake, TogetherUiTestSupport.rail, hints, {}, {}, {})
+        }
+        rule.onNodeWithTag(CORE_INSTALL_SPINNER_TAG).assertIsDisplayed()
+        rule.onNodeWithTag(CORE_INSTALL_MESSAGE_TAG).assertIsDisplayed()
+        rule.onNodeWithTag(CORE_INSTALL_PROGRESS_TAG).assertDoesNotExist()
+        rule.onNodeWithText("Installing core…", ignoreCase = true).assertIsNotEnabled()
+        rule.runOnIdle {
+            assertTrue(captured!!.hints.none { it.glyph == ControllerGlyph.A })
+            assertEquals(TogetherCopy.cancel, captured!!.hints.single { it.glyph == ControllerGlyph.B }.text)
+        }
+        rule.onRoot().performKeyInput { pressKey(Key.ButtonA); pressKey(Key.ButtonA) }
+        assertEquals(TogetherAction.INSTALL_CORE, fake.lastAction)
+        rule.onNodeWithText(TogetherCopy.cancel, ignoreCase = true).performClick()
+        assertEquals(TogetherAction.CANCEL_CORE_INSTALL, fake.lastAction)
+        assertEquals(0, fake.ended)
+    }
+
+    @Test fun ownedCoreInstallShowsByteProgressThenInstallingSentinelWithoutOldPercentBar() {
+        val progress = CoreInstallProgress("snes9x", read = 2_097_152L, total = 8_388_608L)
+        val fake = FakeTogetherController().also {
+            it.setGuest(TogetherFixtures.guest("installing-core").copy(coreInstall = progress, progress = 25))
+        }
+        rule.setTogetherContent { hints -> TogetherGuestScreen(fake, TogetherUiTestSupport.rail, hints, {}, {}, {}) }
+        rule.onNodeWithText("Downloading 2.0 of 8.0 MB").assertIsDisplayed()
+        val bar = rule.onNodeWithTag(CORE_INSTALL_PROGRESS_TAG).assertIsDisplayed().fetchSemanticsNode()
+        assertEquals(0.25f, bar.config[SemanticsProperties.ProgressBarRangeInfo].current, 0.001f)
+        rule.runOnIdle { fake.setGuest(fake.guest.value!!.copy(coreInstall = progress.copy(installing = true), progress = null)) }
+        rule.onNodeWithText("Installing in RetroArch…").assertIsDisplayed()
+        rule.onNodeWithTag(CORE_INSTALL_SPINNER_TAG).assertIsDisplayed()
+        rule.onNodeWithTag(CORE_INSTALL_PROGRESS_TAG).assertDoesNotExist()
+    }
+
+    @Test fun stalledCoreInstallRetryAndBRemainInsideSession() {
+        val fake = FakeTogetherController().also {
+            it.setGuest(TogetherFixtures.guest("installing-core").copy(coreInstall = CoreInstallProgress("snes9x", stalled = true)))
+        }
+        var backs = 0
+        var captured: ConsoleHints? = null
+        rule.setTogetherContent { hints ->
+            captured = hints
+            TogetherGuestScreen(fake, TogetherUiTestSupport.rail, hints, { backs++ }, {}, {})
+        }
+        rule.onNodeWithText("Still working…").assertIsDisplayed()
+        rule.onNodeWithText("Retry", ignoreCase = true).assertIsEnabled().performClick()
+        assertEquals(TogetherAction.RETRY_CORE_INSTALL, fake.lastAction)
+        rule.onRoot().performKeyInput { pressKey(Key.ButtonB) }
+        assertEquals(TogetherAction.CANCEL_CORE_INSTALL, fake.lastAction)
+        assertEquals(0, fake.ended)
+        assertEquals(0, backs)
+        rule.runOnIdle {
+            assertEquals("Retry", captured!!.hints.single { it.glyph == ControllerGlyph.A }.text)
+            assertEquals(TogetherCopy.cancel, captured!!.hints.single { it.glyph == ControllerGlyph.B }.text)
+        }
+    }
+
+    @Test fun ownedCoreInstallStatusFitsAboveActionsAtEveryTextScale() {
+        val fake = FakeTogetherController().also {
+            it.setGuest(TogetherFixtures.guest("installing-core").copy(
+                coreInstall = CoreInstallProgress("snes9x", read = 2_097_152L, total = 8_388_608L)))
+        }
+        val display = TestDisplay()
+        rule.setTogetherContentAt(display) { hints -> TogetherGuestScreen(fake, TogetherUiTestSupport.rail, hints, {}, {}, {}) }
+        for ((textScale, fontScale) in listOf(1f to 1f, 1.25f to 1f, 1.4f to 1f, 1.4f to 1.3f)) {
+            rule.runOnIdle { display.textScale = textScale; display.fontScale = fontScale }
+            val message = rule.onNodeWithTag(CORE_INSTALL_MESSAGE_TAG)
+            assertFalse("$textScale x $fontScale: progress is cut", message.textIsCut())
+            val action = rule.onNodeWithText("Installing core…", ignoreCase = true).box()
+            assertTrue(message.box().bottom < action.top)
+            assertTrue(rule.onNodeWithTag(CORE_INSTALL_PROGRESS_TAG).box().bottom < action.top)
+        }
+    }
+
+    @Test fun openRetroArchUsesEngineActionInsteadOfCompatibilityCallback() {
+        val fake = FakeTogetherController().also {
+            it.setGuest(TogetherFixtures.guest("action-needed").copy(
+                problem = Problem("Open RetroArch once.", TogetherAction.OPEN_RETROARCH)))
+        }
+        var opens = 0
+        rule.setTogetherContent { hints ->
+            TogetherGuestScreen(fake, TogetherUiTestSupport.rail, hints, {}, {}, {}, onOpenRetroArch = { opens++ })
+        }
+        rule.onRoot().performKeyInput { pressKey(Key.ButtonA) }
+        assertEquals(TogetherAction.OPEN_RETROARCH, fake.lastAction)
+        assertEquals(0, opens)
     }
 
     @Test fun endedWithMessageWaitsForBack() {
