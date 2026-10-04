@@ -4,7 +4,12 @@ import com.gamebex.client.stream.StreamCaps
 import java.util.ArrayDeque
 
 class DeadlineQueue(deadlineMs: Int = 0) {
-    data class Result(val dropped: Int, val requestKeyframe: Boolean, val pressure: Boolean)
+    enum class Reason { NONE, COUNT, AGE, COUNT_AND_AGE, EPOCH, AWAIT_KEY, STALE_POLLED }
+    data class Result(
+        val dropped: Int, val requestKeyframe: Boolean, val pressure: Boolean,
+        val reason: Reason = Reason.NONE, val ageNs: Long = 0L, val depth: Int = 0,
+        val incomingReason: Reason = Reason.NONE,
+    )
     data class Entry(val frame: EncodedFrame, val queuedNs: Long, val revision: Long)
 
     private val deadline = if (deadlineMs == 40) 40_000_000L else 0L
@@ -37,27 +42,42 @@ class DeadlineQueue(deadlineMs: Int = 0) {
     fun ageNs(now: Long): Long = frames.peekFirst()?.let { age(it, now) } ?: 0L
 
     fun offer(frame: EncodedFrame, now: Long): Result {
-        if (frame.codecEpoch != epoch) return Result(1, false, false)
+        if (frame.codecEpoch != epoch) return Result(1, false, false, Reason.EPOCH, depth = size,
+            incomingReason = Reason.EPOCH)
         var dropped = 0
+        val depth = size
+        val oldestAgeNs = ageNs(now)
         val oldestExpired = frames.peekFirst()?.let { expired(it, now) } == true
-        val pressure = size >= limit || oldestExpired
+        val countPressure = size >= limit
+        val pressure = countPressure || oldestExpired
+        val reason = when {
+            countPressure && oldestExpired -> Reason.COUNT_AND_AGE
+            countPressure -> Reason.COUNT
+            oldestExpired -> Reason.AGE
+            else -> Reason.NONE
+        }
         if (pressure) dropped += clear()
         val entry = Entry(frame, now, revision)
         if (deadline != 0L && frame.encodedNs <= 0L) ageFallbacks++
         val incomingExpired = deadline != 0L && expired(entry, now)
         if (incomingExpired || (waitingForKey && !frame.key)) {
             if (incomingExpired && !waitingForKey) dropped += clear()
-            return Result(dropped + 1, true, pressure || incomingExpired)
+            val incomingReason = if (incomingExpired) Reason.AGE else Reason.AWAIT_KEY
+            return Result(dropped + 1, true, pressure || incomingExpired,
+                if (pressure) reason else incomingReason,
+                if (pressure) oldestAgeNs else age(entry, now), depth, incomingReason)
         }
         frames.addLast(entry)
         waitingForKey = false
-        return Result(dropped, false, pressure)
+        return Result(dropped, false, pressure, reason, oldestAgeNs, depth)
     }
 
     fun poll(now: Long): Pair<Entry?, Result> {
         if (deadline != 0L && frames.peekFirst()?.let { expired(it, now) } == true) {
+            val ageNs = ageNs(now)
+            val depth = size
             val count = clear()
-            return null to Result(count, true, true)
+            return null to Result(count, true, true, Reason.AGE, ageNs, depth)
         }
         return frames.pollFirst() to Result(0, false, false)
     }

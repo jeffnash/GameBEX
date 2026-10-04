@@ -42,13 +42,16 @@ class TogetherServiceTest {
         try {
             platform.startService("Waiting for the other phone")
             awaitNotification("ongoing notification ${TogetherPlatformImpl.NOTIF_ID} was not posted") {
-                manager.activeNotifications.any { it.id == TogetherPlatformImpl.NOTIF_ID }
+                ongoingText(manager) == "Waiting for the other phone"
             }
             assertEquals(
                 TogetherPlatformImpl.ONGOING_CHANNEL_ID,
                 manager.activeNotifications.first { it.id == TogetherPlatformImpl.NOTIF_ID }.notification.channelId,
             )
             platform.updateService("Updated text")
+            awaitNotification("ongoing notification text was not updated") {
+                ongoingText(manager) == "Updated text"
+            }
             assertEquals(
                 "Updated text",
                 manager.activeNotifications.first { it.id == TogetherPlatformImpl.NOTIF_ID }

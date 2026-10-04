@@ -99,6 +99,18 @@ class BrowseViewModelTest {
         assertEquals(null, saved.get<String>("console:s"))
     }
 
+    @Test fun everyNonEmptyFeedIsListed(): Unit = runBlocking {
+        val source = FakeRomSource("s").apply {
+            consolesResult = (1..40).map { CatalogFixtures.console(id = "c$it", name = "Console $it") } +
+                CatalogFixtures.console(id = "none", count = 0)
+        }
+        val access = access(source)
+        access.select("s")
+        val vm = vm(access)
+        awaitTrue { !vm.loading.value }
+        assertEquals((1..40).map { "c$it" }, vm.consoles.value.map { it.id })
+    }
+
     @Test fun libraryFlowReachesGames(): Unit = runBlocking {
         val access = access(FakeRomSource("s"))
         access.select("s")

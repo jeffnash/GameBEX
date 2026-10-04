@@ -104,6 +104,8 @@ data class SizeInfo(val bytes: Long?, val label: String)
     data class SiteSearch(val query: String) : HomeDestination
     data object Sources : HomeDestination
     data object System : HomeDestination
+    /** The Play together hub (Home header pill). */
+    data object Together : HomeDestination
     @Immutable
     data class Game(val gameId: Long) : HomeDestination
     @Immutable

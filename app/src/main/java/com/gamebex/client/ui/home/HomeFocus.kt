@@ -246,6 +246,7 @@ object HomeFocus {
             is HomeDestination.Library -> HeaderItem.LIBRARY
             HomeDestination.Discover -> HeaderItem.BROWSE
             HomeDestination.Downloads -> HeaderItem.DOWNLOADS
+            HomeDestination.Together -> HeaderItem.TOGETHER
             HomeDestination.System -> HeaderItem.SYSTEM
             else -> null
         }
@@ -280,6 +281,7 @@ object HomeFocus {
                 HeaderItem.LIBRARY -> FocusResult(s, HomeIntent.Nav(HomeDestination.Library()))
                 HeaderItem.BROWSE -> FocusResult(s, HomeIntent.Nav(HomeDestination.Discover))
                 HeaderItem.DOWNLOADS -> FocusResult(s, HomeIntent.Nav(HomeDestination.Downloads))
+                HeaderItem.TOGETHER -> FocusResult(s, HomeIntent.Nav(HomeDestination.Together))
                 HeaderItem.SYSTEM -> FocusResult(s, HomeIntent.Nav(HomeDestination.System))
             }
         }

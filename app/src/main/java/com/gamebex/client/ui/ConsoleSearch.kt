@@ -48,6 +48,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.gamebex.client.GameBexApp
 import com.gamebex.client.R
 import com.gamebex.client.data.RomEntry
@@ -72,6 +73,9 @@ import com.gamebex.client.ui.console.consoleKeys
 import com.gamebex.client.ui.console.rememberScreenFocus
 import com.gamebex.client.ui.console.rememberShelfState
 import com.gamebex.client.ui.console.screenFocus
+import com.gamebex.client.ui.discover.SystemChipRow
+import com.gamebex.client.ui.discover.searchSystemChips
+import com.gamebex.client.ui.discover.systemChipIndex
 import com.gamebex.client.ui.presentation.CatalogMatch
 import com.gamebex.client.ui.presentation.folderForCatalogEntry
 import com.gamebex.client.ui.presentation.matchCatalog
@@ -95,8 +99,8 @@ const val QUERY_SETTLE_MS = 450L
 fun consoleSearchState(state: SearchState, queryStable: Boolean): SearchState =
     if (state == SearchState.EMPTY && !queryStable) SearchState.LOADING else state
 
-/** Focus zones of the console Search screen. */
-enum class SearchZone { FIELD, LIST, PREVIEW }
+/** Focus zones of the console Search screen; CHIPS (system chips) sits between field and list. */
+enum class SearchZone { FIELD, LIST, PREVIEW, CHIPS }
 
 /** What B does in the current focus context. */
 enum class SearchBack { STOP_EDITING, TO_FIELD, LEAVE }
@@ -178,18 +182,15 @@ private fun availabilityColor(a: SearchAvailability): Color = when (a) {
     SearchAvailability.AVAILABLE -> ConsoleColors.TextSecondary
 }
 
-// ---- Screen ----------------------------------------------------------------
-
 /** Design canvas x → content-box-local design px (content starts after the rail). */
 private fun cx(canvasX: Int): Int = canvasX - ConsoleDesign.RAIL_WIDTH.toInt()
 
 /**
- * Catalog Search in the console shell: field over a 760-wide
- * list with a preview pane following list focus, driven by [SearchViewModel].
- *
- * Controller: entry focuses the field and opens text input; submit or Down
- * moves to the first result; Right enters the preview; A opens the catalog
- * detail; X removes a focused recent search; B walks back list → field → leave (see [resolveSearchBack]).
+ * Controller: entry focuses the field and opens text input; submit moves to
+ * the first result; Down walks field → system chips → list; on the chips
+ * Left/Right move and A narrows the search to that system; Right from the
+ * list enters the preview; A opens the catalog detail; X removes a focused
+ * recent search; B walks back list/chips → field → leave (see [resolveSearchBack]).
  */
 @Composable
 fun ConsoleSearchScreen(
@@ -201,6 +202,8 @@ fun ConsoleSearchScreen(
     onSources: () -> Unit,
 ) {
     val g = LocalConsoleGeometry.current
+    val searchHeight = g.hitMin(g.x(56))
+    val chipGeometry = librarySearchGeometry(g.scale, searchHeight.value)
     val query by vm.query.collectAsState()
     val results by vm.results.collectAsState()
     val searching by vm.searching.collectAsState()
@@ -209,7 +212,12 @@ fun ConsoleSearchScreen(
     val sourceName by vm.sourceName.collectAsState()
     val recentAll by vm.recent.collectAsState()
     val recent = consoleRecent(recentAll)
- // Typing settles for the VM's debounce before "no results" is claimed.
+    val consoles by vm.consoles.collectAsState()
+    val system by vm.system.collectAsState()
+    val chips = remember(consoles) { searchSystemChips(consoles) }
+    val showChips = chips.size > 1
+    val selectedChip = systemChipIndex(chips, system)
+    // Typing settles for the VM's debounce before "no results" is claimed.
     var queryStable by remember(query) { mutableStateOf(false) }
     LaunchedEffect(query) {
         delay(QUERY_SETTLE_MS)
@@ -217,7 +225,7 @@ fun ConsoleSearchScreen(
     }
     val state = consoleSearchState(resolveSearchState(query, searching, results.size, error), queryStable)
 
- // Availability: library ownership + newest download per catalog entry.
+    // Availability: library ownership + newest download per catalog entry.
     val app = LocalContext.current.applicationContext as GameBexApp
     val games by remember { LibraryDb.get(app).games().observeAll() }
         .collectAsState(initial = emptyList<GameEntity>())
@@ -240,22 +248,27 @@ fun ConsoleSearchScreen(
     var zoneIdx by rememberSaveable { mutableIntStateOf(SearchZone.FIELD.ordinal) }
     val zone = SearchZone.entries[zoneIdx]
     var editing by remember { mutableStateOf(false) }
- // Query when the field last took focus: "unchanged" for B-to-leave.
+    // Query when the field last took focus: "unchanged" for B-to-leave.
     var fieldBaseline by rememberSaveable { mutableStateOf(query) }
     var entered by rememberSaveable { mutableStateOf(false) }
     var savedSel by rememberSaveable { mutableIntStateOf(0) }
     var listIdentity by rememberSaveable { mutableStateOf("") }
+    // Chip under D-pad focus; snaps to the selected system when it changes.
+    var chipFocus by rememberSaveable { mutableIntStateOf(selectedChip) }
+    LaunchedEffect(selectedChip) { chipFocus = selectedChip }
 
     val listCount = searchListCount(state, results.size, recent.size)
     val shelf = rememberShelfState(maxOf(listCount, 1), initial = savedSel)
     savedSel = shelf.selected
- // New list content (not a nav return) starts at the top.
+    // New list content (not a nav return) starts at the top.
     val identity = state.name + ":" + (if (state == SearchState.RESULTS) resultKeys.hashCode() else recent.hashCode())
     LaunchedEffect(identity) {
         if (listIdentity.isNotEmpty() && listIdentity != identity) shelf.select(0)
         listIdentity = identity
     }
-    if (listCount == 0 && zone != SearchZone.FIELD) zoneIdx = SearchZone.FIELD.ordinal
+    // The chips stay focusable while a re-run search is loading or empty.
+    if (listCount == 0 && (zone == SearchZone.LIST || zone == SearchZone.PREVIEW)) zoneIdx = SearchZone.FIELD.ordinal
+    if (zone == SearchZone.CHIPS && !showChips) zoneIdx = SearchZone.FIELD.ordinal
     if (zone == SearchZone.PREVIEW && state != SearchState.RESULTS) zoneIdx = SearchZone.LIST.ordinal
     val listState = rememberLazyListState()
     FollowSelected(listState, shelf.selected, listCount)
@@ -284,13 +297,24 @@ fun ConsoleSearchScreen(
         setZone(SearchZone.LIST)
         shelf.select(0)
     }
+    fun toChips() {
+        if (editing) stopEditing()
+        chipFocus = selectedChip
+        setZone(SearchZone.CHIPS)
+    }
+    /** Narrows to chip [i]'s system; the VM re-runs the current query. */
+    fun pickChip(i: Int) {
+        val chip = chips.getOrNull(i) ?: return
+        chipFocus = i
+        vm.selectSystem(chip.id)
+    }
     var submitJob by remember { mutableStateOf<Job?>(null) }
     fun submit() {
         vm.commitRecent(query)
         stopEditing()
         fieldBaseline = query
         if (query.isBlank()) return
- // Wait past the VM's 350ms debounce, then for the fetch to settle.
+        // Wait past the VM's 350ms debounce, then for the fetch to settle.
         submitJob?.cancel()
         submitJob = scope.launch {
             delay(400)
@@ -315,8 +339,8 @@ fun ConsoleSearchScreen(
     }
     fun failureAction() = if (unavailable) onSources() else vm.retry()
 
- // Entry: focus the field and open text input once the root focus grant
- // (two frames in rememberScreenFocus) has settled. Nav returns restore.
+    // Entry: focus the field and open text input once the root focus grant
+    // (two frames in rememberScreenFocus) has settled. Nav returns restore.
     LaunchedEffect(Unit) {
         if (!entered) {
             entered = true
@@ -335,6 +359,7 @@ fun ConsoleSearchScreen(
                     ControllerHint(ControllerGlyph.A, "Search"), back,
                 )
                 zone == SearchZone.FIELD -> listOf(ControllerHint(ControllerGlyph.A, "Type"), back)
+                zone == SearchZone.CHIPS -> listOf(ControllerHint(ControllerGlyph.A, "Filter"), back)
                 zone == SearchZone.PREVIEW -> listOf(
                     ControllerHint(ControllerGlyph.A, primaryLabel), back,
                 )
@@ -358,28 +383,33 @@ fun ConsoleSearchScreen(
             .consoleKeys(
                 onUp = {
                     when (zone) {
-                        SearchZone.LIST -> if (shelf.selected > 0) shelf.left() else { toField(); true }
+                        SearchZone.LIST -> if (shelf.selected > 0) shelf.left()
+                        else { if (showChips) toChips() else toField(); true }
+                        SearchZone.CHIPS -> { toField(); true }
                         else -> true
                     }
                 },
                 onDown = {
                     when (zone) {
-                        SearchZone.FIELD -> { toList(); true }
+                        SearchZone.FIELD -> { if (showChips) toChips() else toList(); true }
+                        SearchZone.CHIPS -> { toList(); true }
                         SearchZone.LIST -> shelf.right()
                         SearchZone.PREVIEW -> true
                     }
                 },
- // While typing, Left/Right fall through to the text cursor.
+                // While typing, Left/Right fall through to the text cursor.
                 onLeft = {
                     when {
                         editing -> false
                         zone == SearchZone.PREVIEW -> { setZone(SearchZone.LIST); true }
+                        zone == SearchZone.CHIPS && chipFocus > 0 -> { chipFocus--; true }
                         else -> railHost?.enterRail() ?: false
                     }
                 },
                 onRight = {
                     when {
                         editing -> false
+                        zone == SearchZone.CHIPS && chipFocus < chips.size - 1 -> { chipFocus++; true }
                         zone == SearchZone.LIST && selectedEntry != null -> { setZone(SearchZone.PREVIEW); true }
                         else -> false
                     }
@@ -387,6 +417,7 @@ fun ConsoleSearchScreen(
                 onA = {
                     when (zone) {
                         SearchZone.FIELD -> if (editing) submit() else startEditing()
+                        SearchZone.CHIPS -> pickChip(chipFocus)
                         SearchZone.PREVIEW -> selectedEntry?.let { open(it) }
                         SearchZone.LIST -> when (state) {
                             SearchState.IDLE -> recent.getOrNull(shelf.selected)?.let { pickRecent(it) }
@@ -439,14 +470,29 @@ fun ConsoleSearchScreen(
             onTap = { startEditing() },
             onSubmit = { submit() },
             modifier = Modifier.offset(x = g.x(cx(120)), y = g.x(92))
-                .size(g.x(680), g.hitMin(g.x(56))),
+                .size(g.x(680), searchHeight),
         )
 
- // Results list: x120, y176, 760 wide, bottom y648.
+        // System chips share Library's search geometry (chips y164, list y220).
+        if (showChips) {
+            SystemChipRow(
+                chips = chips,
+                selected = selectedChip,
+                focused = chipFocus.takeIf { zone == SearchZone.CHIPS },
+                onPick = { i ->
+                    if (editing) stopEditing()
+                    setZone(SearchZone.CHIPS)
+                    pickChip(i)
+                },
+                modifier = Modifier.offset(x = g.x(cx(120)), y = chipGeometry.chipTop.dp).width(g.x(760)),
+            )
+        }
+
+        val listTop = if (showChips) chipGeometry.listTop.dp else g.x(176)
         Box(
             modifier = Modifier
-                .offset(x = g.x(cx(120)), y = g.x(176))
-                .size(g.x(760), g.x(648 - 176)),
+                .offset(x = g.x(cx(120)), y = listTop)
+                .size(g.x(760), g.x(648) - listTop),
         ) {
             when (state) {
                 SearchState.RESULTS -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
@@ -592,7 +638,7 @@ private fun ResultRow(
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
- // Fixed trailing status column (min width) so labels never jitter.
+        // Fixed trailing status column (min width) so labels never jitter.
         Box(modifier = Modifier.widthIn(min = g.x(80)), contentAlignment = Alignment.CenterEnd) {
             searchAvailabilityTag(availability)?.let {
                 Text(

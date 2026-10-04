@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import com.gamebex.client.R
+import com.gamebex.client.together.TogetherCopy
 import com.gamebex.client.ui.console.ConsoleColors
 import com.gamebex.client.ui.console.ConsoleDesign
 import com.gamebex.client.ui.console.ConsoleGeometry
@@ -84,9 +85,9 @@ internal fun parseBrowseLabel(label: String): BrowseParts {
 
 /**
  * Header fit rules, in device pixels:
- * - the search field shrinks before any nav item may clip;
- * - when [fixedPx] + the search hit floor + the full nav row exceed the row,
- * the Browse pill collapses to "☁ Browse".
+ *  - the search field shrinks before any nav item may clip;
+ *  - when [fixedPx] + the search hit floor + the full nav row exceed the row,
+ *    the Browse pill collapses to "☁ Browse".
  */
 internal fun browseCollapses(
     rowWidthPx: Int,
@@ -103,14 +104,14 @@ internal fun searchWidthPx(
     maxSearchPx: Int,
 ): Int = (rowWidthPx - fixedPx - navPx).coerceIn(0, maxSearchPx)
 
-enum class HeaderItem { SEARCH, LIBRARY, BROWSE, DOWNLOADS, SYSTEM }
+enum class HeaderItem { SEARCH, LIBRARY, BROWSE, DOWNLOADS, TOGETHER, SYSTEM }
 
 /**
  * Home header: logo, search field, then nav pills
- * (Library · Browse {site} · Downloads {badge} · System {⚠ n}). Every hit box
+ * (Library · Browse {site} · Downloads {badge} · Together · System {⚠ n}). Every hit box
  * is at least 84×84; a pill tap calls [onNav], a field tap calls [onSearchTap].
  *
- * Fix round F3: the row is a [SubcomposeLayout] so the nav pills are measured
+ * The row is a [SubcomposeLayout] so the nav pills are measured
  * at their real widths first — the search field then shrinks (never past its
  * hit floor) before any nav item may clip, "Browse {site}" caps the site name
  * with an ellipsis and collapses to "☁ Browse" when even that doesn't fit, and
@@ -129,9 +130,9 @@ fun HomeHeader(
     onClear: () -> Unit,
     onNav: (HomeDestination) -> Unit,
     modifier: Modifier = Modifier,
- /** Real editor focus changes (tap-on-text starts editing). */
+    /** Real editor focus changes (tap-on-text starts editing). */
     onFocusChange: (Boolean) -> Unit = {},
- /** The mockup's (X) key-hint glyph in the empty field. */
+    /** The mockup's (X) key-hint glyph in the empty field. */
     showKeyHint: Boolean = false,
 ) {
     val g = LocalConsoleGeometry.current
@@ -227,16 +228,16 @@ private fun NavRow(
 
         NavPill(focused == HeaderItem.BROWSE, { onNav(HomeDestination.Discover) }) {
             if (parts.cloud) {
- // Filled pixel cloud (mockup `U.cloud`, 22×15),
- // not the outline Unicode "☁".
+                // Filled pixel cloud (mockup `U.cloud`, 22×15),
+                // not the outline Unicode "☁".
                 CloudGlyph(
                     tint = ConsoleColors.TextTertiary,
                     modifier = Modifier.size(g.x(22), g.x(15)),
                 )
             }
             NavText(parts.lead, focused == HeaderItem.BROWSE, homeT(g, 20))
- // "Browse {site}": the site name is width-capped with an ellipsis;
- // the collapsed form drops it entirely ("☁ Browse").
+            // "Browse {site}": the site name is width-capped with an ellipsis;
+            // the collapsed form drops it entirely ("☁ Browse").
             if (!collapsed && parts.site != null) {
                 Text(
                     parts.site,
@@ -266,11 +267,16 @@ private fun NavRow(
             }
         }
 
+        // The Play together hub, read exactly like its rail cell.
+        NavPill(focused == HeaderItem.TOGETHER, { onNav(HomeDestination.Together) }) {
+            NavText(TogetherCopy.navLabel, focused == HeaderItem.TOGETHER, homeT(g, 20))
+        }
+
         NavPill(focused == HeaderItem.SYSTEM, { onNav(HomeDestination.System) }) {
             NavText(HomeCopy.navSystem, focused == HeaderItem.SYSTEM, homeT(g, 20))
             systemWarnText(header.systemWarnings)?.let { warn ->
- // Filled pixel warning triangle (mockup
- // `ICO.warn`), not the outline Unicode "⚠".
+                // Filled pixel warning triangle (mockup
+                // `ICO.warn`), not the outline Unicode "⚠".
                 WarnGlyph(
                     tint = ConsoleColors.Warning,
                     modifier = Modifier.size(g.x(16), g.x(14)),

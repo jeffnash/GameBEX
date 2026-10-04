@@ -106,6 +106,8 @@ private fun Key.androidKeyCode(): Int = when (this) {
     Key.ButtonB -> AndroidKeyEvent.KEYCODE_BUTTON_B
     Key.ButtonY -> AndroidKeyEvent.KEYCODE_BUTTON_Y
     Key.DirectionDown -> AndroidKeyEvent.KEYCODE_DPAD_DOWN
+    Key.DirectionUp -> AndroidKeyEvent.KEYCODE_DPAD_UP
+    Key.DirectionLeft -> AndroidKeyEvent.KEYCODE_DPAD_LEFT
     Key.DirectionRight -> AndroidKeyEvent.KEYCODE_DPAD_RIGHT
     else -> error("Unsupported test key: $this")
 }

@@ -126,8 +126,9 @@ class BrowseViewModel(
                 val source = withContext(Dispatchers.IO) { sources.open(sel.id, sel.revision) }
                 if (gen != requestGen) return@launch
                 _sourceName.value = source.name
+                // Every non-empty feed: Discover's system chips scroll.
                 val consoles = withContext(Dispatchers.IO) { source.consoles() }
-                    .filter { it.count > 0 }.take(30)
+                    .filter { it.count > 0 }
                 if (gen != requestGen) return@launch
                 _consoles.value = consoles
                 // Restore this source's saved console; drop it when the
@@ -179,7 +180,7 @@ class BrowseViewModel(
                 if (gen != requestGen || activeSelection != sel) return@launch
                 if (_consoles.value.isEmpty()) {
                     val consoles = withContext(Dispatchers.IO) { source.consoles() }
-                        .filter { it.count > 0 }.take(30)
+                        .filter { it.count > 0 }
                     if (gen != requestGen || activeSelection != sel) return@launch
                     _consoles.value = consoles
                 }

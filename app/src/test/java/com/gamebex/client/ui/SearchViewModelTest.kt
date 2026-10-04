@@ -16,6 +16,93 @@ import org.junit.Test
 class SearchViewModelTest {
     @get:Rule val main = MainDispatcherRule()
 
+    /** Records each search's platform input; pages come from [searchResult]. */
+    private class PlatformSource(id: String) : FakeRomSource(id) {
+        val platforms: MutableList<String?> = java.util.concurrent.CopyOnWriteArrayList()
+
+        override suspend fun search(query: String, platformId: String?, cursor: String?): CatalogPage {
+            platforms += platformId
+            return super.search(query, platformId, cursor)
+        }
+    }
+
+    private fun ready(vararg sources: FakeRomSource): FakeSourceAccess {
+        val access = FakeSourceAccess()
+        sources.forEach { access.install(it) }
+        access.setReady()
+        return access
+    }
+
+    private fun <T : FakeRomSource> twoSystems(source: T): T = source.apply {
+        consolesResult = listOf(
+            CatalogFixtures.console(id = "game-boy", platformId = "gb"),
+            CatalogFixtures.console(id = "gba", name = "Game Boy Advance", platformId = "gba"),
+            CatalogFixtures.console(id = "nes", name = "NES", platformId = "nes", count = 0),
+        )
+        // Ignores the platform input: the client still narrows.
+        searchResult = {
+            CatalogPage(
+                listOf(
+                    CatalogFixtures.entry(itemKey = "gb/tetris", title = "Tetris", platformId = "gb"),
+                    CatalogFixtures.entry(itemKey = "gba/tetris", title = "Tetris Worlds", platformId = "gba"),
+                ),
+            )
+        }
+    }
+
+    @Test fun systemListsOnlyNonEmptyFeeds(): Unit = runBlocking {
+        val access = ready(twoSystems(PlatformSource("s")))
+        access.select("s")
+        val vm = SearchViewModel(access, SavedStateHandle())
+        awaitTrue { vm.consoles.value.isNotEmpty() }
+        assertEquals(listOf("game-boy", "gba"), vm.consoles.value.map { it.id })
+    }
+
+    @Test fun systemChipPassesPlatformAndRerunsTheQuery(): Unit = runBlocking {
+        val source = twoSystems(PlatformSource("s"))
+        val access = ready(source)
+        access.select("s")
+        val vm = SearchViewModel(access, SavedStateHandle())
+        awaitTrue { vm.consoles.value.isNotEmpty() }
+        vm.onQuery("tetris")
+        awaitTrue { vm.results.value.size == 2 && !vm.searching.value }
+        assertEquals(listOf<String?>(null), source.platforms.toList())
+        vm.selectSystem("gba")
+        awaitTrue { source.platforms.lastOrNull() == "gba" }
+        awaitTrue { !vm.searching.value && vm.results.value.map { it.platformId } == listOf("gba") }
+        assertEquals("tetris", vm.query.value)
+        vm.selectSystem(null)
+        awaitTrue { source.platforms.size == 3 && !vm.searching.value && vm.results.value.size == 2 }
+        assertEquals(null, source.platforms.last())
+    }
+
+    @Test fun staleSavedSystemNeverNarrows(): Unit = runBlocking {
+        val source = twoSystems(PlatformSource("s"))
+        val access = ready(source)
+        access.select("s")
+        val vm = SearchViewModel(access, SavedStateHandle(mapOf("sys:s" to "n64")))
+        awaitTrue { vm.consoles.value.isNotEmpty() }
+        vm.onQuery("tetris")
+        awaitTrue { vm.results.value.size == 2 && !vm.searching.value }
+        assertTrue(source.platforms.all { it == null })
+    }
+
+    @Test fun systemIsKeptPerSource(): Unit = runBlocking {
+        val a = twoSystems(FakeRomSource("a"))
+        val b = FakeRomSource("b").apply {
+            consolesResult = listOf(CatalogFixtures.console(id = "snes", name = "SNES", platformId = "snes"))
+        }
+        val access = ready(a, b)
+        access.select("a")
+        val vm = SearchViewModel(access, SavedStateHandle())
+        awaitTrue { vm.consoles.value.isNotEmpty() }
+        vm.selectSystem("gb")
+        access.select("b", generation = 2)
+        awaitTrue { vm.system.value == null && vm.consoles.value.map { it.id } == listOf("snes") }
+        access.select("a", generation = 3)
+        awaitTrue { vm.system.value == "gb" && vm.consoles.value.any { it.platformId == "gb" } }
+    }
+
     @Test fun retrySameSearchRunsAgain(): Unit = runBlocking {
         var attempts = 0
         val source = FakeRomSource("s").apply {

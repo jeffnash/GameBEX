@@ -95,20 +95,15 @@ fun resolveDiscoverRestore(hasItems: Boolean, selectedConsole: String?): Discove
         else -> DiscoverRestore.SELECT_CONSOLE
     }
 
-/**
- * Tombstone copy (D6 / OffPhone), private to Discover. F2's
- * HomeCopy owns the canonical strings; listed in the F6 report.
- */
+/** Tombstone copy, private to Discover; HomeCopy owns the canonical strings. */
 private const val DOWNLOAD_AGAIN = "Download again"
 private const val NOT_ON_PHONE = "Not on this phone"
 
 /**
- * Tier-1 Discover (brief): editorial featured game + one browseable
- * catalog shelf. Data stays on the existing Store source ([BrowseViewModel]
- * consoles/items); categories are the console feeds, LB/RB cycles them.
- * Owned Only browses the local collection (always complete); the catalog
- * shelf paginates the feed. Coordinates are design px local to the content
- * box (absolute − rail).
+ * Featured game plus one catalog shelf. Categories are the console feeds of
+ * [BrowseViewModel]: the system chips pick one, LB/RB cycle them. Owned Only
+ * browses the local collection; the catalog shelf paginates the feed.
+ * Coordinates are design px local to the content box (absolute − rail).
  */
 @Composable
 fun DiscoverScreen(
@@ -133,20 +128,21 @@ fun DiscoverScreen(
     val sourceName by vm.sourceName.collectAsState()
     val selection by vm.selection.collectAsState()
 
- // Initial + selection-change loads are driven by the ViewModel's
- // selection collector (it also restores the saved console per source).
+    // Initial + selection-change loads are driven by the ViewModel's
+    // selection collector (it also restores the saved console per source).
 
     var ownedOnly by remember { mutableStateOf(focusMemory.recall("discover:owned", 0) == 1) }
     var zone by remember { mutableIntStateOf(focusMemory.recall("discover:zone", 0)) }
     fun setZone(i: Int) {
- // 0 featured, 1 shelf, 2 header controls (source selector).
-        zone = i.coerceIn(0, 2)
+        // 0 featured, 1 shelf, 2 header controls (source selector),
+        // 3 system chips. Up walks shelf → featured → chips → source.
+        zone = i.coerceIn(0, 3)
         focusMemory.store("discover:zone", zone)
     }
 
- // Per-tab memory: restore the browsed console once feeds arrive. The
- // restore flag is keyed on the source selection so categories can
- // never leak across sources.
+    // Per-tab memory: restore the browsed console once feeds arrive. The
+    // restore flag is keyed on the source selection so categories can
+    // never leak across sources.
     var catRestored by remember(selection) { mutableStateOf(false) }
     LaunchedEffect(consoles, selection) {
         if (!catRestored && consoles.isNotEmpty()) {
@@ -172,16 +168,23 @@ fun DiscoverScreen(
     val installed by app.sources.list().collectAsState()
     fun revFor(sourceId: String): String? = installed.firstOrNull { it.id == sourceId }?.revision
     val scope = rememberCoroutineScope()
- // Source selector: enabled sources + Manage; select commits the
- // registry selection and Browse/Search react through their flows.
+    // Source selector: enabled sources + Manage; select commits the
+    // registry selection and Browse/Search react through their flows.
     val enabledSources = remember(installed) { installed.filter { it.enabled && it.available } }
     val hasDisabledOrBad = remember(installed) { installed.any { !it.enabled || !it.available } }
     val currentSourceName = selection?.id?.let { id -> installed.firstOrNull { it.id == id }?.name } ?: sourceName
     var selectorOpen by remember { mutableStateOf(false) }
     val dialogShelf = rememberShelfState(enabledSources.size + 1)
- // Header controls: 0 selector.
+    // Header controls: 0 selector.
     val headerShelf = rememberShelfState(1)
     val noSource = enabledSources.isEmpty()
+    // System chips: Latest + every console feed. Chip focus moves with
+    // Left/Right; any category change (A, tap, LB/RB) snaps it to the
+    // selected chip.
+    val chips = remember(consoles) { discoverSystemChips(consoles) }
+    val selectedChip = systemChipIndex(chips, sel)
+    var chipFocus by remember { mutableIntStateOf(selectedChip) }
+    LaunchedEffect(selectedChip) { chipFocus = selectedChip }
     var noticeChoice by remember(hasDisabledOrBad) { mutableStateOf(0) }
     fun selectSource(id: String) {
         scope.launch { runCatching { app.sources.select(id) } }
@@ -202,10 +205,10 @@ fun DiscoverScreen(
             )
         }
     }
- // Owned Only reads the local collection, not fetched catalog pages, so
- // the shelf (and its empty state) is never a pagination artifact.
- // Only playable rows count as owned: tombstones and rows whose
- // file is currently absent stay out.
+    // Owned Only reads the local collection, not fetched catalog pages, so
+    // the shelf (and its empty state) is never a pagination artifact.
+    // Only playable rows count as owned: tombstones and rows whose
+    // file is currently absent stay out.
     val ownedGames = remember(games, browseFolder, sel) {
         val list = games.filter { it.available }
             .let { if (sel == null) it else it.filter { g -> g.folder == browseFolder } }
@@ -213,8 +216,8 @@ fun DiscoverScreen(
     }
     val ownedCatalog: List<GamePresentation> = remember(ownedGames, installed) {
         ownedGames.map { gl ->
- // Remote hero only when the owning source is known (scoped
- // load); otherwise the color wash renders, never a naked URL.
+            // Remote hero only when the owning source is known (scoped
+            // load); otherwise the color wash renders, never a naked URL.
             val remoteHero = gl.coverUrl
                 ?.takeIf { gl.artHero == null && gl.sourceId != null }
                 ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
@@ -232,8 +235,8 @@ fun DiscoverScreen(
     val localByStable = remember(ownedGames) { ownedGames.associateBy { "local:${it.id}" } }
     val filtered = if (!ownedOnly) catalog else ownedCatalog
     val shelfState = rememberShelfState(filtered.size, focusMemory.recall("discover:shelf", 0))
- // Featured tracks focus: first item in the header zone, focused tile in
- // the shelf zone — the header/CTA/hero never go stale mid-traversal.
+    // Featured tracks focus: first item in the header zone, focused tile in
+    // the shelf zone — the header/CTA/hero never go stale mid-traversal.
     val featured = if (zone == 0) filtered.firstOrNull()
         else filtered.getOrNull(shelfState.selected) ?: filtered.firstOrNull()
 
@@ -241,17 +244,18 @@ fun DiscoverScreen(
     val shelfList = androidx.compose.foundation.lazy.rememberLazyListState()
     if (filtered.isNotEmpty()) focusMemory.store("discover:shelf", shelfState.selected)
 
- // New category/filter → back to featured; tab return restores memory.
+    // New category/filter → back to featured (the chip row keeps focus so
+    // systems can be tried in a row); tab return restores memory.
     var prevCat by remember { mutableStateOf<Pair<String?, Boolean>?>(null) }
     LaunchedEffect(sel, ownedOnly) {
         val cur = sel to ownedOnly
         if (prevCat != null && prevCat != cur) {
             shelfState.select(0)
-            setZone(0)
+            if (zone != 3) setZone(0)
         }
         prevCat = cur
     }
- // Touch scrolling reaches the end without moving the selection: load the next page then too.
+    // Touch scrolling reaches the end without moving the selection: load the next page then too.
     LaunchedEffect(shelfList, filtered.size, ownedOnly) {
         androidx.compose.runtime.snapshotFlow { shelfList.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
             .collect { last -> if (discoverNeedsMore(last, filtered.size, ownedOnly)) vm.loadMore() }
@@ -267,19 +271,19 @@ fun DiscoverScreen(
 
     fun entryOf(p: GamePresentation): RomEntry? = entriesByStable[p.stableId]
 
- /**
- * Tombstone tile: the entry's only library rows are deleted, so the CTA
- * is "Download again" and Play never runs on the missing file.
- */
+    /**
+     * Tombstone tile: the entry's only library rows are deleted, so the CTA
+     * is "Download again" and Play never runs on the missing file.
+     */
     fun downloadAgain(p: GamePresentation): Boolean =
         !ownedOnly && entryOf(p)?.let { matches[it.key] is CatalogMatch.DownloadAgain } == true
 
     fun focusedPres(): GamePresentation? =
         if (zone == 0) featured else filtered.getOrNull(shelfState.selected)
 
- // Owned tiles open local detail (full actions); catalog tiles open the
- // unified detail on its catalog face. A tombstone match opens the
- // catalog detail: its local row is deleted and can't play.
+    // Owned tiles open local detail (full actions); catalog tiles open the
+    // unified detail on its catalog face. A tombstone match opens the
+    // catalog detail: its local row is deleted and can't play.
     fun openPresentation(p: GamePresentation): Boolean {
         if (ownedOnly) {
             val local = localByStable[p.stableId] ?: return false
@@ -306,9 +310,9 @@ fun DiscoverScreen(
         }
         val e = entryOf(p) ?: return false
         val local = (matches[e.key] as? CatalogMatch.Owned)?.game
- // Catalog tile: Start queues the download Detail's Download would;
- // a version choice or unmapped system opens Detail instead. A
- // tombstone match downloads again and never plays the missing file.
+        // Catalog tile: Start queues the download Detail's Download would;
+        // a version choice or unmapped system opens Detail instead. A
+        // tombstone match downloads again and never plays the missing file.
         if (local != null) vm.play(local) else vm.quickDownload(e) { onOpen(e) }
         return true
     }
@@ -321,17 +325,33 @@ fun DiscoverScreen(
         return true
     }
 
+    /** Loads chip [i]'s feed as LB/RB would; the selected chip retries a failed load. */
+    fun pickChip(i: Int): Boolean {
+        val chip = chips.getOrNull(i) ?: return false
+        chipFocus = i
+        if (chip.id != sel || error != null) vm.selectConsole(chip.id)
+        return true
+    }
+
     fun toggleOwned(): Boolean {
         ownedOnly = !ownedOnly
         focusMemory.store("discover:owned", if (ownedOnly) 1 else 0)
         return true
     }
 
- // No-source notice (catalog mode only; owned mode is local).
+    // No-source notice (catalog mode only; owned mode is local).
     val showNoSource = noSource && !ownedOnly
+    // The chip row needs the source's feeds; without them zone 3 falls back.
+    val showChips = consoles.isNotEmpty() && !showNoSource
+    LaunchedEffect(showChips) { if (!showChips && zone == 3) setZone(0) }
+    fun toChips(): Boolean {
+        chipFocus = selectedChip
+        setZone(3)
+        return true
+    }
 
- // Hints name what each key does for the current focus target and
- // content state (the heading already prints LB / RB).
+    // Hints name what each key does for the current focus target and
+    // content state (the heading already prints LB / RB).
     val hintList = discoverHints(
         selectorOpen = selectorOpen,
         noSource = showNoSource,
@@ -369,6 +389,10 @@ fun DiscoverScreen(
                         noticeChoice = 0; true
                     } else if (zone == 2) {
                         rail.enterRail()
+                    } else if (zone == 3) {
+                        if (chipFocus > 0) {
+                            chipFocus--; true
+                        } else rail.enterRail()
                     } else when (resolveDiscoverLeft(zone, filtered.isEmpty(), shelfState.selected)) {
                         DiscoverLeft.SHELF_LEFT -> shelfState.left()
                         DiscoverLeft.TO_HEADER -> {
@@ -387,6 +411,10 @@ fun DiscoverScreen(
                         true
                     } else if (zone == 2) {
                         headerShelf.right()
+                    } else if (zone == 3) {
+                        if (chipFocus < chips.size - 1) {
+                            chipFocus++; true
+                        } else false
                     } else when {
                         filtered.isEmpty() -> false
                         zone == 0 -> {
@@ -401,6 +429,10 @@ fun DiscoverScreen(
                     else if (zone == 1 && filtered.isNotEmpty()) {
                         setZone(0); true
                     } else if (zone == 0) {
+                        if (showChips) toChips() else {
+                            setZone(2); true
+                        }
+                    } else if (zone == 3) {
                         setZone(2); true
                     } else false
                 },
@@ -408,9 +440,13 @@ fun DiscoverScreen(
                     if (selectorOpen) dialogShelf.right()
                     else if (showNoSource) false
                     else if (zone == 2) {
+                        if (showChips) toChips() else {
+                            setZone(0); true
+                        }
+                    } else if (zone == 3) {
                         setZone(0); true
                     } else if (zone == 0 && filtered.isNotEmpty()) {
- // Featured cover center ≈ x297; drop to nearest tile.
+                        // Featured cover center ≈ x297; drop to nearest tile.
                         shelfState.select(nearestIndexByX(shelfCenters(), 297f))
                         setZone(1)
                         true
@@ -422,6 +458,8 @@ fun DiscoverScreen(
                     else if (zone == 2) {
                         selectorOpen = true
                         true
+                    } else if (zone == 3) {
+                        pickChip(chipFocus)
                     } else if (filtered.isEmpty()) {
                         if (error != null) {
                             if (sel == null) vm.load() else vm.selectConsole(sel)
@@ -455,17 +493,28 @@ fun DiscoverScreen(
             lineHeight = g.t(18), fontWeight = FontWeight.Bold,
             modifier = Modifier.offset(x = g.x(48), y = g.x(34)),
         )
- // Featured object (fixed per category: first item).
+        if (showChips) {
+            SystemChipRow(
+                chips = chips,
+                selected = selectedChip,
+                focused = chipFocus.takeIf { zone == 3 },
+                onPick = { i ->
+                    setZone(3)
+                    pickChip(i)
+                },
+                modifier = Modifier.offset(x = g.x(48), y = g.x(60)).width(g.x(1000)),
+            )
+        }
         featured?.let { f ->
             val ftint = f.folder?.let { tintFor(it) } ?: ConsoleColors.AccentDim
             GameCover(
                 title = f.title, cover = f.cover, focused = zone == 0, tint = ftint,
                 systemFolder = f.folder,
                 ring = false, // the GET/PLAY CTA beside it already rings zone focus
-                modifier = Modifier.offset(x = g.x(134), y = g.x(88)).width(g.x(166)).height(g.x(236)),
+                modifier = Modifier.offset(x = g.x(134), y = g.x(106)).width(g.x(166)).height(g.x(236)),
             )
             Column(
-                modifier = Modifier.offset(x = g.x(342), y = g.x(108)).width(g.x(380)),
+                modifier = Modifier.offset(x = g.x(342), y = g.x(126)).width(g.x(380)),
             ) {
                 var titleSize by remember(f.title) { mutableIntStateOf(44) }
                 Text(
@@ -526,7 +575,7 @@ fun DiscoverScreen(
                     modifier = Modifier.padding(start = g.x(12)),
                 )
             }
- // Source identity stays explicit even with a single source.
+            // Source identity stays explicit even with a single source.
             val selFocused = zone == 2 && headerShelf.selected == 0
             Text(
                 "SOURCE: ${(currentSourceName ?: "none").uppercase()}",
@@ -539,7 +588,7 @@ fun DiscoverScreen(
         }
 
         if (showNoSource) {
- // No enabled source: scaffold stays, grid goes away.
+            // No enabled source: scaffold stays, grid goes away.
             Column(
                 modifier = Modifier.offset(x = g.x(48), y = g.x(402)).width(g.x(900)),
             ) {
@@ -607,7 +656,7 @@ fun DiscoverScreen(
                             else ConsoleColors.TextSecondary,
                             fontSize = g.t(13), lineHeight = g.t(15),
                             fontWeight = FontWeight.Bold,
- // Ownership shows as the cover's badge, so the title gets two lines.
+                            // Ownership shows as the cover's badge, so the title gets two lines.
                             maxLines = 2, overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.width(g.x(118)).padding(top = g.x(5)),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -617,8 +666,8 @@ fun DiscoverScreen(
             )
         }
 
- // Pagination failure is non-blocking: items stay, the banner
- // persists until reaching the shelf end retries the page.
+        // Pagination failure is non-blocking: items stay, the banner
+        // persists until reaching the shelf end retries the page.
         val pageErr = pageError
         if (pageErr != null && filtered.isNotEmpty()) {
             Text(
@@ -711,6 +760,7 @@ private fun SourceSelectorDialog(
 /**
  * Discover hint row (≤4), state-aware: A names what A does (Open, Retry,
  * Import source, Change source, Select), never "Open" over an error.
+ * Zone 3 is the system chip row (A selects the focused system).
  * [startLabel] is the focused game's primary action (Start runs it).
  */
 internal fun discoverHints(
@@ -733,6 +783,7 @@ internal fun discoverHints(
     val a = when {
         noSource -> "Import source"
         zone == 2 -> "Change source"
+        zone == 3 -> "Select"
         empty -> if (error) "Retry" else null
         else -> "Open"
     }

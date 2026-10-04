@@ -25,6 +25,7 @@ object StreamRaConfig {
     fun overrides(
         rsoundReady: Boolean = false,
         diagnostics: Boolean = StreamDebug.prop("ra_log") == "1",
+        hasRealHostPad: Boolean = false,
     ): LinkedHashMap<String, String> = LinkedHashMap<String, String>().apply {
         if (diagnostics) {
             put("log_verbosity", "true")
@@ -35,6 +36,7 @@ object StreamRaConfig {
         put("input_poll_type_behavior", StreamDebug.prop("ra_poll")?.takeIf { it in setOf("0", "1", "2") } ?: "0")
  // input_max_users stays as in the managed config (8): forcing 2 makes RetroArch connect the core's
  // ports 3-4 as RETRO_DEVICE_NONE, and the Dolphin core crashes a few seconds into the game .
+        put("input_overlay_enable", (!hasRealHostPad).toString())
         put("input_overlay_hide_when_gamepad_connected", "false")
         put("input_player2_reserved_device", StreamCaps.PAD_NAME)
         put("input_player2_device_reservation_type", "2")
@@ -74,20 +76,20 @@ object StreamRaConfig {
     }
 
  /** The whole file: the managed config (with save-state resume, as a normal Play) plus [overrides]. */
-    fun cfgText(sharedRoot: String, rsoundReady: Boolean = false): String {
+    fun cfgText(sharedRoot: String, rsoundReady: Boolean = false, hasRealHostPad: Boolean = false): String {
         val base = GraphicsTuner.retroArchConfigText(sharedRoot, resume = true).trimEnd('\n').split('\n')
-        val (merged, _) = RetroArchTuner.mergeConfig(base, overrides(rsoundReady))
+        val (merged, _) = RetroArchTuner.mergeConfig(base, overrides(rsoundReady, hasRealHostPad = hasRealHostPad))
         return merged.joinToString("\n") + "\n"
     }
 
     fun fileUnder(base: File): File = File(GraphicsTuner.sharedDirUnder(base), "ra/$FILE_NAME")
 
  /** Writes the config under [base] (external storage); null when it can't. */
-    fun write(base: File, rsoundReady: Boolean = false): File? = try {
+    fun write(base: File, rsoundReady: Boolean = false, hasRealHostPad: Boolean = false): File? = try {
         val file = fileUnder(base)
         val dir = file.parentFile ?: throw IOException("no parent for $file")
         if (!dir.isDirectory && !dir.mkdirs() && !dir.isDirectory) throw IOException("Couldn't create $dir")
-        file.writeText(cfgText(base.absolutePath, rsoundReady))
+        file.writeText(cfgText(base.absolutePath, rsoundReady, hasRealHostPad))
         file
     } catch (_: IOException) {
         null

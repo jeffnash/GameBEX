@@ -47,5 +47,6 @@ class RealShellComponents(@Suppress("unused") private val context: Context?) : S
     override fun audioSource(config: StreamConfig): AudioSource? =
         if (config.rsound) rsoundBridge.acquire() else audioSource()
 
-    override fun mediaChannel(config: StreamConfig): MediaChannel = MediaServer(config)
+    override fun mediaChannel(config: StreamConfig): MediaChannel =
+        MediaServer(config, logger = { android.util.Log.i("GameBEXStream", it) })
 }

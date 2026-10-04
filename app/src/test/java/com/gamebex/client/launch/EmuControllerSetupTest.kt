@@ -81,6 +81,27 @@ class EmuControllerSetupTest {
         assertFalse(File(dir, "Android_GameSir-X5s.cfg" + EmuControllerSetup.BACKUP_SUFFIX).exists())
     }
 
+    @Test fun streamStandaloneLaunchWritersAlreadyHideTouchControlsForRealPads() {
+        val b = base(Emu.DOLPHIN.pkg, Emu.NETHER.pkg)
+        val ini = File(b, "Android/data/${Emu.DOLPHIN.pkg}/files/Config/Dolphin.ini")
+        ini.parentFile!!.mkdirs()
+        val original = "[Core]\nSIDevice1 = 6\n[Android]\nShowInputOverlay = True\n"
+        ini.writeText(original)
+        val dolphin = run(Emu.DOLPHIN, b, pads = listOf(pad))
+        assertEquals(Status.ONE_TIME, dolphin.status)
+        assertEquals("False", IniText.get(ini.readText(), "Android", "ShowInputOverlay"))
+        assertEquals("6", IniText.get(ini.readText(), "Core", "SIDevice1"))
+        assertEquals(original, File(ini.path + EmuControllerSetup.BACKUP_SUFFIX).readText())
+        val profile = File(b, "Android/data/${Emu.NETHER.pkg}/files/inputprofiles/gamebex.ini")
+        profile.parentFile!!.mkdirs()
+        profile.writeText("[TouchscreenController]\nAutoHide = false\nAutoHideTime = 2.5\n[Pad1]\nType = DualShock2\n")
+        val nether = run(Emu.NETHER, b, pads = listOf(pad))
+        assertEquals(Status.ONE_TIME, nether.status)
+        assertEquals("true", IniText.get(profile.readText(), "TouchscreenController", "AutoHide"))
+        assertEquals("2.5", IniText.get(profile.readText(), "TouchscreenController", "AutoHideTime"))
+        assertEquals("DualShock2", IniText.get(profile.readText(), "Pad1", "Type"))
+    }
+
     @Test fun netherWritesTemplateThenOnlyFixesAutoHide() {
         val b = base(Emu.NETHER.pkg)
         val f = File(b, "Android/data/${Emu.NETHER.pkg}/files/inputprofiles/gamebex.ini")

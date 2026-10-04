@@ -99,13 +99,6 @@ internal fun StreamTouchPad(
         Column(Modifier.align(Alignment.BottomCenter), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 PadKey("L", KeyEvent.KEYCODE_BUTTON_L1, pad, Modifier.size(64.dp, 40.dp))
-                Text(
-                    "GameBEX controls",
-                    color = ConsoleColors.TextPrimary,
-                    fontFamily = SpaceGrotesk,
-                    fontSize = 12.sp,
-                    modifier = Modifier.background(ConsoleColors.Background.copy(alpha = 0.65f), RoundedCornerShape(4.dp)).padding(4.dp),
-                )
                 PadKey("R", KeyEvent.KEYCODE_BUTTON_R1, pad, Modifier.size(64.dp, 40.dp))
             }
             if (!wide) {

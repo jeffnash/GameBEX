@@ -64,6 +64,7 @@ import com.gamebex.client.ui.home.model.HomeIntent
 import com.gamebex.client.ui.system.SystemScreen
 import com.gamebex.client.ui.together.TogetherInviteDialog
 import com.gamebex.client.ui.together.TogetherHubScreen
+import com.gamebex.client.ui.together.TogetherHubViewModel
 import com.gamebex.client.ui.together.TogetherHostScreen
 import com.gamebex.client.ui.together.TogetherGuestScreen
 import com.gamebex.client.stream.guest.StreamGuestRuntime
@@ -426,20 +427,26 @@ fun AppNav(
 }
 
 /** The tab roots that can sit directly above `library` (Home is `library` itself). */
-private val TAB_ROOTS = setOf("allgames", "browse", "downloads", "emulators")
+private val TAB_ROOTS = setOf("allgames", "browse", "downloads", "together", "emulators")
 
 /**
  * The tab that owns the back stack: the tab root last reached through a tab
  * change ([owner]) while it's still on the stack ([onStack]), else Home. Pushed
- * pages (game pages, search, sources, Play together, a System page opened from a
- * session) belong to it, as does everything above it.
+ * pages (game pages, search, sources, Play together opened from System or a game
+ * page, a System page opened from a session) belong to it, as does everything
+ * above it. The Play together hub is a tab root itself when the rail or Home's
+ * header opened it.
  */
 internal fun tabOwning(owner: String, onStack: (String) -> Boolean): String =
     if (owner in TAB_ROOTS && onStack(owner)) owner else "library"
 
-/** Pops every Play together route on top, so leaving a session screen leaves nothing together-related behind (N1). */
+/**
+ * Pops the Play together session screens on top (host, guest), so leaving a session
+ * leaves none behind. It stops at the hub: a game hosted or joined from the hub
+ * goes back to the hub, and a game page's 2P goes back to the game page.
+ */
 private fun androidx.navigation.NavController.leaveTogether() {
-    while (currentBackStackEntry?.destination?.route?.startsWith("together") == true && popBackStack()) Unit
+    while (currentBackStackEntry?.destination?.route?.startsWith("together/") == true && popBackStack()) Unit
 }
 
 /**
@@ -529,6 +536,7 @@ private fun ConsoleNavHost(
                                     is HomeDestination.SiteSearch ->
                                         nav.navigate(searchRouteFor(d.query))
                                     HomeDestination.Sources -> nav.navigate("sources")
+                                    HomeDestination.Together -> goHome("together")
                                     HomeDestination.System -> goHome("emulators")
                                     is HomeDestination.Game -> nav.navigate("local/${d.gameId}")
                                     is HomeDestination.SiteEntry -> nav.navigate(detailRouteFor(d.entry))
@@ -710,7 +718,16 @@ private fun ConsoleNavHost(
             SystemScreen(vm, focusMemory, rail, onSources = { nav.navigate("sources") }, onTogether = { nav.navigate("together") }, hints = hints)
         }
         composable("together") {
-            TogetherHubScreen(app.together, rail, hints, onBack = { nav.popBackStack() }, onJoined = { nav.navigate("together/guest") })
+            val hubVm: TogetherHubViewModel = viewModel { TogetherHubViewModel(context.applicationContext) }
+            val hostable by hubVm.hostable.collectAsState()
+            TogetherHubScreen(
+                app.together, rail, hints,
+                onBack = { nav.popBackStack() },
+                onJoined = { nav.navigate("together/guest") },
+                hostable = hostable,
+                // Same route as the game page's 2P button.
+                onHost = { nav.navigate("together/host/$it") },
+            )
         }
         composable("together/host/{gameId}", arguments = listOf(navArgument("gameId") { type = NavType.LongType })) { entry ->
             val gameId = entry.arguments?.getLong("gameId") ?: 0L
@@ -809,5 +826,6 @@ internal fun consoleDestinationFor(route: String?): ConsoleDestination = when {
     route == "browse" || isSearchRoute(route) || route.startsWith("detail/") -> ConsoleDestination.Discover
     route == "downloads" -> ConsoleDestination.Downloads
     route == "allgames" -> ConsoleDestination.Library
+    route == "together" -> ConsoleDestination.Together
     else -> ConsoleDestination.System
 }

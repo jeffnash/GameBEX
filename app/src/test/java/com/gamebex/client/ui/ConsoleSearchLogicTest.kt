@@ -39,6 +39,20 @@ class ConsoleSearchLogicTest {
         assertEquals(SearchBack.TO_FIELD, resolveSearchBack(SearchZone.PREVIEW, false, true))
     }
 
+    @Test fun backFromSystemChipsReturnsToField() {
+        assertEquals(SearchBack.TO_FIELD, resolveSearchBack(SearchZone.CHIPS, false, false))
+    }
+
+    @Test fun systemFilterKeepsMatchesAndUnknownSystemsInOrder() {
+        val gb = CatalogFixtures.entry(itemKey = "gb/tetris", platformId = "gb")
+        val gba = CatalogFixtures.entry(itemKey = "gba/tetris", platformId = "gba")
+        val unknown = CatalogFixtures.entry(itemKey = "x/tetris", platformId = null)
+        val page = listOf(gba, gb, unknown)
+        assertEquals(page, filterSearchBySystem(page, null))
+        assertEquals(listOf(gb, unknown), filterSearchBySystem(page, "gb"))
+        assertEquals(listOf(unknown), filterSearchBySystem(page, "n64"))
+    }
+
     @Test fun backOnChangedEditClosesEditFirst() {
         assertEquals(SearchBack.STOP_EDITING, resolveSearchBack(SearchZone.FIELD, true, true))
     }

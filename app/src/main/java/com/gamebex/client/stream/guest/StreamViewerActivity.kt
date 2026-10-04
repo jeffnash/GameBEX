@@ -18,9 +18,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.gamebex.client.launch.ControllerRegistry
 import com.gamebex.client.stream.StreamCaps
 import com.gamebex.client.stream.StreamDebug
 import com.gamebex.client.stream.StreamEndpoint
@@ -43,6 +46,8 @@ class StreamViewerActivity : ComponentActivity() {
     private val scope = MainScope()
     private var wifiLock: WifiManager.WifiLock? = null
     private var options = ViewerOptions()
+    private var physicalControllerConnected by mutableStateOf(false)
+    private var controllerObserver: ControllerRegistry.PadObserver? = null
     private var oldDisplayMode = 0
     private var oldRefreshRate = 0f
     private var displayManager: DisplayManager? = null
@@ -79,6 +84,11 @@ class StreamViewerActivity : ComponentActivity() {
         }
         val s = StreamGuestRuntime.attach(endpoint, loopback)
         session = s
+        controllerObserver = ControllerRegistry.observe(this) { pads ->
+            physicalControllerConnected = updateViewerControllerPresence(
+                physicalControllerConnected, pads.isNotEmpty(), s::releaseTouchInput,
+            )
+        }
         if (StreamDebug.prop("tdls") == "1") setTdls(endpoint.host, true)
         setContent {
             GameBexTheme {
@@ -102,6 +112,7 @@ class StreamViewerActivity : ComponentActivity() {
                     unbufferedInput = options.unbufferedInput,
                     fixedSurface = options.fixedSurface,
                     surfaceOpaque = options.surfaceOpaque,
+                    physicalControllerConnected = physicalControllerConnected,
                 )
             }
         }
@@ -212,6 +223,7 @@ class StreamViewerActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        controllerObserver?.rescan()
         configureUnbufferedInput()
         logActualDisplay()
         if (wifiLock == null) wifiLock = createWifiLock()
@@ -256,6 +268,8 @@ class StreamViewerActivity : ComponentActivity() {
     private var tdlsHost: String? = null
 
     override fun onDestroy() {
+        controllerObserver?.close()
+        controllerObserver = null
         tdlsHost?.let { setTdls(it, false) }
         displayManager?.unregisterDisplayListener(displayListener)
         window.attributes = window.attributes.apply {
@@ -273,6 +287,11 @@ class StreamViewerActivity : ComponentActivity() {
         const val TAG = "GameBEXStream"
         const val VIEWER_OPTIONS = "stream_viewer_options"
     }
+}
+
+internal fun updateViewerControllerPresence(previous: Boolean, connected: Boolean, releaseTouchInput: () -> Unit): Boolean {
+    if (previous != connected) releaseTouchInput()
+    return connected
 }
 
 internal data class ViewerDisplayMode(val id: Int, val width: Int, val height: Int, val hz: Float)

@@ -98,6 +98,51 @@ object ControllerRegistry {
         emptyList()
     }
 
+    fun observe(ctx: Context, onPadsChanged: (List<Pad>) -> Unit): PadObserver {
+        val im = ctx.getSystemService(Context.INPUT_SERVICE) as? InputManager
+        return PadObserver(
+            scan = ::snapshot,
+            onPadsChanged = { pads ->
+                runCatching { onPadsChanged(pads) }.onFailure { Log.w(TAG, "pad observer failed", it) }
+            },
+            register = { listener ->
+                if (im == null) false else {
+                    im.registerInputDeviceListener(listener, null)
+                    true
+                }
+            },
+            unregister = { listener -> im?.unregisterInputDeviceListener(listener) },
+        )
+    }
+
+    class PadObserver internal constructor(
+        private val scan: () -> List<Pad>,
+        private val onPadsChanged: (List<Pad>) -> Unit,
+        register: (InputManager.InputDeviceListener) -> Boolean,
+        private val unregister: (InputManager.InputDeviceListener) -> Unit,
+    ) : InputManager.InputDeviceListener, AutoCloseable {
+        private var closed = false
+        private val registered = runCatching { register(this) }.getOrDefault(false)
+
+        init {
+            rescan()
+        }
+
+        fun rescan() {
+            if (!closed) onPadsChanged(scan())
+        }
+
+        override fun onInputDeviceAdded(deviceId: Int) = rescan()
+        override fun onInputDeviceRemoved(deviceId: Int) = rescan()
+        override fun onInputDeviceChanged(deviceId: Int) = rescan()
+
+        override fun close() {
+            if (closed) return
+            closed = true
+            if (registered) runCatching { unregister(this) }
+        }
+    }
+
     /**
      * Calls [onPadConnected] (on the registering thread's looper) whenever a
      * real pad appears. Returns the listener so callers can unregister it.

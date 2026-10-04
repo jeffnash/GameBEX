@@ -47,6 +47,13 @@ class DiscoverHintsTest {
         assertNull(h.label(ControllerGlyph.Start))
     }
 
+    @Test fun chipsZoneSelectsEvenOverAnEmptyShelf() {
+        val h = hints(zone = 3)
+        assertTrue(h.size <= 4)
+        assertEquals("Select", h.label(ControllerGlyph.A))
+        assertEquals("Select", hints(zone = 3, empty = true, startLabel = null).label(ControllerGlyph.A))
+    }
+
     @Test fun headerAndSelectorStates() {
         assertEquals("Change source", hints(zone = 2).label(ControllerGlyph.A))
         val sel = hints(selectorOpen = true)

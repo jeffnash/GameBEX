@@ -1,6 +1,7 @@
 package com.gamebex.client.launch
 
 import android.view.InputDevice
+import com.gamebex.client.stream.StreamCaps
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -57,6 +58,82 @@ class ControllerRegistryTest {
         assertTrue(!ControllerRegistry.isSubDevice("Keyboard"))
         assertEquals("GameSir-X5s", ControllerRegistry.baseName("GameSir-X5s Consumer Control"))
         assertEquals("GameSir-X5s", ControllerRegistry.baseName("GameSir-X5s"))
+    }
+
+    @Test fun streamPlayerTwoIsExcludedEvenWhenAndroidDoesNotMarkItVirtual() {
+        val pads = ControllerRegistry.pads(listOf(
+            dev(7, StreamCaps.PAD_NAME, "stream-p2"),
+            dev(8, StreamCaps.PAD_NAME, "virtual-p2", virtual = true),
+        ))
+        assertTrue(pads.isEmpty())
+    }
+
+    @Test fun observerReportsInitialSnapshotAndRescansEveryDeviceEvent() {
+        var devices = listOf(dev(7, StreamCaps.PAD_NAME, "stream-p2"))
+        val seen = mutableListOf<List<ControllerRegistry.Pad>>()
+        var scans = 0
+        var registrations = 0
+        var unregistrations = 0
+        val observer = ControllerRegistry.PadObserver(
+            scan = { scans++; ControllerRegistry.pads(devices) },
+            onPadsChanged = { seen += it },
+            register = { registrations++; true },
+            unregister = { unregistrations++ },
+        )
+        assertEquals(listOf(emptyList<ControllerRegistry.Pad>()), seen)
+        devices = devices + dev(12, "GameSir-X5s Consumer Control", "cc", InputDevice.SOURCE_KEYBOARD or padSources)
+        observer.onInputDeviceAdded(12)
+        assertEquals(listOf("GameSir-X5s"), seen.last().map { it.label })
+        devices = devices + dev(13, "GameSir-X5s", "pad")
+        observer.onInputDeviceChanged(12)
+        assertEquals(listOf("GameSir-X5s"), seen.last().map { it.name })
+        devices = devices.filter { it.id == 7 }
+        observer.onInputDeviceRemoved(13)
+        assertTrue(seen.last().isEmpty())
+        observer.onInputDeviceChanged(7)
+        observer.rescan()
+        assertEquals(6, scans)
+        assertEquals(6, seen.size)
+        assertEquals(1, registrations)
+        observer.close()
+        observer.close()
+        observer.onInputDeviceAdded(12)
+        observer.onInputDeviceRemoved(12)
+        observer.onInputDeviceChanged(12)
+        observer.rescan()
+        assertEquals(1, unregistrations)
+        assertEquals(6, scans)
+        assertEquals(6, seen.size)
+    }
+
+    @Test fun observerIncludesAPadThatWasConnectedBeforeRegistration() {
+        val pads = ControllerRegistry.pads(listOf(dev(12, "GameSir-X5s Consumer Control", "cc")))
+        val seen = mutableListOf<List<ControllerRegistry.Pad>>()
+        val observer = ControllerRegistry.PadObserver(
+            scan = { pads },
+            onPadsChanged = { seen += it },
+            register = { true },
+            unregister = {},
+        )
+        assertEquals(listOf(pads), seen)
+        observer.close()
+    }
+
+    @Test fun observerCanRescanWhenPlatformRegistrationIsUnavailable() {
+        var pads = emptyList<ControllerRegistry.Pad>()
+        val seen = mutableListOf<List<ControllerRegistry.Pad>>()
+        var unregistrations = 0
+        val observer = ControllerRegistry.PadObserver(
+            scan = { pads },
+            onPadsChanged = { seen += it },
+            register = { false },
+            unregister = { unregistrations++ },
+        )
+        pads = ControllerRegistry.pads(listOf(dev(12, "GameSir-X5s", "pad")))
+        observer.rescan()
+        assertEquals(listOf(emptyList<ControllerRegistry.Pad>(), pads), seen)
+        observer.close()
+        assertEquals(0, unregistrations)
     }
 
     @Test fun guideCardOncePerPadUnlessNever() {

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import com.gamebex.client.R
+import com.gamebex.client.together.TogetherCopy
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -55,6 +56,8 @@ enum class ConsoleDestination(
     Library("Library", Icons.Filled.List, "allgames"),
     Discover("Discover", GameBexIcons.Explore, "browse"),
     Downloads("Downloads", GameBexIcons.Download, "downloads"),
+    /** The Play together hub (host or join); Home's header pill reads the same. */
+    Together(TogetherCopy.navLabel, GameBexIcons.People, "together"),
     System("System", Icons.Filled.Settings, "emulators"),
 }
 

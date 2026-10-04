@@ -78,6 +78,110 @@ class StreamViewerScreenTest {
     }
 
     @Test
+    fun physicalControllerAtMountHidesPadButKeepsMenuAndLeave() {
+        var leaves = 0
+        rule.setContent {
+            GameBexTheme {
+                StreamViewerScreen(ui(ViewerStatus.WATCHING, stats = true), {}, { leaves++ }, {}, {},
+                    physicalControllerConnected = true,
+                )
+            }
+        }
+        rule.onNodeWithTag(TAG_TOUCH_PAD, useUnmergedTree = true).assertDoesNotExist()
+        rule.onNodeWithText("GameBEX controls", useUnmergedTree = true).assertDoesNotExist()
+        rule.onNodeWithTag(TAG_STATS, useUnmergedTree = true).assertIsDisplayed()
+        rule.onNodeWithTag(TAG_VIDEO, useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag(TAG_MENU, useUnmergedTree = true).performClick()
+        rule.onNodeWithText(TogetherCopy.leaveStream).performClick()
+        assertEquals(1, leaves)
+    }
+
+    @Test
+    fun controllerPresenceHidesAndRestoresPadWithTouchOnlyReleaseOnBothChanges() {
+        var connected by mutableStateOf(false)
+        val events = mutableListOf<Pair<Int, Boolean>>()
+        val physical = PadMapper()
+        val touch = PadMapper()
+        var releases = 0
+        var leaves = 0
+        val releaseTouch = {
+            releases++
+            touch.reset()
+        }
+        rule.runOnIdle {
+            physical.onKey(KeyEvent.KEYCODE_BUTTON_A, true, 1)
+            physical.onAxes(0.5f, -0.5f, 0f, 0.75f, 1f, 0f, -1f, 0f)
+        }
+        val heldPhysical = physical.state()
+        rule.setContent {
+            GameBexTheme {
+                StreamViewerScreen(ui(ViewerStatus.WATCHING), {}, { leaves++ }, {}, {},
+                    onTouchKey = { key, down, atNs ->
+                        events.add(key to down)
+                        touch.onKey(key, down, atNs)
+                    },
+                    onTouchAxes = { x, y, _ -> touch.onAxes(x, y, 0f, 0f, 0f, 0f, 0f, 0f) },
+                    onReleaseTouchInput = releaseTouch,
+                    physicalControllerConnected = connected,
+                )
+            }
+        }
+        rule.onNodeWithTag(TAG_TOUCH_PAD, useUnmergedTree = true).assertIsDisplayed()
+        rule.onNodeWithText("GameBEX controls", useUnmergedTree = true).assertDoesNotExist()
+        rule.onNodeWithTag(touchKeyTag(KeyEvent.KEYCODE_BUTTON_R1), useUnmergedTree = true).performTouchInput { down(center) }
+        rule.runOnIdle {
+            assertEquals(listOf(KeyEvent.KEYCODE_BUTTON_R1 to true), events)
+            connected = updateViewerControllerPresence(connected, true, releaseTouch)
+        }
+        rule.onNodeWithTag(TAG_TOUCH_PAD, useUnmergedTree = true).assertDoesNotExist()
+        rule.onNodeWithTag(TAG_VIDEO, useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag(TAG_MENU, useUnmergedTree = true).assertIsDisplayed()
+        var hiddenReleases = 0
+        rule.runOnIdle {
+            assertEquals(listOf(KeyEvent.KEYCODE_BUTTON_R1 to true, KeyEvent.KEYCODE_BUTTON_R1 to false), events)
+            assertTrue(releases > 0)
+            assertTrue(touch.state().isNeutral)
+            assertEquals(heldPhysical, mergePadStates(physical.state(), touch.state()))
+            hiddenReleases = releases
+        }
+        rule.onNodeWithTag(TAG_ROOT, useUnmergedTree = true).performTouchInput { cancel() }
+        rule.runOnIdle { connected = updateViewerControllerPresence(connected, false, releaseTouch) }
+        rule.onNodeWithTag(TAG_TOUCH_PAD, useUnmergedTree = true).assertIsDisplayed()
+        rule.onNodeWithText("GameBEX controls", useUnmergedTree = true).assertDoesNotExist()
+        rule.runOnIdle {
+            assertEquals(hiddenReleases + 1, releases)
+            assertEquals(heldPhysical, mergePadStates(physical.state(), touch.state()))
+        }
+        rule.onNodeWithTag(touchKeyTag(KeyEvent.KEYCODE_BUTTON_R1), useUnmergedTree = true).performTouchInput { down(center); up() }
+        rule.runOnIdle {
+            assertEquals(listOf(KeyEvent.KEYCODE_BUTTON_R1 to true, KeyEvent.KEYCODE_BUTTON_R1 to false,
+                KeyEvent.KEYCODE_BUTTON_R1 to true, KeyEvent.KEYCODE_BUTTON_R1 to false), events)
+            assertEquals(heldPhysical, mergePadStates(physical.state(), touch.state()))
+        }
+        rule.onNodeWithTag(TAG_MENU, useUnmergedTree = true).performClick()
+        rule.onNodeWithText(TogetherCopy.leaveStream).performClick()
+        assertEquals(1, leaves)
+    }
+
+    @Test
+    fun disconnectKeepsDebugHiddenPadHidden() {
+        var connected by mutableStateOf(true)
+        rule.setContent {
+            GameBexTheme {
+                StreamViewerScreen(ui(ViewerStatus.WATCHING), {}, {}, {}, {},
+                    touchPadHidden = true,
+                    physicalControllerConnected = connected,
+                )
+            }
+        }
+        rule.onNodeWithTag(TAG_TOUCH_PAD, useUnmergedTree = true).assertDoesNotExist()
+        rule.runOnIdle { connected = false }
+        rule.onNodeWithTag(TAG_TOUCH_PAD, useUnmergedTree = true).assertDoesNotExist()
+        rule.onNodeWithTag(TAG_MENU, useUnmergedTree = true).performClick()
+        rule.onNodeWithText(TogetherCopy.leaveStream).assertIsDisplayed()
+    }
+
+    @Test
     fun hudOffKeepsWaitingLeaveAndTerminalMessage() {
         var state by mutableStateOf(ui(ViewerStatus.WATCHING).copy(waitingForVideo = true))
         rule.setContent {
@@ -144,7 +248,7 @@ class StreamViewerScreenTest {
         rule.onNodeWithTag(TAG_TOUCH_PAD, useUnmergedTree = true).assertDoesNotExist()
         rule.runOnIdle { state = state.copy(waitingForVideo = false) }
         rule.onNodeWithTag(TAG_TOUCH_PAD, useUnmergedTree = true).assertIsDisplayed()
-        rule.onNodeWithText("GameBEX controls", useUnmergedTree = true).assertIsDisplayed()
+        rule.onNodeWithText("GameBEX controls", useUnmergedTree = true).assertDoesNotExist()
         listOf(
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
             KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_BUTTON_X, KeyEvent.KEYCODE_BUTTON_Y,

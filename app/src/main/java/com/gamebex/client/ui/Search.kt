@@ -3,9 +3,11 @@ package com.gamebex.client.ui
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gamebex.client.data.ConsoleItem
 import com.gamebex.client.data.RomEntry
 import com.gamebex.client.data.toStableId
 import com.gamebex.client.sources.SourceAccess
+import com.gamebex.client.sources.SourceSelection
 import com.gamebex.client.ui.presentation.rankSearchResults
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -45,6 +48,23 @@ fun searchResultKeys(results: List<RomEntry>): List<String> {
     }
 }
 
+/**
+ * Narrows a result page to [platformId] (null = every system). Results
+ * with no known system stay, so a source that ignores the search's platform
+ * input still narrows without hiding unlabeled games. Order is kept. Pure.
+ */
+fun filterSearchBySystem(entries: List<RomEntry>, platformId: String?): List<RomEntry> =
+    if (platformId == null) entries
+    else entries.filter { it.platformId == null || it.platformId == platformId }
+
+/** One search request: equal inputs never fetch twice in a row. */
+private data class SearchInput(
+    val query: String,
+    val selection: SourceSelection?,
+    val retry: Int,
+    val platform: String?,
+)
+
 class SearchViewModel(private val sources: SourceAccess, private val saved: SavedStateHandle) : ViewModel() {
     // Adopt the live selection synchronously: async adoption races
     // StateFlow conflation (a switch before the collector runs).
@@ -68,6 +88,13 @@ class SearchViewModel(private val sources: SourceAccess, private val saved: Save
         currentSourceId?.let { saved.get<ArrayList<String>>("recent:$it")?.toList() }.orEmpty(),
     )
     val recent: StateFlow<List<String>> = _recent
+    // System chip: the platform folder chosen for this source (null = all
+    // systems). Kept per source like the query.
+    private val systemFlow = MutableStateFlow(currentSourceId?.let { saved.get<String>("sys:$it") })
+    val system: StateFlow<String?> = systemFlow
+    private val _consoles = MutableStateFlow<List<ConsoleItem>>(emptyList())
+    /** The active source's non-empty console feeds (Search's system chips). */
+    val consoles: StateFlow<List<ConsoleItem>> = _consoles
     private val _sourceName = MutableStateFlow<String?>(null)
     val sourceName: StateFlow<String?> = _sourceName
     private val _sourceUnavailable = MutableStateFlow(false)
@@ -78,11 +105,13 @@ class SearchViewModel(private val sources: SourceAccess, private val saved: Save
         val id = currentSourceId ?: return
         saved["q:$id"] = queryFlow.value
         saved["recent:$id"] = ArrayList(_recent.value)
+        saved["sys:$id"] = systemFlow.value
     }
 
     private fun restoreState(id: String?) {
         queryFlow.value = id?.let { saved.get<String>("q:$it") }.orEmpty()
         _recent.value = id?.let { saved.get<ArrayList<String>>("recent:$it")?.toList() }.orEmpty()
+        systemFlow.value = id?.let { saved.get<String>("sys:$it") }
     }
 
     init {
@@ -103,13 +132,38 @@ class SearchViewModel(private val sources: SourceAccess, private val saved: Save
                 restoreState(sel?.id)
             }
         }
+        // System chips: the selected source's non-empty feeds; empty while
+        // loading or after a failed load (the chips hide).
         viewModelScope.launch {
+            combine(sources.ready, sources.selected) { ready, sel -> ready to sel }
+                .collectLatest { (ready, sel) ->
+                    _consoles.value = emptyList()
+                    if (!ready || sel == null) return@collectLatest
+                    _consoles.value = try {
+                        val source = withContext(Dispatchers.IO) { sources.open(sel.id, sel.revision) }
+                        withContext(Dispatchers.IO) { source.consoles() }.filter { it.count > 0 }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        logW("GameBEXSearch", "system list failed", e)
+                        emptyList()
+                    }
+                }
+        }
+        viewModelScope.launch {
+            // The chosen system narrows only while the loaded feeds carry
+            // it: a stale or not-yet-loaded system never filters behind
+            // hidden chips (the row then shows All systems selected).
             @OptIn(FlowPreview::class)
             combine(
                 queryFlow.debounce(350),
                 sources.selected,
                 retryFlow,
-            ) { q, sel, _ -> q to sel }.collectLatest { (q, sel) ->
+                systemFlow,
+                _consoles,
+            ) { q, sel, retry, sys, feeds ->
+                SearchInput(q, sel, retry, sys?.takeIf { s -> feeds.any { it.platformId == s } })
+            }.distinctUntilChanged().collectLatest { (q, sel, _, sys) ->
                 val gen = ++searchGen
                 if (q.isBlank()) {
                     _results.value = emptyList()
@@ -131,9 +185,9 @@ class SearchViewModel(private val sources: SourceAccess, private val saved: Save
                     val source = withContext(Dispatchers.IO) { sources.open(sel.id, sel.revision) }
                     if (gen != searchGen || currentSourceId != sel.id) return@collectLatest
                     _sourceName.value = source.name
-                    val raw = withContext(Dispatchers.IO) { source.search(q).items }
+                    val raw = withContext(Dispatchers.IO) { source.search(q, sys).items }
                     if (gen != searchGen || currentSourceId != sel.id) return@collectLatest
-                    _results.value = rankSearchResults(q, raw)
+                    _results.value = rankSearchResults(q, filterSearchBySystem(raw, sys))
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -152,6 +206,15 @@ class SearchViewModel(private val sources: SourceAccess, private val saved: Save
     fun onQuery(q: String) {
         queryFlow.value = q
         currentSourceId?.let { saved["q:$it"] = q }
+    }
+
+    /**
+     * Narrows to one platform folder (null = all systems), passed to the
+     * source's search as its platform input; a change re-runs the current query.
+     */
+    fun selectSystem(platformId: String?) {
+        systemFlow.value = platformId
+        currentSourceId?.let { saved["sys:$it"] = platformId }
     }
 
     /** Re-runs the current query; the counter survives StateFlow conflation. */

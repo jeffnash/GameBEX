@@ -76,12 +76,13 @@ fun StreamViewerScreen(
     unbufferedInput: Boolean = false,
     fixedSurface: Boolean = false,
     surfaceOpaque: Boolean = false,
+    physicalControllerConnected: Boolean = false,
 ) {
     var menu by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf(true) }
     val surfaceCallback by rememberUpdatedState(onSurface)
     val releaseTouchCallback by rememberUpdatedState(onReleaseTouchInput)
-    val overlays = viewerOverlays(ui.status, ui.waitingForVideo, hudEnabled, touchPadHidden)
+    val overlays = viewerOverlays(ui.status, ui.waitingForVideo, hudEnabled, touchPadHidden, physicalControllerConnected)
     val loading = overlays.loading
     val controlsVisible = overlays.menu
     LaunchedEffect(loading, ui.status) {
@@ -312,9 +313,9 @@ private const val MENU_MS = 4_000L
 
 internal data class ViewerOverlays(val loading: Boolean, val menu: Boolean, val touchPad: Boolean, val hud: Boolean)
 
-internal fun viewerOverlays(status: ViewerStatus, waitingForVideo: Boolean, hudEnabled: Boolean, touchPadHidden: Boolean): ViewerOverlays {
+internal fun viewerOverlays(status: ViewerStatus, waitingForVideo: Boolean, hudEnabled: Boolean, touchPadHidden: Boolean, physicalControllerConnected: Boolean = false): ViewerOverlays {
     val loading = status != ViewerStatus.ENDED &&
         (status == ViewerStatus.CONNECTING || status == ViewerStatus.RECONNECTING || waitingForVideo)
     val controls = status == ViewerStatus.WATCHING && !loading
-    return ViewerOverlays(loading, controls, controls && !touchPadHidden, hudEnabled)
+    return ViewerOverlays(loading, controls, controls && !touchPadHidden && !physicalControllerConnected, hudEnabled)
 }

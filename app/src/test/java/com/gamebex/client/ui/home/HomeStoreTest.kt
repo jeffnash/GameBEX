@@ -356,6 +356,14 @@ class HomeStoreTest {
         assertEquals(listOf(true), h.rescans)
     }
 
+    @Test fun togetherPillNavigatesToTheHub(): Unit = runBlocking {
+        val h = Harness()
+        val effects = collect(h)
+        h.store.onIntent(HomeIntent.Nav(HomeDestination.Together))
+        awaitTrue { effects.isNotEmpty() }
+        assertEquals(HomeEffect.Navigate(HomeDestination.Together), effects.last())
+    }
+
     @Test fun navEmitsNavigateAndStatusDismisses(): Unit = runBlocking {
         val h = Harness(games = listOf(game(1, playCount = 1, lastPlayedMs = System.currentTimeMillis())))
         val effects = collect(h)

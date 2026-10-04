@@ -218,7 +218,16 @@ class HomeFocusTest {
         assertEquals(HeaderItem.SEARCH, (press(search, model, FocusKey.LEFT).state.zone as FocusZone.Header).item)
         assertEquals(HeaderItem.LIBRARY, (press(search, model, FocusKey.RIGHT).state.zone as FocusZone.Header).item)
         assertEquals(HeaderItem.SYSTEM, (press(system, model, FocusKey.RIGHT).state.zone as FocusZone.Header).item)
-        assertEquals(HeaderItem.DOWNLOADS, (press(system, model, FocusKey.LEFT).state.zone as FocusZone.Header).item)
+        assertEquals(HeaderItem.TOGETHER, (press(system, model, FocusKey.LEFT).state.zone as FocusZone.Header).item)
+    }
+
+    @Test fun headerTogetherSitsBetweenDownloadsAndSystem() {
+        val model = home()
+        val together = HomeFocusState(FocusZone.Header(HeaderItem.TOGETHER))
+        assertEquals(HeaderItem.DOWNLOADS, (press(together, model, FocusKey.LEFT).state.zone as FocusZone.Header).item)
+        assertEquals(HeaderItem.SYSTEM, (press(together, model, FocusKey.RIGHT).state.zone as FocusZone.Header).item)
+        val downloads = HomeFocusState(FocusZone.Header(HeaderItem.DOWNLOADS))
+        assertEquals(HeaderItem.TOGETHER, (press(downloads, model, FocusKey.RIGHT).state.zone as FocusZone.Header).item)
     }
 
     @Test fun headerSearchDownGoesToGridSelectedElseDefault() {
@@ -233,7 +242,7 @@ class HomeFocusTest {
     }
 
     @Test fun headerOtherDownGoesToActionsPrimary() {
-        for (item in listOf(HeaderItem.LIBRARY, HeaderItem.BROWSE, HeaderItem.DOWNLOADS, HeaderItem.SYSTEM)) {
+        for (item in listOf(HeaderItem.LIBRARY, HeaderItem.BROWSE, HeaderItem.DOWNLOADS, HeaderItem.TOGETHER, HeaderItem.SYSTEM)) {
             val r = press(HomeFocusState(FocusZone.Header(item), a1), home(), FocusKey.DOWN)
             assertEquals(FocusZone.Actions(0), r.state.zone)
         }
@@ -308,6 +317,10 @@ class HomeFocusTest {
         assertEquals(
             HomeIntent.Nav(HomeDestination.Downloads),
             press(HomeFocusState(FocusZone.Header(HeaderItem.DOWNLOADS)), model, FocusKey.A).intent,
+        )
+        assertEquals(
+            HomeIntent.Nav(HomeDestination.Together),
+            press(HomeFocusState(FocusZone.Header(HeaderItem.TOGETHER)), model, FocusKey.A).intent,
         )
         assertEquals(
             HomeIntent.Nav(HomeDestination.System),
@@ -458,6 +471,13 @@ class HomeFocusTest {
         val r = HomeFocus.tapNav(gridAt(a1), HomeDestination.Downloads)
         assertEquals(HomeIntent.Nav(HomeDestination.Downloads), r.intent)
         assertEquals(FocusZone.Header(HeaderItem.DOWNLOADS), r.state.zone)
+        assertTrue(r.state.touch)
+    }
+
+    @Test fun tapNavTogetherOpensTheHubAndRingsItsPill() {
+        val r = HomeFocus.tapNav(gridAt(a1), HomeDestination.Together)
+        assertEquals(HomeIntent.Nav(HomeDestination.Together), r.intent)
+        assertEquals(FocusZone.Header(HeaderItem.TOGETHER), r.state.zone)
         assertTrue(r.state.touch)
     }
 

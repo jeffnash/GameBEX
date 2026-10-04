@@ -91,7 +91,7 @@ class StreamViewerSession(
     private var height = endpoint.height
     private var ticker: Job? = null
     @Volatile private var ended = false
-    private var startLevel = -1
+    private val weakWifiPolicy = WeakWifiPolicy()
 
     private val _ui = MutableStateFlow(ViewerUi(ViewerStatus.CONNECTING, endpoint.hostName, endpoint.width, endpoint.height))
     val ui: StateFlow<ViewerUi> = _ui.asStateFlow()
@@ -139,17 +139,21 @@ class StreamViewerSession(
         override fun onState(state: StreamClient.State) {
             if (ended) return
             when (state) {
-                StreamClient.State.Connecting -> _ui.update { it.copy(status = ViewerStatus.CONNECTING) }
+                StreamClient.State.Connecting -> synchronized(lock) {
+                    weakWifiPolicy.connectionReset()
+                    _ui.update { it.copy(status = ViewerStatus.CONNECTING, weakWifi = false) }
+                }
                 is StreamClient.State.Connected -> {
                     clock.reset()
                     stats.rttNs = -1L
                     // The host's welcome has the real size; the endpoint's is what stream_ready promised.
                     synchronized(lock) {
+                        weakWifiPolicy.connectionReset()
                         videoConfig = null
                         width = state.welcome.width
                         height = state.welcome.height
                     }
-                    _ui.update { it.copy(status = ViewerStatus.WATCHING, width = state.welcome.width, height = state.welcome.height, waitingForVideo = true) }
+                    _ui.update { it.copy(status = ViewerStatus.WATCHING, width = state.welcome.width, height = state.welcome.height, waitingForVideo = true, weakWifi = false) }
                     if (endpoint.audio && !ended) {
                         audioRecovery.connected(audioSourceEpoch(), player.isActive)?.let(::startAudioOutput)
                     }
@@ -164,8 +168,11 @@ class StreamViewerSession(
                     audioDrift.reset()
                     player.requestFlush()
                     releaseTouchInput()
-                    synchronized(lock) { videoConfig = null }
-                    _ui.update { it.copy(status = ViewerStatus.RECONNECTING, waitingForVideo = true) }
+                    synchronized(lock) {
+                        videoConfig = null
+                        weakWifiPolicy.connectionReset()
+                        _ui.update { it.copy(status = ViewerStatus.RECONNECTING, waitingForVideo = true, weakWifi = false) }
+                    }
                 }
                 is StreamClient.State.Ended -> finish(messageFor(state.reason))
             }
@@ -179,7 +186,8 @@ class StreamViewerSession(
                 val level = StreamCaps.LEVELS.getOrNull(stats.level)?.takeIf { it.width == width && it.height == height }
                 val config = DecoderRequest(csd, width, height, codecEpoch, level?.fps ?: 60)
                 videoConfig = config
-                _ui.update { it.copy(waitingForVideo = true) }
+                weakWifiPolicy.codecEpoch(codecEpoch)
+                _ui.update { it.copy(waitingForVideo = true, weakWifi = false) }
                 decoder?.configure(config.csd, config.width, config.height, config.codecEpoch)
             }
         }
@@ -219,22 +227,31 @@ class StreamViewerSession(
             synchronized(lock) {
                 width = info.width
                 height = info.height
+                stats.bitrate = info.bitrate
+                stats.level = info.level
+                val maxBitrate = StreamCaps.LEVELS.getOrNull(info.level)?.maxBitrate ?: 0
+                val weak = weakWifiPolicy.quality(info.level, info.bitrate, maxBitrate, System.nanoTime())
+                _ui.update { it.copy(width = info.width, height = info.height, weakWifi = weak) }
             }
-            stats.bitrate = info.bitrate
-            stats.level = info.level
-            // "Weak" means the host had to lower quality below where this stream started, not that it
-            // started below level 0 (the phones start at level 1, early check V-2).
-            if (startLevel < 0) startLevel = info.level
-            val startMax = StreamCaps.LEVELS.getOrNull(startLevel)?.maxBitrate ?: StreamCaps.LEVELS[0].maxBitrate
-            val weak = info.level > startLevel || info.bitrate < startMax * WEAK_BITRATE_RATIO
-            _ui.update { it.copy(width = info.width, height = info.height, weakWifi = weak) }
         }
 
         override fun onPong(t0: Long, t1: Long, t2: Long, t3: Long) {
             val accepted = clock.add(t0, t1, t2, t3)
             stats.rttNs = clock.rttNs
+            synchronized(lock) {
+                val weak = weakWifiPolicy.roundTrip(t3 - t0 - (t2 - t1), accepted && clock.ready, t3)
+                _ui.update { it.copy(weakWifi = weak) }
+            }
             val bounds = clock.interval(t3)
             Log.i(TAG, "CLOCK transport=tcp t0=$t0 t1=$t1 t2=$t2 t3=$t3 accepted=$accepted ready=${clock.ready} offset_lo_ns=${bounds?.lowerNs ?: "-"} offset_hi_ns=${bounds?.upperNs ?: "-"} error_bound_ns=${clock.errorBoundNs} drift_ppm=${clock.driftPpm} resets=${clock.resets}")
+        }
+
+        override fun onDelivery(report: com.gamebex.client.stream.proto.DeliveryWire.Report) {
+            synchronized(lock) {
+                if (ended) return
+                weakWifiPolicy.delivery(report)
+                _ui.update { it.copy(weakWifi = weakWifiPolicy.tick(System.nanoTime())) }
+            }
         }
     }
 
@@ -268,6 +285,9 @@ class StreamViewerSession(
                 n += 1
                 val now = System.nanoTime()
                 stats.tick(now)
+                synchronized(lock) {
+                    _ui.update { it.copy(weakWifi = weakWifiPolicy.tick(now)) }
+                }
                 emitRun(now)
                 runCatching { avEvidence?.tick() }
                 if (synchronized(inputLock) { mapper.leaveRequested(System.nanoTime()) }) {
@@ -465,7 +485,7 @@ class StreamViewerSession(
         stats.finish(now)
         emitRun(now)
         Log.i(TAG, "${stats.statsLine(now)} audio_origin=${endpoint.audioTimestampOrigin}")
-        _ui.update { it.copy(status = ViewerStatus.ENDED, message = message) }
+        _ui.update { it.copy(status = ViewerStatus.ENDED, message = message, weakWifi = false) }
         ticker?.cancel()
         scope.cancel()
         // With a message the viewer stays up to show it; the Back button closes it.
@@ -522,8 +542,5 @@ class StreamViewerSession(
         const val TAG = "GameBEXStream"
         const val TICK_MS = 100L
         const val TICKS_PER_SECOND = 10
-
-        /** Below this share of the starting level's bitrate the host has cut quality (the "weak Wi-Fi" notice). */
-        const val WEAK_BITRATE_RATIO = 0.8
     }
 }

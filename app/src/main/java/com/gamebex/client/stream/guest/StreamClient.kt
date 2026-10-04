@@ -45,6 +45,7 @@ class StreamClient(
         fun onAudio(frame: MediaFrame.Audio)
         fun onInfo(info: MediaFrame.Info)
         fun onPong(t0: Long, t1: Long, t2: Long, t3: Long)
+        fun onDelivery(report: com.gamebex.client.stream.proto.DeliveryWire.Report) = Unit
     }
 
     sealed interface State {
@@ -225,6 +226,10 @@ class StreamClient(
             c.nextPingNs = now + if (c.burstRemaining > 0) BURST_SPACING_NS else StreamCaps.PING_INTERVAL_MS * 1_000_000L
         }
         c.delivery.report(now, decoderPending())?.let { report ->
+            synchronized(stateLock) {
+                if (closed || current.get() !== c) return
+                listener.onDelivery(report)
+            }
             c.writer.offer(ControlWriter.Kind.REPORT) { MediaFrames.encode(MediaFrame.Delivery(report)) }
         }
     }

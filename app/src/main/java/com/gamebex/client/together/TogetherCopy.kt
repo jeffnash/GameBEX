@@ -289,4 +289,11 @@ object TogetherCopy {
         StreamError.SHELL_UNAVAILABLE -> startShizuku
         StreamError.BAD_CONFIG, null -> streamStopped
     }
+
+    /** The rail cell and Home header pill that open the hub. One word: the rail cell is 96 wide. */
+    const val navLabel = "Together"
+    const val hostTitle = "Host a game"
+    /** The A-button action on a "Host a game" row. */
+    const val hostAction = "Host"
+    const val hostEmpty = "NES, SNES, Genesis, Game Boy, PSP, PlayStation, N64 and GameCube games can be played together, and they show here when they're on this phone."
 }

@@ -45,6 +45,7 @@ class MediaServer(
     private val queueDeadlineMs: Int = StreamDebug.int("queue_deadline_ms", 0, 0..40),
     private val latencyControl: Boolean = StreamDebug.flag("latency_cc"),
     private val videoWriteStallMs: Int = StreamDebug.int("video_write_stall_ms", 0, 0..50),
+    private val logger: (String) -> Unit = { System.err.println(it) },
 ) : MediaChannel {
     private val token = StreamToken.bytes(config.token)
     private val lock = Object()
@@ -58,6 +59,8 @@ class MediaServer(
     private var actualFormat: EncodedFormat? = null
     private var actualLevel = StreamCaps.LEVELS[config.level.coerceIn(0, StreamCaps.LEVELS.lastIndex)]
     private var actualBitrate = actualLevel.maxBitrate
+    private var requestedLevel = actualLevel.index
+    private var requestedBitrate = actualBitrate
     private var delivery = DeliveryControl(StreamCaps.LEVELS, actualLevel.index, startNs = clock())
     private var pressureDrops = 0L
     private var observedPressureDrops = 0L
@@ -113,7 +116,10 @@ class MediaServer(
                 actualLevel = level
                 actualBitrate = bitrate
             }
+            requestedLevel = level.index
+            requestedBitrate = bitrate
             audioOn = audio
+            logQuality("start")
         }
         spawn("gbx-media-accept") { acceptLoop(s) }
         spawn("gbx-media-tick") { tickLoop() }
@@ -166,12 +172,17 @@ class MediaServer(
     override fun onFormat(format: EncodedFormat) {
         synchronized(lock) {
             if (closed || format.codecEpoch <= 0L || format.codecEpoch < (actualFormat?.codecEpoch ?: 0L)) return
+            val changed = actualLevel != format.level || actualBitrate != format.bitrate
             actualFormat = format
             actualLevel = format.level
             actualBitrate = format.bitrate
+            if (changed) logQuality("format")
             val g = guest ?: return
+            val now = clock()
+            val ageNs = g.video.ageNs(now)
+            val depth = g.video.size
             val count = g.video.reset(format.codecEpoch)
-            framesDropped.addAndGet(count.toLong())
+            recordDrop(count, "config", ageNs, depth, "format", now)
             videoConfigDiscarded.addAndGet(count.toLong())
             g.latestReport = null
             g.control.addLast(Out.Format(format))
@@ -185,19 +196,24 @@ class MediaServer(
         synchronized(lock) {
             val g = guest
             if (g == null || closed) {
-                framesDropped.incrementAndGet()
+                recordDrop(1, if (closed) "closed" else "no_guest", trigger = "offer", now = now)
                 videoRetiredDiscarded.incrementAndGet()
                 return
             }
             if (actualFormat == null || frame.codecEpoch <= 0L || frame.codecEpoch != g.video.epoch) {
-                framesDropped.incrementAndGet()
+                val reason = when {
+                    frame.codecEpoch <= 0L -> "malformed_epoch"
+                    actualFormat == null -> "missing_config"
+                    else -> "epoch"
+                }
+                recordDrop(1, reason, depth = g.video.size, trigger = "offer", now = now)
                 videoConfigDiscarded.incrementAndGet()
                 return
             }
             val fallbacks = g.video.ageFallbacks
             val result = g.video.offer(frame, now)
             deadlineAgeFallbacks.addAndGet(g.video.ageFallbacks - fallbacks)
-            account(result, now)
+            account(result, now, "offer")
             askKey = result.requestKeyframe
             lock.notifyAll()
         }
@@ -303,7 +319,7 @@ class MediaServer(
                     while (g.isEmpty() && guest === g && !closed) lock.wait(WAIT_MS)
                     if (g.isEmpty()) return
                     g.control.pollFirst() ?: g.audio.pollFirst() ?: g.video.poll(clock()).let { (entry, result) ->
-                        account(result, clock())
+                        account(result, clock(), "poll")
                         askKey = result.requestKeyframe
                         entry
                     }
@@ -343,22 +359,37 @@ class MediaServer(
                             try {
                                 Thread.sleep(videoWriteStallMs.toLong())
                             } catch (e: InterruptedException) {
-                                framesDropped.incrementAndGet()
+                                recordDrop(1, "interrupted", trigger = "write", now = clock())
                                 videoRetiredDiscarded.incrementAndGet()
                                 throw e
                             }
                         }
                         val f = next.frame
-                        val bytes = MediaFrames.encode(MediaFrame.Video(f.key, f.seq, f.captureNs, f.encodedNs, 0L, f.data))
+                        val bytes = try {
+                            MediaFrames.encode(MediaFrame.Video(f.key, f.seq, f.captureNs, f.encodedNs, 0L, f.data))
+                        } catch (e: IOException) {
+                            recordDrop(1, "malformed", trigger = "encode", now = clock())
+                            throw e
+                        }
                         val valid = synchronized(lock) {
-                            if (guest !== g || closed || !g.video.valid(next, clock())) {
-                                framesDropped.incrementAndGet()
-                                if (guest !== g || closed) videoRetiredDiscarded.incrementAndGet()
-                                else if (f.codecEpoch != g.video.epoch) videoConfigDiscarded.incrementAndGet()
-                                else if (next.revision != g.video.revision) Unit
-                                else {
+                            val now = clock()
+                            if (guest !== g || closed || !g.video.valid(next, now)) {
+                                val ageNs = (now - if (queueDeadlineMs == 40 && f.encodedNs > 0L)
+                                    f.encodedNs else next.queuedNs).coerceAtLeast(0L)
+                                val depth = g.video.size
+                                if (guest !== g || closed) {
+                                    recordDrop(1, "retired_polled", ageNs, depth, "validate", now)
+                                    videoRetiredDiscarded.incrementAndGet()
+                                } else if (f.codecEpoch != g.video.epoch) {
+                                    recordDrop(1, "epoch_polled", ageNs, depth, "validate", now)
+                                    videoConfigDiscarded.incrementAndGet()
+                                } else if (next.revision != g.video.revision) {
+                                    recordDrop(1, "revision_polled", ageNs, depth, "validate", now)
+                                } else {
+                                    framesDropped.incrementAndGet()
                                     val count = g.video.clear()
-                                    account(DeadlineQueue.Result(count, true, true), clock())
+                                    account(DeadlineQueue.Result(count, true, true, DeadlineQueue.Reason.STALE_POLLED,
+                                        ageNs, depth), clock(), "validate", extraDropped = 1)
                                     pressureDrops++
                                     askKey = true
                                 }
@@ -374,7 +405,7 @@ class MediaServer(
                         try {
                             g.out.write(bytes)
                         } catch (e: IOException) {
-                            framesDropped.incrementAndGet()
+                            recordDrop(1, "write_failed", trigger = "write", now = clock())
                             videoRetiredDiscarded.incrementAndGet()
                             throw e
                         }
@@ -410,7 +441,10 @@ class MediaServer(
                     MediaFrame.KeyframeRequest -> {
                         val current = synchronized(lock) {
                             if (guest !== g || closed) false else {
-                                framesDropped.addAndGet(g.video.clear().toLong())
+                                val now = clock()
+                                val ageNs = g.video.ageNs(now)
+                                val depth = g.video.size
+                                recordDrop(g.video.clear(), "key_request", ageNs, depth, "guest_request", now)
                                 true
                             }
                         }
@@ -431,7 +465,7 @@ class MediaServer(
                                 if (guest === g && frame.reason == StreamWire.BYE_LEAVING) {
                                     guest = null
                                     guestChangedNs = clock()
-                                    discardRetired(g)
+                                    discardRetired(g, "leave")
                                     true
                                 } else false
                             }
@@ -482,15 +516,27 @@ class MediaServer(
                 val c = control ?: continue
                 when (action) {
                     is CongestionPolicy.Action.SetBitrate -> {
+                        synchronized(lock) {
+                            requestedLevel = actualLevel.index
+                            requestedBitrate = action.bps
+                        }
                         c.setBitrate(action.bps)
                         synchronized(lock) {
                             actualBitrate = action.bps
                             actualFormat?.let { actualFormat = EncodedFormat(it.level, action.bps, it.csd, it.codecEpoch) }
                             guest?.control?.addLast(Out.Frame(infoFrame()))
+                            logQuality("bitrate")
                             lock.notifyAll()
                         }
                     }
-                    is CongestionPolicy.Action.ChangeLevel -> c.changeLevel(action.level, action.bps)
+                    is CongestionPolicy.Action.ChangeLevel -> {
+                        synchronized(lock) {
+                            requestedLevel = action.level.index
+                            requestedBitrate = action.bps
+                            logQuality("level_request")
+                        }
+                        c.changeLevel(action.level, action.bps)
+                    }
                 }
             }
         } catch (_: InterruptedException) {
@@ -506,7 +552,7 @@ class MediaServer(
 
     /** Called with [lock] held: the writer sends BYE after what is already queued for control, then stops. */
     private fun retire(g: Guest, reason: Int) {
-        discardRetired(g)
+        discardRetired(g, if (reason == StreamWire.BYE_REPLACED) "replaced" else "stopping")
         g.control.addLast(Out.Frame(MediaFrames.encode(MediaFrame.Bye(reason)), bye = true))
         g.retired = true
         lock.notifyAll()
@@ -518,7 +564,7 @@ class MediaServer(
                 guest = null
                 guestChangedNs = clock()
             }
-            discardRetired(g)
+            discardRetired(g, "lost")
             lock.notifyAll()
         }
         runCatching { g.socket.close() }
@@ -540,17 +586,46 @@ class MediaServer(
         start()
     }
 
-    private fun account(result: DeadlineQueue.Result, now: Long) {
-        framesDropped.addAndGet(result.dropped.toLong())
+    private fun account(result: DeadlineQueue.Result, now: Long, trigger: String, extraDropped: Int = 0) {
+        val total = framesDropped.addAndGet(result.dropped.toLong())
+        if (result.dropped + extraDropped > 0) {
+            logDrop(result.dropped + extraDropped, result.reason.name.lowercase(), result.ageNs, result.depth,
+                trigger, now, total, result.incomingReason.name.lowercase())
+        }
         if (result.pressure) {
             pressureDrops += result.dropped
             if (!latencyControl) policy.onDrop(now)?.let { pending = it }
         }
     }
 
-    private fun discardRetired(g: Guest) {
+    private fun recordDrop(count: Int, reason: String, ageNs: Long = 0L, depth: Int = 0,
+        trigger: String, now: Long) {
+        val total = framesDropped.addAndGet(count.toLong())
+        logDrop(count, reason, ageNs, depth, trigger, now, total)
+    }
+
+    private fun logDrop(count: Int, reason: String, ageNs: Long, depth: Int, trigger: String,
+        now: Long, total: Long, incomingReason: String = "none") {
+        if (count <= 0) return
+        runCatching {
+            logger("HOST_DROP reason=$reason count=$count ageNs=$ageNs depth=$depth trigger=$trigger " +
+                "incomingReason=$incomingReason totalDropped=$total nowNs=$now")
+        }
+    }
+
+    private fun logQuality(trigger: String) {
+        runCatching {
+            logger("HOST_QUALITY trigger=$trigger requestedLevel=$requestedLevel requestedBitrate=$requestedBitrate " +
+                "actualLevel=${actualLevel.index} actualBitrate=$actualBitrate totalDropped=${framesDropped.get()}")
+        }
+    }
+
+    private fun discardRetired(g: Guest, trigger: String) {
+        val now = clock()
+        val ageNs = g.video.ageNs(now)
+        val depth = g.video.size
         val count = g.video.clear()
-        framesDropped.addAndGet(count.toLong())
+        recordDrop(count, "retired", ageNs, depth, trigger, now)
         videoRetiredDiscarded.addAndGet(count.toLong())
         g.audio.forEach { tcpAudioEvictedFrames.addAndGet(it.frames.toLong()) }
         g.audio.clear()

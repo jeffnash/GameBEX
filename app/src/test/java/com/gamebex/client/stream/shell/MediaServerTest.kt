@@ -13,9 +13,11 @@ import java.io.BufferedInputStream
 import java.io.DataInputStream
 import java.io.EOFException
 import java.io.IOException
+import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketTimeoutException
+import java.util.concurrent.CopyOnWriteArrayList
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -39,9 +41,12 @@ class MediaServerTest {
     }
 
     private fun server(guest: String = "127.0.0.1", audio: Boolean = true, latencyControl: Boolean = false,
-        clock: () -> Long = System::nanoTime): MediaServer {
-        val s = MediaServer(StreamConfig(token = token, guestAddress = guest, mediaPort = 0, inputPort = 0),
+        clock: () -> Long = System::nanoTime, logger: ((String) -> Unit)? = null): MediaServer {
+        val config = StreamConfig(token = token, guestAddress = guest, mediaPort = 0, inputPort = 0)
+        val s = if (logger == null) MediaServer(config,
             clock = clock, tickMs = 10L, queueDeadlineMs = 0, latencyControl = latencyControl, videoWriteStallMs = 0)
+        else MediaServer(config, clock = clock, tickMs = 10L, queueDeadlineMs = 0,
+            latencyControl = latencyControl, videoWriteStallMs = 0, logger = logger)
         servers += s
         s.open(0)
         video.start(StreamCaps.LEVELS[0], StreamCaps.LEVELS[0].maxBitrate, s)
@@ -101,6 +106,31 @@ class MediaServerTest {
             Thread.sleep(5)
         }
         throw AssertionError("timed out waiting for $what")
+    }
+
+    private fun queueLock(s: MediaServer): Any = MediaServer::class.java.getDeclaredField("lock").let {
+        it.isAccessible = true
+        it.get(s)
+    }
+
+    private fun writerGuest(s: MediaServer, out: OutputStream): Pair<DeadlineQueue, Thread> {
+        val type = MediaServer::class.java.declaredClasses.first { it.simpleName == "Guest" }
+        val constructor = type.getDeclaredConstructor(Socket::class.java, OutputStream::class.java,
+            java.lang.Long.TYPE, java.lang.Integer.TYPE).apply { isAccessible = true }
+        val g = constructor.newInstance(Socket(), out, 7L, 40)
+        MediaServer::class.java.getDeclaredField("guest").apply { isAccessible = true }.set(s, g)
+        val queue = type.getDeclaredField("video").let {
+            it.isAccessible = true
+            it.get(g) as DeadlineQueue
+        }.apply { reset(1L) }
+        val method = MediaServer::class.java.getDeclaredMethod("writeLoop", type).apply { isAccessible = true }
+        val writer = Thread({ method.invoke(s, g) }, "test-media-write").apply { isDaemon = true }
+        type.getDeclaredField("writer").apply { isAccessible = true }.set(g, writer)
+        return queue to writer
+    }
+
+    private fun droppedIn(logs: List<String>): Long = logs.filter { it.startsWith("HOST_DROP ") }.sumOf {
+        Regex(" count=(\\d+)").find(it)!!.groupValues[1].toLong()
     }
 
     @Test
@@ -223,7 +253,8 @@ class MediaServerTest {
 
     @Test
     fun aStalledGuestMakesTheServerDropVideoAndLowerTheBitrate() {
-        val s = server()
+        val logs = CopyOnWriteArrayList<String>()
+        val s = server(logger = { logs += it })
         val c = Client(s.port, receiveBuffer = 8 * 1024)
         c.hello()
         waitFor("guest") { s.stats().guestConnected }
@@ -236,6 +267,11 @@ class MediaServerTest {
         waitFor("bitrate cut") { video.currentBitrate in 1 until StreamCaps.LEVELS[0].maxBitrate }
         assertTrue(video.keyframeRequests >= 2)
         assertTrue(s.stats().bitrate < StreamCaps.LEVELS[0].maxBitrate)
+        waitFor("bitrate transition log") { logs.any { it.startsWith("HOST_QUALITY trigger=bitrate ") } }
+        assertTrue(logs.filter { it.startsWith("HOST_QUALITY trigger=bitrate ") }.all {
+            val requested = Regex("requestedBitrate=(\\d+)").find(it)!!.groupValues[1]
+            it.contains("actualBitrate=$requested") && it.contains("totalDropped=")
+        })
     }
 
     @Test
@@ -468,7 +504,8 @@ class MediaServerTest {
 
     @Test
     fun configAndRetireCountAllQueuedDropsAndTcpAudioFrames() {
-        val s = server()
+        val logs = CopyOnWriteArrayList<String>()
+        val s = server(logger = { logs += it })
         val c = Client(s.port, receiveBuffer = 1024)
         c.hello()
         c.next<MediaFrame.VideoConfig>()
@@ -487,6 +524,9 @@ class MediaServerTest {
         assertTrue(s.stats().videoRetiredDiscarded >= 2L)
         assertTrue(s.stats().tcpAudioEvictedFrames >= 6000L)
         assertTrue(s.stats().framesDropped >= 4L)
+        assertTrue(logs.any { it.contains("reason=config count=2") && it.contains("depth=2 trigger=format") })
+        assertTrue(logs.any { it.contains("reason=retired count=2") && it.contains("depth=2 trigger=stopping") })
+        waitFor("all discard logs") { droppedIn(logs) == s.framesDropped.get() }
     }
 
     @Test
@@ -500,6 +540,204 @@ class MediaServerTest {
         assertEquals(1L, s.stats().videoConfigDiscarded)
         c.send(MediaFrame.Ping(8, 0L))
         assertEquals(8, c.next<MediaFrame.Pong>().id)
+    }
+
+    @Test
+    fun logsCountAndAgePressureBeforeClearAndCountsTheRejectedDependant() {
+        val logs = CopyOnWriteArrayList<String>()
+        val now = java.util.concurrent.atomic.AtomicLong(1_000_000_000L)
+        val s = server(clock = now::get, logger = { logs += it })
+        val c = Client(s.port)
+        c.hello()
+        c.next<MediaFrame.VideoConfig>()
+        synchronized(queueLock(s)) {
+            repeat(4) { s.onFrame(EncodedFrame(it, it == 0, now.get(), now.get(), byteArrayOf(1), 1L)) }
+            now.addAndGet(10_000_000L)
+            s.onFrame(EncodedFrame(5, false, now.get(), now.get(), byteArrayOf(1), 1L))
+            s.onFrame(EncodedFrame(6, false, now.get(), now.get(), byteArrayOf(1), 1L))
+            s.onFrame(EncodedFrame(7, true, now.get(), now.get(), byteArrayOf(1), 1L))
+            now.addAndGet(121_000_000L)
+            s.onFrame(EncodedFrame(8, true, now.get(), now.get(), byteArrayOf(1), 1L))
+        }
+        c.next<MediaFrame.Video>()
+        assertTrue(logs.any { it.contains("reason=count count=5 ageNs=10000000 depth=4 trigger=offer") &&
+            it.contains("incomingReason=await_key totalDropped=5") })
+        assertTrue(logs.any { it.contains("reason=await_key count=1") && it.contains("totalDropped=6") })
+        assertTrue(logs.any { it.contains("reason=age count=1 ageNs=121000000 depth=1 trigger=offer") })
+        assertEquals(7L, s.framesDropped.get())
+        assertEquals(s.framesDropped.get(), droppedIn(logs))
+        assertFalse(logs.any { it.contains(token) || it.contains("attachId=") || it.contains("seq=") })
+    }
+
+    @Test
+    fun pollExpiryLogsAllQueuedDependantsWithoutChangingDefaultPolling() {
+        val logs = CopyOnWriteArrayList<String>()
+        val now = java.util.concurrent.atomic.AtomicLong(1_000_000_000L)
+        val s = MediaServer(StreamConfig(token = token, guestAddress = "127.0.0.1"), clock = now::get,
+            tickMs = 10L, queueDeadlineMs = 40, latencyControl = false, videoWriteStallMs = 0,
+            logger = { logs += it })
+        servers += s
+        s.open(0)
+        video.start(StreamCaps.LEVELS[0], StreamCaps.LEVELS[0].maxBitrate, s)
+        s.start(video, StreamCaps.LEVELS[0], StreamCaps.LEVELS[0].maxBitrate, false)
+        val c = Client(s.port)
+        c.hello()
+        c.next<MediaFrame.VideoConfig>()
+        synchronized(queueLock(s)) {
+            s.onFrame(EncodedFrame(1, true, now.get(), now.get(), byteArrayOf(1), 1L))
+            s.onFrame(EncodedFrame(2, false, now.get(), now.get(), byteArrayOf(1), 1L))
+            now.addAndGet(41_000_000L)
+        }
+        waitFor("poll expiry log") { logs.any { it.contains("reason=age count=2 ageNs=41000000 depth=2 trigger=poll") } }
+        assertEquals(2L, s.framesDropped.get())
+        assertEquals(0L, s.framesSent.get())
+        assertEquals(s.framesDropped.get(), droppedIn(logs))
+    }
+
+    @Test
+    fun stalePolledAuLogsItselfAndAllQueuedDependantsExactlyOnce() {
+        val logs = CopyOnWriteArrayList<String>()
+        val writerReads = java.util.concurrent.atomic.AtomicInteger()
+        val now = 1_000_000_000L
+        val s = MediaServer(StreamConfig(token = token, guestAddress = "127.0.0.1"),
+            clock = { if (Thread.currentThread().name == "test-media-write" && writerReads.incrementAndGet() >= 2)
+                now + 41_000_000L else now }, queueDeadlineMs = 40, latencyControl = false,
+            videoWriteStallMs = 0, logger = { logs += it })
+        servers += s
+        val (q, writer) = writerGuest(s, java.io.ByteArrayOutputStream())
+        q.offer(EncodedFrame(1, true, now, now, byteArrayOf(1), 1L), now)
+        q.offer(EncodedFrame(2, false, now, now, byteArrayOf(1), 1L), now)
+        writer.start()
+        waitFor("stale polled aggregate") { logs.any {
+            it.contains("reason=stale_polled count=2 ageNs=41000000 depth=1 trigger=validate")
+        } }
+        assertEquals(2L, s.framesDropped.get())
+        assertEquals(0L, s.framesSent.get())
+        assertEquals(s.framesDropped.get(), droppedIn(logs))
+        assertTrue(q.waitingForKey)
+        s.close()
+        writer.join(1000L)
+        assertFalse(writer.isAlive)
+    }
+
+    @Test
+    fun failedVideoWriteAndRetiredQueueAreBothLoggedAndCounted() {
+        val logs = CopyOnWriteArrayList<String>()
+        val now = 1_000_000_000L
+        val s = MediaServer(StreamConfig(token = token, guestAddress = "127.0.0.1"), clock = { now },
+            queueDeadlineMs = 40, latencyControl = false, videoWriteStallMs = 0, logger = { logs += it })
+        servers += s
+        val (q, writer) = writerGuest(s, object : OutputStream() {
+            override fun write(value: Int) { throw IOException("write failed") }
+        })
+        q.offer(EncodedFrame(1, true, now, now, byteArrayOf(1), 1L), now)
+        q.offer(EncodedFrame(2, false, now, now, byteArrayOf(1), 1L), now)
+        writer.start()
+        writer.join(1000L)
+        assertFalse(writer.isAlive)
+        assertTrue(logs.any { it.contains("reason=write_failed count=1") && it.contains("trigger=write") })
+        assertTrue(logs.any { it.contains("reason=retired count=1") && it.contains("trigger=lost") })
+        assertEquals(2L, s.framesDropped.get())
+        assertEquals(2L, s.videoRetiredDiscarded.get())
+        assertEquals(s.framesDropped.get(), droppedIn(logs))
+    }
+
+    @Test
+    fun logsEpochAwaitKeyNoGuestClosedAndMalformedDiscards() {
+        val logs = CopyOnWriteArrayList<String>()
+        val s = server(logger = { logs += it })
+        val now = System.nanoTime()
+        s.onFrame(EncodedFrame(1, true, now, now, byteArrayOf(1), 1L))
+        val c = Client(s.port)
+        c.hello()
+        c.next<MediaFrame.VideoConfig>()
+        s.onFrame(EncodedFrame(2, true, now, now, byteArrayOf(1), 0L))
+        s.onFrame(EncodedFrame(3, true, now, now, byteArrayOf(1), 2L))
+        s.onFrame(EncodedFrame(4, false, now, now, byteArrayOf(1), 1L))
+        s.onFrame(EncodedFrame(5, true, now, now, ByteArray(StreamWire.MAX_FRAME), 1L))
+        waitFor("malformed discard") { logs.any { it.contains("reason=malformed count=1") } }
+        waitFor("malformed writer retires") { !s.stats().guestConnected }
+        s.close()
+        s.onFrame(EncodedFrame(6, true, now, now, byteArrayOf(1), 1L))
+        for (reason in listOf("no_guest", "malformed_epoch", "epoch", "await_key", "malformed", "closed")) {
+            assertTrue(reason, logs.any { it.contains("reason=$reason count=1") })
+        }
+        assertEquals(6L, s.framesDropped.get())
+        assertEquals(s.framesDropped.get(), droppedIn(logs))
+    }
+
+    @Test
+    fun logsQualityRequestedAndActualWithoutSplittingTheFormatBundle() {
+        val logs = CopyOnWriteArrayList<String>()
+        val s = server(logger = { logs += it })
+        val c = Client(s.port)
+        c.hello()
+        c.next<MediaFrame.VideoConfig>()
+        s.onFormat(EncodedFormat(StreamCaps.LEVELS[3], 2_000_000, byteArrayOf(1), 2L))
+        val info = c.read() as MediaFrame.Info
+        assertEquals(3, info.level)
+        assertEquals(2_000_000, info.bitrate)
+        assertTrue(c.read() is MediaFrame.VideoConfig)
+        assertTrue(logs.any { it.contains("HOST_QUALITY trigger=start requestedLevel=0 requestedBitrate=8000000") })
+        assertTrue(logs.any { it.contains("HOST_QUALITY trigger=format requestedLevel=0 requestedBitrate=8000000") &&
+            it.contains("actualLevel=3 actualBitrate=2000000 totalDropped=0") })
+    }
+
+    @Test
+    fun levelRequestLogsOldActualThenConfirmedFormatAndPreservesInfoConfigOrder() {
+        val logs = CopyOnWriteArrayList<String>()
+        val s = server(logger = { logs += it })
+        val c = Client(s.port)
+        c.hello()
+        c.next<MediaFrame.VideoConfig>()
+        synchronized(queueLock(s)) {
+            MediaServer::class.java.getDeclaredField("pending").apply { isAccessible = true }
+                .set(s, CongestionPolicy.Action.ChangeLevel(StreamCaps.LEVELS[3], 2_000_000))
+        }
+        val info = c.read() as MediaFrame.Info
+        assertEquals(3, info.level)
+        assertEquals(2_000_000, info.bitrate)
+        assertTrue(c.read() is MediaFrame.VideoConfig)
+        assertTrue(logs.any { it.contains("HOST_QUALITY trigger=level_request requestedLevel=3 requestedBitrate=2000000") &&
+            it.contains("actualLevel=0 actualBitrate=8000000 totalDropped=0") })
+        assertTrue(logs.any { it.contains("HOST_QUALITY trigger=format requestedLevel=3 requestedBitrate=2000000") &&
+            it.contains("actualLevel=3 actualBitrate=2000000 totalDropped=0") })
+    }
+
+    @Test
+    fun guestKeyRequestCountsAndLogsAllClearedAusWithoutPressure() {
+        val logs = CopyOnWriteArrayList<String>()
+        val now = 1_000_000_000L
+        val s = MediaServer(StreamConfig(token = token, guestAddress = "127.0.0.1"), clock = { now },
+            queueDeadlineMs = 40, latencyControl = false, videoWriteStallMs = 0, logger = { logs += it })
+        servers += s
+        val (q, _) = writerGuest(s, java.io.ByteArrayOutputStream())
+        q.offer(EncodedFrame(1, true, now, now, byteArrayOf(1), 1L), now)
+        q.offer(EncodedFrame(2, false, now, now, byteArrayOf(1), 1L), now)
+        val g = MediaServer::class.java.getDeclaredField("guest").let {
+            it.isAccessible = true
+            it.get(s)
+        }
+        val input = DataInputStream(MediaFrames.encode(MediaFrame.KeyframeRequest).inputStream())
+        MediaServer::class.java.getDeclaredMethod("readLoop", g.javaClass, DataInputStream::class.java)
+            .apply { isAccessible = true }.invoke(s, g, input)
+        assertTrue(logs.any { it.contains("reason=key_request count=2 ageNs=0 depth=2 trigger=guest_request") })
+        assertEquals(2L, s.framesDropped.get())
+        assertEquals(s.framesDropped.get(), droppedIn(logs))
+        assertEquals(0L, s.videoRetiredDiscarded.get())
+    }
+
+    @Test
+    fun loggerFailureDoesNotChangeDiscardOrStatsAndLegacyConstructorRemainsJvmSafe() {
+        val s = server(logger = { throw IllegalStateException("logger unavailable") })
+        video.emit(1, true)
+        assertEquals(1L, s.framesDropped.get())
+        assertEquals(1L, s.videoRetiredDiscarded.get())
+        val legacy = MediaServer(StreamConfig(token = token, guestAddress = "127.0.0.1"),
+            tickMs = 10L, queueDeadlineMs = 0, latencyControl = false, videoWriteStallMs = 0)
+        servers += legacy
+        legacy.onFrame(EncodedFrame(1, true, 0L, 0L, byteArrayOf(1), 1L))
+        assertEquals(1L, legacy.framesDropped.get())
     }
 
     @Test

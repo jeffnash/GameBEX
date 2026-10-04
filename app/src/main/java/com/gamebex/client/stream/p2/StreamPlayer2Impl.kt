@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Environment
 import com.gamebex.client.data.Emu
 import com.gamebex.client.data.local.GameEntity
+import com.gamebex.client.launch.ControllerRegistry
 import com.gamebex.client.stream.P2Prep
 import com.gamebex.client.stream.StreamCaps
 import com.gamebex.client.stream.StreamPlayer2
@@ -23,12 +24,13 @@ import java.io.File
 class StreamPlayer2Impl(
     private val externalBase: () -> File,
     private val dolphin: DolphinP2Config,
+    private val hostPads: () -> List<ControllerRegistry.Pad> = ControllerRegistry::snapshot,
     /** True the first time it is called for [key] on this phone. */
     private val firstTime: (key: String) -> Boolean,
 ) : StreamPlayer2 {
     override suspend fun prepare(game: GameEntity, emu: Emu, rsoundReady: Boolean): P2Prep = when (emu) {
-        Emu.RETROARCH -> StreamRaConfig.write(externalBase(), rsoundReady)?.let { P2Prep.RetroArchConfig(it) }
-            ?: P2Prep.Failed(TogetherCopy.configUnwritable)
+        Emu.RETROARCH -> StreamRaConfig.write(externalBase(), rsoundReady, hasRealHostPad = hostPads().isNotEmpty())
+            ?.let { P2Prep.RetroArchConfig(it) } ?: P2Prep.Failed(TogetherCopy.configUnwritable)
         Emu.DOLPHIN -> when (val r = dolphin.apply()) {
             DolphinP2Config.Result.Applied -> P2Prep.Written
             is DolphinP2Config.Result.Failed -> P2Prep.Failed(r.text)

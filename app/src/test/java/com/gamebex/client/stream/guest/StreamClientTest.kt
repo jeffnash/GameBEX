@@ -32,6 +32,7 @@ class StreamClientTest {
     private val states: MutableList<StreamClient.State> = Collections.synchronizedList(mutableListOf())
     private val events = LinkedBlockingQueue<Any>()
     private val receivedVideos = LinkedBlockingQueue<Pair<Int, Long>>()
+    private val deliveryReports = LinkedBlockingQueue<com.gamebex.client.stream.proto.DeliveryWire.Report>()
 
     @After
     fun tearDown() {
@@ -62,6 +63,9 @@ class StreamClientTest {
         }
         override fun onPong(t0: Long, t1: Long, t2: Long, t3: Long) {
             events += MediaFrame.Pong(0, t0, t1, t2)
+        }
+        override fun onDelivery(report: com.gamebex.client.stream.proto.DeliveryWire.Report) {
+            deliveryReports += report
         }
     }
 
@@ -231,9 +235,9 @@ class StreamClientTest {
     }
 
     private fun manualClient(now: AtomicLong, timer: ManualTicker, pending: () -> Int = { 0 },
-        counters: (String, Long) -> Unit = { _, _ -> }): StreamClient {
+        counters: (String, Long) -> Unit = { _, _ -> }, observer: StreamClient.Listener = listener): StreamClient {
         val endpoint = StreamEndpoint("127.0.0.1", server.localPort, 0, token, 1600, 720, true, "J")
-        return StreamClient(endpoint, listener, decoderPending = pending, clock = now::get,
+        return StreamClient(endpoint, observer, decoderPending = pending, clock = now::get,
             onCounter = counters, tickerFactory = timer::create).also { clients += it; it.start() }
     }
 
@@ -271,9 +275,62 @@ class StreamClientTest {
         assertEquals(0L, report.bytes)
         assertEquals(-1L, report.relativeP95Ns)
         assertEquals(7, report.pending)
+        assertEquals(report, deliveryReports.poll(1, TimeUnit.SECONDS))
         now.addAndGet(500_000_000L)
         timer.tick()
-        assertEquals(2, host.nextDelivery().report.seq)
+        val second = host.nextDelivery().report
+        assertEquals(2, second.seq)
+        assertEquals(second, deliveryReports.poll(1, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun inFlightDeliveryCallbackFinishesBeforeConnectionReset() {
+        val now = AtomicLong(10_000_000_000L)
+        val timer = ManualTicker()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val firstCallback = java.util.concurrent.atomic.AtomicBoolean(true)
+        val observer = object : StreamClient.Listener by listener {
+            override fun onDelivery(report: com.gamebex.client.stream.proto.DeliveryWire.Report) {
+                if (firstCallback.compareAndSet(true, false)) {
+                    entered.countDown()
+                    assertTrue(release.await(3, TimeUnit.SECONDS))
+                }
+                listener.onDelivery(report)
+            }
+        }
+        manualClient(now, timer, observer = observer)
+        val first = accept()
+        first.handshake()
+        await<StreamClient.State.Connected>()
+        assertTrue(timer.ready.await(1, TimeUnit.SECONDS))
+        first.send(MediaFrame.VideoConfig(byteArrayOf(1)))
+        await<MediaFrame.VideoConfig>()
+        now.addAndGet(500_000_000L)
+        val ticking = Thread { timer.tick() }
+        ticking.start()
+        try {
+            assertTrue(entered.await(1, TimeUnit.SECONDS))
+            first.socket.close()
+            assertEquals(null, events.poll(200, TimeUnit.MILLISECONDS))
+        } finally {
+            release.countDown()
+            ticking.join(1000L)
+        }
+        assertTrue(!ticking.isAlive)
+        assertEquals(1, deliveryReports.poll(1, TimeUnit.SECONDS)!!.seq)
+        await<StreamClient.State.Reconnecting>()
+        val second = accept()
+        second.handshake()
+        await<StreamClient.State.Connected>()
+        second.send(MediaFrame.VideoConfig(byteArrayOf(2)))
+        await<MediaFrame.VideoConfig>()
+        now.addAndGet(500_000_000L)
+        timer.tick()
+        val report = second.nextDelivery().report
+        assertEquals(1, report.seq)
+        assertEquals(1L, report.codecEpoch)
+        assertEquals(report, deliveryReports.poll(1, TimeUnit.SECONDS))
     }
 
     @Test
@@ -298,7 +355,9 @@ class StreamClientTest {
         assertEquals(1 to 1L, receivedVideos.poll(1, TimeUnit.SECONDS))
         now.addAndGet(500_000_000L)
         timer.tick()
-        assertEquals(1L, first.nextDelivery().report.codecEpoch)
+        val initialReport = first.nextDelivery().report
+        assertEquals(1L, initialReport.codecEpoch)
+        assertEquals(initialReport, deliveryReports.poll(1, TimeUnit.SECONDS))
         first.send(MediaFrame.VideoConfig(byteArrayOf(2)))
         await<MediaFrame.VideoConfig>()
         now.addAndGet(500_000_000L)
@@ -306,6 +365,7 @@ class StreamClientTest {
         val changed = first.nextDelivery().report
         assertEquals(2L, changed.codecEpoch)
         assertEquals(2, changed.seq)
+        assertEquals(changed, deliveryReports.poll(1, TimeUnit.SECONDS))
         first.socket.close()
         await<StreamClient.State.Reconnecting>()
         val retired = timer.retired.poll(1, TimeUnit.SECONDS)!!
@@ -318,11 +378,13 @@ class StreamClientTest {
         await<MediaFrame.Info>()
         now.addAndGet(500_000_000L)
         retired()
+        assertTrue(deliveryReports.isEmpty())
         timer.tick()
         val reconnected = second.nextDelivery().report
         assertEquals(1L, reconnected.codecEpoch)
         assertEquals(1, reconnected.seq)
         assertEquals(0, reconnected.frames)
         assertEquals(0L, reconnected.bytes)
+        assertEquals(reconnected, deliveryReports.poll(1, TimeUnit.SECONDS))
     }
 }

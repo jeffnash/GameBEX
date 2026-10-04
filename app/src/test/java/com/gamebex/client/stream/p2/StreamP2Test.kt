@@ -72,6 +72,54 @@ class StreamP2Test {
     }
 
     @Test
+    fun retroArchOverlayIsOffForARealHostPad() {
+        val sources = InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK
+        val pads = ControllerRegistry.pads(
+            listOf(
+                ControllerRegistry.DeviceInfo(20, StreamCaps.PAD_NAME, "p2", sources, false),
+                ControllerRegistry.DeviceInfo(21, "GameSir-X5s", "x5", sources, false),
+            ),
+        )
+        assertTrue(pads.isNotEmpty())
+        val hasRealHostPad = pads.isNotEmpty()
+        assertEquals("false", StreamRaConfig.overrides(hasRealHostPad = hasRealHostPad)["input_overlay_enable"])
+        val text = StreamRaConfig.cfgText("/sdcard", hasRealHostPad = hasRealHostPad)
+        assertTrue(text.contains("input_overlay_enable = \"false\""))
+        assertTrue(text.contains("input_overlay_hide_when_gamepad_connected = \"false\""))
+        assertEquals(1, text.lines().count { it.startsWith("input_overlay_enable ") })
+    }
+
+    @Test
+    fun retroArchOverlayStaysOnWithOnlyTheStreamPadAndVirtualDevices() {
+        val sources = InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK
+        val pads = ControllerRegistry.pads(
+            listOf(
+                ControllerRegistry.DeviceInfo(20, StreamCaps.PAD_NAME, "p2", sources, false),
+                ControllerRegistry.DeviceInfo(21, "Virtual controller", "virtual", sources, true),
+            ),
+        )
+        assertTrue(pads.isEmpty())
+        val hasRealHostPad = pads.isNotEmpty()
+        assertEquals("true", StreamRaConfig.overrides(hasRealHostPad = hasRealHostPad)["input_overlay_enable"])
+        val text = StreamRaConfig.cfgText("/sdcard", hasRealHostPad = hasRealHostPad)
+        assertTrue(text.contains("input_overlay_enable = \"true\""))
+        assertTrue(text.contains("input_overlay_hide_when_gamepad_connected = \"false\""))
+        assertEquals(1, text.lines().count { it.startsWith("input_overlay_enable ") })
+    }
+
+    @Test
+    fun retroArchOverlayDefaultsOnWithoutAnyPads() {
+        val pads = ControllerRegistry.pads(emptyList())
+        assertTrue(pads.isEmpty())
+        assertEquals("true", StreamRaConfig.overrides()["input_overlay_enable"])
+        val text = StreamRaConfig.cfgText("/sdcard", hasRealHostPad = pads.isNotEmpty())
+        assertEquals(StreamRaConfig.cfgText("/sdcard"), text)
+        assertTrue(text.contains("input_overlay_enable = \"true\""))
+        assertTrue(text.contains("input_overlay_hide_when_gamepad_connected = \"false\""))
+        assertEquals(1, text.lines().count { it.startsWith("input_overlay_enable ") })
+    }
+
+    @Test
     fun streamUsesEarlyPollingWithoutChangingSoloInputConfig() {
         assertEquals("0", StreamRaConfig.overrides()["input_poll_type_behavior"])
         assertTrue(StreamRaConfig.cfgText("/sdcard").contains("input_poll_type_behavior = \"0\""))
@@ -123,7 +171,7 @@ class StreamP2Test {
 
     @Test
     fun playerTwoForwardsReadinessButDefaultsToOpenSl() = runBlocking {
-        val p2 = StreamPlayer2Impl({ tmp }, dolphin()) { true }
+        val p2 = StreamPlayer2Impl({ tmp }, dolphin(), hostPads = { emptyList() }) { true }
         val original = p2.prepare(game("n64"), Emu.RETROARCH) as P2Prep.RetroArchConfig
         assertTrue(original.cfg.readText().contains("audio_driver = \"opensl\""))
         val ready = p2.prepare(game("n64"), Emu.RETROARCH, rsoundReady = true) as P2Prep.RetroArchConfig
@@ -135,8 +183,35 @@ class StreamP2Test {
     }
 
     @Test
+    fun playerTwoSamplesHostPadsAndKeepsTheOverlayChoiceWhenReadinessChanges() = runBlocking {
+        val sources = InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK
+        val streamPad = ControllerRegistry.DeviceInfo(20, StreamCaps.PAD_NAME, "p2", sources, false)
+        val realPad = ControllerRegistry.DeviceInfo(21, "GameSir-X5s", "x5", sources, false)
+        var pads = ControllerRegistry.pads(listOf(streamPad, realPad))
+        var snapshots = 0
+        val p2 = StreamPlayer2Impl({ tmp }, dolphin(), hostPads = { snapshots++; pads }) { true }
+        val original = p2.prepare(game("n64"), Emu.RETROARCH) as P2Prep.RetroArchConfig
+        assertTrue(original.cfg.readText().contains("input_overlay_enable = \"false\""))
+        val ready = p2.prepare(game("n64"), Emu.RETROARCH, rsoundReady = true) as P2Prep.RetroArchConfig
+        assertEquals(original.cfg, ready.cfg)
+        val text = ready.cfg.readText()
+        assertTrue(text.contains("input_overlay_enable = \"false\""))
+        assertTrue(text.contains("input_overlay_hide_when_gamepad_connected = \"false\""))
+        assertTrue(text.contains("audio_driver = \"rsound\""))
+        assertEquals(1, text.lines().count { it.startsWith("input_overlay_enable ") })
+        pads = ControllerRegistry.pads(listOf(streamPad))
+        val onlyStreamPad = p2.prepare(game("n64"), Emu.RETROARCH) as P2Prep.RetroArchConfig
+        assertEquals(original.cfg, onlyStreamPad.cfg)
+        assertTrue(onlyStreamPad.cfg.readText().contains("input_overlay_enable = \"true\""))
+        pads = ControllerRegistry.pads(emptyList())
+        val noPads = p2.prepare(game("n64"), Emu.RETROARCH) as P2Prep.RetroArchConfig
+        assertTrue(noPads.cfg.readText().contains("input_overlay_enable = \"true\""))
+        assertEquals(4, snapshots)
+    }
+
+    @Test
     fun readinessDoesNotTurnOtherEmulatorsIntoRetroArch() = runBlocking {
-        val p2 = StreamPlayer2Impl({ tmp }, dolphin()) { true }
+        val p2 = StreamPlayer2Impl({ tmp }, dolphin(), hostPads = { emptyList() }) { true }
         assertEquals(P2Prep.Guide(listOf(TogetherCopy.netherPlayer2)), p2.prepare(game("ps2"), Emu.NETHER, rsoundReady = true))
         assertEquals(P2Prep.Guide(listOf(TogetherCopy.streamPlayer2Other("ARMSX2"))), p2.prepare(game("ps2", Emu.ARMSX2.pkg), Emu.ARMSX2, rsoundReady = true))
         assertFalse(StreamRaConfig.fileUnder(tmp).exists())
@@ -196,7 +271,7 @@ class StreamP2Test {
     fun eachEmulatorGetsItsPlayerTwoPreparation() = runBlocking {
         File(configDir, "Dolphin.ini").writeText("[Core]\n")
         val seen = mutableSetOf<String>()
-        val p2 = StreamPlayer2Impl({ tmp }, dolphin()) { key -> seen.add(key) }
+        val p2 = StreamPlayer2Impl({ tmp }, dolphin(), hostPads = { emptyList() }) { key -> seen.add(key) }
         val ra = p2.prepare(game("n64"), Emu.RETROARCH)
         assertTrue(ra is P2Prep.RetroArchConfig)
         assertEquals(P2Prep.Written, p2.prepare(game("gc", Emu.DOLPHIN.pkg), Emu.DOLPHIN))
