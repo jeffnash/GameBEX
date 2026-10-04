@@ -100,8 +100,9 @@ class IndexedAudioBuffer(
             captureNs.size >= count && seq.size >= count)
         if (epoch != expectedEpoch || !initialized) return null
         val first = next
+        val frames = minOf(count.toLong(), (high - next).coerceAtLeast(0L)).toInt()
         val previousMissing = missing
-        for (i in 0 until count) {
+        for (i in 0 until frames) {
             val index = first + i
             val slot = (index % capacity).toInt()
             val ok = tags[slot] == index
@@ -112,9 +113,9 @@ class IndexedAudioBuffer(
             seq[i] = if (ok) sequences[slot] else 0
             if (ok) { tags[slot] = Long.MIN_VALUE; buffered-- } else missing++
         }
-        next += count
+        next += frames
         emitCounter("a_missing_frames", missing - previousMissing)
-        return Read(first, count)
+        return Read(first, frames)
     }
 
     private fun emitCounter(name: String, delta: Long) {

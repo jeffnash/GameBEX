@@ -7,6 +7,7 @@ import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketTimeoutException
+import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicInteger
 
 class RSoundAudioSource(
@@ -42,10 +43,69 @@ class RSoundAudioSource(
         var connected = false
     }
 
+    private data class LocalLoss(val pendingChunks: Int, val pendingBytes: Int, val inFlightBytes: Int, val rejectedBytes: Int) {
+        val discardedBytes: Int get() = pendingBytes + inFlightBytes + rejectedBytes
+    }
+
+    private class LocalQueue {
+        private val lock = Object()
+        private val pending = ArrayDeque<ByteArray>()
+        private var alive = true
+        private var pendingBytes = 0
+        private var inFlightBytes = 0
+        private var rejectedBytes = 0
+        val pendingChunks: Int get() = synchronized(lock) { pending.size }
+
+        fun enqueue(bytes: ByteArray) = synchronized(lock) {
+            if (!alive) return@synchronized
+            if (pending.size == LOCAL_QUEUE_CHUNKS) {
+                rejectedBytes += bytes.size
+                throw LocalPlaybackFailure(IOException("RSound local queue overflow: $LOCAL_QUEUE_CHUNKS chunks / ${LOCAL_QUEUE_CHUNKS * 5}ms"))
+            }
+            pending.addLast(bytes)
+            pendingBytes += bytes.size
+            lock.notifyAll()
+        }
+
+        fun take(): ByteArray? = synchronized(lock) {
+            while (alive && pending.isEmpty()) lock.wait()
+            if (!alive) null else pending.removeFirst().also {
+                pendingBytes -= it.size
+                inFlightBytes = it.size
+            }
+        }
+
+        fun written(count: Int) = synchronized(lock) {
+            if (alive) inFlightBytes -= count
+        }
+
+        fun close(): LocalLoss? = synchronized(lock) {
+            if (!alive) return@synchronized null
+            alive = false
+            val loss = LocalLoss(pending.size, pendingBytes, inFlightBytes, rejectedBytes)
+            pending.clear()
+            pendingBytes = 0
+            inFlightBytes = 0
+            lock.notifyAll()
+            loss
+        }
+    }
+
+    private data class Counters(
+        val receivedBytes: Long,
+        val writtenBytes: Long,
+        val nonzeroChunks: Long,
+        val lastArrivalNs: Long,
+    )
+
+    private data class DiagnosticSnapshot(val counters: Counters, val arrival: String, val timings: String)
+
     private class Connection(val data: Socket, val control: Socket, val player: RSoundPlayer) {
+        val local = LocalQueue()
+        val metrics = Any()
         @Volatile var alive = true
-        @Volatile var receivedBytes = 0L
-        @Volatile var writtenBytes = 0L
+        var receivedBytes = 0L
+        var writtenBytes = 0L
         var nonzeroChunks = 0L
         var nextLogNs = 0L
         var lastArrivalNs = 0L
@@ -62,9 +122,13 @@ class RSoundAudioSource(
         val writeTiming = Timing()
         val arrivalGapTiming = Timing()
         val arrivalToDeliverTiming = Timing()
+
+        fun counters(): Counters = synchronized(metrics) {
+            Counters(receivedBytes, writtenBytes, nonzeroChunks, lastArrivalNs)
+        }
     }
 
-    private class LocalPlaybackFailure(cause: Throwable) : IOException("RSound local playback failed", cause)
+    private class LocalPlaybackFailure(cause: Throwable) : IOException("RSound local playback failed: ${cause.message}", cause)
 
     private class Timing {
         var count = 0L
@@ -145,7 +209,7 @@ class RSoundAudioSource(
                 val player = createPlayer(next)
                 next.prepared = player
                 ready = true
-                log("RSound ready 127.0.0.1:${server.localPort} rate=48000 channels=2 chunkBytes=960 transportChunkBytes=$transportChunkBytes controlProtocol=$useControlProtocol bufferBytes=${player.bufferBytes} receiveBufferSize=${server.receiveBufferSize} quickAckEnabled=$quickAckEnabled guestQueueChunks=${RSoundGuestQueue.CAPACITY_CHUNKS} guestQueueCapacityMs=${RSoundGuestQueue.CAPACITY_MS}; loopback disabled")
+                log("RSound ready 127.0.0.1:${server.localPort} rate=48000 channels=2 chunkBytes=960 transportChunkBytes=$transportChunkBytes controlProtocol=$useControlProtocol bufferBytes=${player.bufferBytes} receiveBufferSize=${server.receiveBufferSize} quickAckEnabled=$quickAckEnabled guestQueueChunks=${RSoundGuestQueue.CAPACITY_CHUNKS} guestQueueCapacityMs=${RSoundGuestQueue.CAPACITY_MS} localQueueChunks=$LOCAL_QUEUE_CHUNKS localQueueCapacityMs=${LOCAL_QUEUE_CHUNKS * 5}; loopback disabled")
                 spawn(next, "gbx-rsound-accept") { acceptLoop(next, server) }
                 true
             } catch (t: Throwable) {
@@ -263,7 +327,8 @@ class RSoundAudioSource(
                 )
                 acceptedData.soTimeout = 0
                 spawn(current, "gbx-rsound-control") { controlLoop(current, acceptedConnection) }
-                spawn(current, "gbx-rsound-data") { dataLoop(current, acceptedConnection) }
+                spawn(current, "gbx-rsound-local", Thread.NORM_PRIORITY + 2) { localLoop(current, acceptedConnection) }
+                spawn(current, "gbx-rsound-data", Thread.NORM_PRIORITY + 2) { dataLoop(current, acceptedConnection) }
             } catch (t: Throwable) {
                 if (isCurrent(current)) log("RSound client rejected/disconnected: ${detail(t)}")
                 if (connection != null) disconnected(current, connection, t)
@@ -334,25 +399,16 @@ class RSoundAudioSource(
             }
             val chunker = RSoundChunker { bytes, arrivalNs ->
                 if (isActive(current, connection)) {
+                    val localBytes = bytes.copyOf()
                     val deliverStartNs = System.nanoTime()
-                    connection.arrivalToDeliverTiming.record(deliverStartNs - arrivalNs)
+                    synchronized(connection.metrics) {
+                        connection.arrivalToDeliverTiming.record(deliverStartNs - arrivalNs)
+                    }
                     deliver(current, Mode.RSOUND, connection, bytes, arrivalNs, RSoundProtocol.CHUNK_FRAMES)
-                    connection.deliverTiming.record(System.nanoTime() - deliverStartNs)
-                    val writeStartNs = System.nanoTime()
-                    val written = try {
-                        rsoundWriteFully(connection.player, bytes) { isActive(current, connection) }
-                    } catch (failure: Throwable) {
-                        throw LocalPlaybackFailure(failure)
+                    synchronized(connection.metrics) {
+                        connection.deliverTiming.record(System.nanoTime() - deliverStartNs)
                     }
-                    connection.writeTiming.record(System.nanoTime() - writeStartNs)
-                    if (!written && isActive(current, connection)) {
-                        throw LocalPlaybackFailure(IOException("RSound playback stopped"))
-                    }
-                    if (written) {
-                        connection.writtenBytes += bytes.size
-                        if (bytes.any { it != 0.toByte() }) connection.nonzeroChunks++
-                        logPlayback(connection)
-                    }
+                    if (isActive(current, connection)) connection.local.enqueue(localBytes)
                 }
             }
             val input = connection.data.getInputStream()
@@ -364,20 +420,23 @@ class RSoundAudioSource(
                 if (count > 0 && quickAckEnabled) rearmQuickAck(connection, quickAck)
                 if (count < 0) throw IOException("RSound data EOF")
                 if (count == 0) throw IOException("RSound data read stalled")
-                connection.readTiming.record(arrivalNs - readStartNs)
-                if (connection.lastArrivalNs != 0L) {
-                    val gapNs = arrivalNs - connection.lastArrivalNs
-                    connection.arrivalGapTiming.record(gapNs)
-                    connection.arrivalGaps[connection.arrivalGapIndex] = gapNs
-                    connection.arrivalGapIndex = (connection.arrivalGapIndex + 1) % connection.arrivalGaps.size
-                    connection.arrivalGapSamples = minOf(connection.arrivalGapSamples + 1, connection.arrivalGaps.size)
-                    if (gapNs > 30_000_000L) connection.arrivalGapsOver30Ms++
-                } else {
-                    connection.firstArrivalNs = arrivalNs
+                val firstRead = synchronized(connection.metrics) {
+                    connection.readTiming.record(arrivalNs - readStartNs)
+                    if (connection.lastArrivalNs != 0L) {
+                        val gapNs = arrivalNs - connection.lastArrivalNs
+                        connection.arrivalGapTiming.record(gapNs)
+                        connection.arrivalGaps[connection.arrivalGapIndex] = gapNs
+                        connection.arrivalGapIndex = (connection.arrivalGapIndex + 1) % connection.arrivalGaps.size
+                        connection.arrivalGapSamples = minOf(connection.arrivalGapSamples + 1, connection.arrivalGaps.size)
+                        if (gapNs > 30_000_000L) connection.arrivalGapsOver30Ms++
+                    } else {
+                        connection.firstArrivalNs = arrivalNs
+                    }
+                    connection.lastArrivalNs = arrivalNs
+                    connection.receivedBytes += count
+                    connection.receivedBytes == count.toLong()
                 }
-                connection.lastArrivalNs = arrivalNs
-                connection.receivedBytes += count
-                if (connection.receivedBytes == count.toLong()) {
+                if (firstRead) {
                     log("RSound first PCM read bytes=$count arrivalNs=$arrivalNs origin=bridge-arrival")
                 }
                 chunker.accept(bytes, 0, count, arrivalNs)
@@ -393,6 +452,33 @@ class RSoundAudioSource(
         }
     }
 
+    private fun localLoop(current: Run, connection: Connection) {
+        try {
+            while (isActive(current, connection)) {
+                val bytes = connection.local.take() ?: return
+                if (!isActive(current, connection)) return
+                val writeStartNs = System.nanoTime()
+                val written = rsoundWriteFully(connection.player, bytes, onWritten = { count ->
+                    synchronized(connection.metrics) {
+                        if (isActive(current, connection)) {
+                            connection.local.written(count)
+                            connection.writtenBytes += count
+                        }
+                    }
+                }) { isActive(current, connection) }
+                synchronized(connection.metrics) {
+                    connection.writeTiming.record(System.nanoTime() - writeStartNs)
+                    if (written && bytes.any { it != 0.toByte() }) connection.nonzeroChunks++
+                }
+                if (!isActive(current, connection)) return
+                if (!written) throw IOException("RSound playback stopped")
+                logPlayback(current, connection)
+            }
+        } catch (failure: Throwable) {
+            if (isActive(current, connection)) disconnected(current, connection, failure, LOCAL_PLAYBACK)
+        }
+    }
+
     private fun rearmQuickAck(connection: Connection, quickAck: RSoundQuickAck?) {
         val succeeded = try {
             quickAck?.rearm() == true
@@ -401,15 +487,19 @@ class RSoundAudioSource(
         } catch (_: LinkageError) {
             false
         }
-        if (succeeded) {
-            connection.quickAckSuccesses++
-        } else {
-            connection.quickAckFailures++
-            if (!connection.quickAckWarning) {
-                connection.quickAckWarning = true
-                log("RSound TCP_QUICKACK unavailable; continuing with OS ACK policy")
+        val warn = synchronized(connection.metrics) {
+            if (succeeded) {
+                connection.quickAckSuccesses++
+                false
+            } else {
+                connection.quickAckFailures++
+                if (connection.quickAckWarning) false else {
+                    connection.quickAckWarning = true
+                    true
+                }
             }
         }
+        if (warn) log("RSound TCP_QUICKACK unavailable; continuing with OS ACK policy")
     }
 
     private fun controlLoop(current: Run, connection: Connection) {
@@ -428,7 +518,7 @@ class RSoundAudioSource(
                 when (val command = RSoundProtocol.readControl(input, first) { setDeadline(socket, end) }) {
                     is RSoundProtocol.Control.Info -> {
                         val played = try {
-                            playedBytes(connection)
+                            logInfo(current, connection, command.clientBytes)
                         } catch (failure: Throwable) {
                             disconnected(current, connection, failure, LOCAL_PLAYBACK)
                             return
@@ -515,8 +605,18 @@ class RSoundAudioSource(
         }
     }
 
-    private fun playedBytes(connection: Connection): Long =
-        playedFramesNow(connection.player.stats(), System.nanoTime(), connection.writtenBytes / RSoundProtocol.FRAME_BYTES) * RSoundProtocol.FRAME_BYTES
+    private fun logInfo(current: Run, connection: Connection, clientBytes: Long): Long {
+        val stats = connection.player.stats()
+        val now = System.nanoTime()
+        val counters = connection.counters()
+        val played = playedFramesNow(stats, now, counters.writtenBytes / RSoundProtocol.FRAME_BYTES) * RSoundProtocol.FRAME_BYTES
+        val queuedChunks = connection.local.pendingChunks
+        val queuedUs = queuedChunks * RSoundProtocol.CHUNK_FRAMES * 1_000_000L / RSoundProtocol.RATE
+        if (isActive(current, connection)) {
+            log("RSound INFO clientBytes=$clientBytes receivedBytes=${counters.receivedBytes} writtenBytes=${counters.writtenBytes} playedBytes=$played localQueueChunks=$queuedChunks localQueueCapacityChunks=$LOCAL_QUEUE_CHUNKS localQueuedAudioUs=$queuedUs trackQueuedAudioUs=${(counters.writtenBytes - played) * 1_000_000L / (RSoundProtocol.RATE * RSoundProtocol.FRAME_BYTES)}")
+        }
+        return played
+    }
 
     private fun playedFramesNow(stats: RSoundPlaybackStats, now: Long, writtenFrames: Long): Long {
         val timestampNs = stats.timestampNs
@@ -528,31 +628,40 @@ class RSoundAudioSource(
         return frames.coerceIn(0, writtenFrames)
     }
 
-    private fun logPlayback(connection: Connection) {
-        val now = System.nanoTime()
-        if (now < connection.nextLogNs) return
-        connection.nextLogNs = now + 2_000_000_000L
-        val stats = try {
-            connection.player.stats()
-        } catch (failure: Throwable) {
-            throw LocalPlaybackFailure(failure)
-        }
-        val played = playedFramesNow(stats, now, connection.writtenBytes / RSoundProtocol.FRAME_BYTES) * RSoundProtocol.FRAME_BYTES
-        val queuedUs = (connection.writtenBytes - played) * 1_000_000L / (RSoundProtocol.RATE * 4)
-        val timestampNs = stats.timestampNs
-        val timestampFrames = stats.timestampFrames
-        val timestampAgeUs = timestampNs?.let { (now - it) / 1_000 }
-        val timestampLatencyUs = if (timestampNs != null && timestampFrames != null) {
-            (timestampNs + (connection.writtenBytes / 4 - timestampFrames) * 1_000_000_000L / RSoundProtocol.RATE - now) / 1_000
-        } else null
-        val phase = if (connection.writtenBytes < RSoundProtocol.RATE * 4) "startup" else "steady"
+    private fun diagnosticSnapshot(connection: Connection): DiagnosticSnapshot = synchronized(connection.metrics) {
+        val counters = connection.counters()
         val gaps = connection.arrivalGaps.copyOf(connection.arrivalGapSamples).apply { sort() }
         fun percentile(percent: Int): Long = if (gaps.isEmpty()) 0L else
             gaps[((gaps.size.toLong() * percent + 99) / 100 - 1).toInt()] / 1_000
         val arrivalElapsedNs = (connection.lastArrivalNs - connection.firstArrivalNs).coerceAtLeast(0)
-        val actualByteCadence = if (arrivalElapsedNs > 0) connection.receivedBytes.toDouble() * 1_000_000_000.0 / arrivalElapsedNs else 0.0
-        log("RSound bridge-arrival origin=bridge-arrival quickAckEnabled=$quickAckEnabled quickAckSuccessCount=${connection.quickAckSuccesses} quickAckFailureCount=${connection.quickAckFailures} readGapSamples=${gaps.size} readGapP50Us=${percentile(50)} readGapP95Us=${percentile(95)} readGapMaxUs=${connection.arrivalGapTiming.maxNs / 1_000} readGapsOver30Ms=${connection.arrivalGapsOver30Ms} receivedBytes=${connection.receivedBytes} arrivalElapsedNs=$arrivalElapsedNs actualByteCadenceBps=${actualByteCadence.toLong()} guestDrops=$guestDrops")
-        log("RSound local phase=$phase receivedBytes=${connection.receivedBytes} writtenBytes=${connection.writtenBytes} nonzeroChunks=${connection.nonzeroChunks} playedBytes=$played headFrames=${stats.headFrames} timestampFrames=$timestampFrames timestampNs=$timestampNs timestampAgeUs=$timestampAgeUs timestampLatencyUs=$timestampLatencyUs queuedLatencyUs=$queuedUs underruns=${stats.underruns} lastArrivalNs=${connection.lastArrivalNs} ${connection.readTiming.summary("read")} ${connection.deliverTiming.summary("deliver")} ${connection.writeTiming.summary("write")} ${connection.arrivalGapTiming.summary("arrivalGap")} ${connection.arrivalToDeliverTiming.summary("arrivalToDeliver")}")
+        val actualByteCadence = if (arrivalElapsedNs > 0) counters.receivedBytes.toDouble() * 1_000_000_000.0 / arrivalElapsedNs else 0.0
+        val arrival = "RSound bridge-arrival origin=bridge-arrival quickAckEnabled=$quickAckEnabled quickAckSuccessCount=${connection.quickAckSuccesses} quickAckFailureCount=${connection.quickAckFailures} readGapSamples=${gaps.size} readGapP50Us=${percentile(50)} readGapP95Us=${percentile(95)} readGapMaxUs=${connection.arrivalGapTiming.maxNs / 1_000} readGapsOver30Ms=${connection.arrivalGapsOver30Ms} receivedBytes=${counters.receivedBytes} arrivalElapsedNs=$arrivalElapsedNs actualByteCadenceBps=${actualByteCadence.toLong()} ${connection.arrivalGapTiming.summary("arrivalGap")} ${connection.arrivalToDeliverTiming.summary("arrivalToDeliver")} guestDrops=$guestDrops"
+        val timings = "${connection.readTiming.summary("read")} ${connection.deliverTiming.summary("deliver")} ${connection.writeTiming.summary("write")} ${connection.arrivalGapTiming.summary("arrivalGap")} ${connection.arrivalToDeliverTiming.summary("arrivalToDeliver")}"
+        DiagnosticSnapshot(counters, arrival, timings)
+    }
+
+    private fun logPlayback(current: Run, connection: Connection) {
+        val now = System.nanoTime()
+        if (now < connection.nextLogNs) return
+        connection.nextLogNs = now + 2_000_000_000L
+        val stats = connection.player.stats()
+        val snapshot = diagnosticSnapshot(connection)
+        val counters = snapshot.counters
+        val played = playedFramesNow(stats, now, counters.writtenBytes / RSoundProtocol.FRAME_BYTES) * RSoundProtocol.FRAME_BYTES
+        val queuedUs = (counters.writtenBytes - played) * 1_000_000L / (RSoundProtocol.RATE * RSoundProtocol.FRAME_BYTES)
+        val queuedChunks = connection.local.pendingChunks
+        val localQueuedUs = queuedChunks * RSoundProtocol.CHUNK_FRAMES * 1_000_000L / RSoundProtocol.RATE
+        val timestampNs = stats.timestampNs
+        val timestampFrames = stats.timestampFrames
+        val timestampAgeUs = timestampNs?.let { (now - it) / 1_000 }
+        val timestampLatencyUs = if (timestampNs != null && timestampFrames != null) {
+            (timestampNs + (counters.writtenBytes / RSoundProtocol.FRAME_BYTES - timestampFrames) * 1_000_000_000L / RSoundProtocol.RATE - now) / 1_000
+        } else null
+        val phase = if (counters.writtenBytes < RSoundProtocol.RATE * RSoundProtocol.FRAME_BYTES) "startup" else "steady"
+        if (!isActive(current, connection)) return
+        log(snapshot.arrival)
+        if (!isActive(current, connection)) return
+        log("RSound local phase=$phase receivedBytes=${counters.receivedBytes} writtenBytes=${counters.writtenBytes} nonzeroChunks=${counters.nonzeroChunks} playedBytes=$played headFrames=${stats.headFrames} timestampFrames=$timestampFrames timestampNs=$timestampNs timestampAgeUs=$timestampAgeUs timestampLatencyUs=$timestampLatencyUs queuedLatencyUs=$queuedUs localQueueChunks=$queuedChunks localQueueCapacityChunks=$LOCAL_QUEUE_CHUNKS localQueuedAudioUs=$localQueuedUs guestDrops=$guestDrops underruns=${stats.underruns} lastArrivalNs=${counters.lastArrivalNs} ${snapshot.timings}")
     }
 
     private fun configure(socket: Socket) {
@@ -580,8 +689,18 @@ class RSoundAudioSource(
         if (removed) runCatching { player.close() }
     }
 
+    private fun closeLocalQueue(connection: Connection) {
+        val snapshot = synchronized(connection.metrics) {
+            val loss = connection.local.close() ?: return
+            loss to connection.counters()
+        }
+        val (loss, counters) = snapshot
+        log("RSound local queue closed localPendingChunks=${loss.pendingChunks} localPendingBytes=${loss.pendingBytes} localInFlightBytes=${loss.inFlightBytes} localRejectedBytes=${loss.rejectedBytes} localDiscardedBytes=${loss.discardedBytes} localDiscardedFrames=${loss.discardedBytes / RSoundProtocol.FRAME_BYTES} receivedBytes=${counters.receivedBytes} writtenBytes=${counters.writtenBytes}")
+    }
+
     private fun closeConnection(current: Run, connection: Connection) {
         connection.alive = false
+        closeLocalQueue(connection)
         closeSocket(current, connection.data)
         closeSocket(current, connection.control)
         closePlayer(current, connection.player)
@@ -589,7 +708,10 @@ class RSoundAudioSource(
 
     private fun closeResources(current: Run) {
         runCatching { current.server?.close() }
-        current.active?.alive = false
+        current.active?.let {
+            it.alive = false
+            closeLocalQueue(it)
+        }
         val sockets: List<Socket>
         val players: List<RSoundPlayer>
         synchronized(current.resources) {
@@ -602,7 +724,7 @@ class RSoundAudioSource(
         players.forEach { runCatching { it.close() } }
     }
 
-    private fun spawn(current: Run, name: String, block: () -> Unit) {
+    private fun spawn(current: Run, name: String, priority: Int = Thread.NORM_PRIORITY, block: () -> Unit) {
         val thread = Thread({
             try {
                 if (isCurrent(current)) block()
@@ -611,7 +733,7 @@ class RSoundAudioSource(
             } finally {
                 synchronized(current.resources) { current.threads.remove(Thread.currentThread()) }
             }
-        }, name).apply { isDaemon = true }
+        }, name).apply { isDaemon = true; this.priority = priority }
         synchronized(current.resources) {
             if (!isCurrent(current)) return
             current.threads.add(thread)
@@ -635,6 +757,7 @@ class RSoundAudioSource(
         private const val SETUP = "setup"
         private const val LOCAL_PLAYBACK = "local-playback"
         private const val GUEST_NETWORK = "guest-network"
+        private const val LOCAL_QUEUE_CHUNKS = 8
         private const val CONTROL_IDLE_MS = 500
         private const val MAX_BUFFER_BYTES = RSoundProtocol.RATE * RSoundProtocol.FRAME_BYTES / 25
     }

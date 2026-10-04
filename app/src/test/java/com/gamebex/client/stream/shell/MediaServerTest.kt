@@ -41,11 +41,11 @@ class MediaServerTest {
     }
 
     private fun server(guest: String = "127.0.0.1", audio: Boolean = true, latencyControl: Boolean = false,
-        clock: () -> Long = System::nanoTime, logger: ((String) -> Unit)? = null): MediaServer {
+        clock: () -> Long = System::nanoTime, logger: ((String) -> Unit)? = null, queueDeadlineMs: Int = 0): MediaServer {
         val config = StreamConfig(token = token, guestAddress = guest, mediaPort = 0, inputPort = 0)
         val s = if (logger == null) MediaServer(config,
-            clock = clock, tickMs = 10L, queueDeadlineMs = 0, latencyControl = latencyControl, videoWriteStallMs = 0)
-        else MediaServer(config, clock = clock, tickMs = 10L, queueDeadlineMs = 0,
+            clock = clock, tickMs = 10L, queueDeadlineMs = queueDeadlineMs, latencyControl = latencyControl, videoWriteStallMs = 0)
+        else MediaServer(config, clock = clock, tickMs = 10L, queueDeadlineMs = queueDeadlineMs,
             latencyControl = latencyControl, videoWriteStallMs = 0, logger = logger)
         servers += s
         s.open(0)
@@ -113,11 +113,11 @@ class MediaServerTest {
         it.get(s)
     }
 
-    private fun writerGuest(s: MediaServer, out: OutputStream): Pair<DeadlineQueue, Thread> {
+    private fun writerGuest(s: MediaServer, out: OutputStream, deadlineMs: Int = 40): Pair<DeadlineQueue, Thread> {
         val type = MediaServer::class.java.declaredClasses.first { it.simpleName == "Guest" }
         val constructor = type.getDeclaredConstructor(Socket::class.java, OutputStream::class.java,
             java.lang.Long.TYPE, java.lang.Integer.TYPE).apply { isAccessible = true }
-        val g = constructor.newInstance(Socket(), out, 7L, 40)
+        val g = constructor.newInstance(Socket(), out, 7L, deadlineMs)
         MediaServer::class.java.getDeclaredField("guest").apply { isAccessible = true }.set(s, g)
         val queue = type.getDeclaredField("video").let {
             it.isAccessible = true
@@ -486,7 +486,7 @@ class MediaServerTest {
         c.hello()
         c.next<MediaFrame.VideoConfig>()
         val report = com.gamebex.client.stream.proto.DeliveryWire.Report(1L, 1, 1_000_000_000L,
-            500_000_000L, 1000L, 1, 13_000_000L, 0, 1)
+            500_000_000L, 1000L, 1, 31_000_000L, 0, 1)
         c.send(MediaFrame.Delivery(report))
         c.send(MediaFrame.Ping(1, 0L))
         c.next<MediaFrame.Pong>()
@@ -500,6 +500,56 @@ class MediaServerTest {
         c.next<MediaFrame.Pong>()
         Thread.sleep(30)
         assertEquals(6_800_000, video.currentBitrate)
+    }
+
+    @Test
+    fun normalDeliveryWindowsDoNotRatchetAndDefaultControllerIgnoresLatency() {
+        for (enabled in listOf(false, true)) {
+            val now = java.util.concurrent.atomic.AtomicLong(1_000_000_000L)
+            val s = server(latencyControl = enabled, clock = now::get)
+            val c = Client(s.port)
+            c.hello()
+            c.next<MediaFrame.VideoConfig>()
+            for (n in 1..12) {
+                now.set(n * 1_000_000_000L)
+                val p95 = if (!enabled) 31_000_000L else (12L + n) * 1_000_000L
+                val report = com.gamebex.client.stream.proto.DeliveryWire.Report(1L, n, now.get(),
+                    500_000_000L, 1000L, 1, p95, 0, 1)
+                c.send(MediaFrame.Delivery(report))
+                c.send(MediaFrame.Ping(n, 0L))
+                c.next<MediaFrame.Pong>()
+                Thread.sleep(30)
+                assertEquals(8_000_000, video.currentBitrate)
+                assertEquals(0, s.stats().level)
+            }
+            s.close()
+            c.close()
+        }
+    }
+
+    @Test
+    fun onlyMediaWriterRetainsHighestPriority() {
+        val s = server()
+        val c = Client(s.port)
+        c.hello()
+        c.next<MediaFrame.VideoConfig>()
+        waitFor("media reader started") {
+            val threads = MediaServer::class.java.getDeclaredField("threads").let {
+                it.isAccessible = true
+                it.get(s) as MutableList<*>
+            }
+            synchronized(threads) { threads.filterIsInstance<Thread>().any { it.name == "gbx-media-read" } }
+        }
+        val threads = MediaServer::class.java.getDeclaredField("threads").let {
+            it.isAccessible = true
+            it.get(s) as MutableList<*>
+        }
+        val priorities = synchronized(threads) { threads.filterIsInstance<Thread>().associate { it.name to it.priority } }
+        assertEquals(setOf("gbx-media-accept", "gbx-media-read", "gbx-media-tick", "gbx-media-write"), priorities.keys)
+        assertEquals(Thread.MAX_PRIORITY, priorities["gbx-media-write"])
+        for (name in listOf("gbx-media-accept", "gbx-media-read", "gbx-media-tick")) {
+            assertEquals(Thread.NORM_PRIORITY, priorities[name])
+        }
     }
 
     @Test
@@ -592,6 +642,57 @@ class MediaServerTest {
         assertEquals(2L, s.framesDropped.get())
         assertEquals(0L, s.framesSent.get())
         assertEquals(s.framesDropped.get(), droppedIn(logs))
+    }
+
+    @Test
+    fun shorterDeadlineExpiresAtPollFromEncodeTimeNotEnqueueTime() {
+        val logs = CopyOnWriteArrayList<String>()
+        val now = java.util.concurrent.atomic.AtomicLong(1_000_000_000L)
+        val s = server(audio = false, clock = now::get, logger = { logs += it }, queueDeadlineMs = 15)
+        val c = Client(s.port)
+        c.hello()
+        c.next<MediaFrame.VideoConfig>()
+        synchronized(queueLock(s)) {
+            val encoded = now.get() - 5_000_000L
+            s.onFrame(EncodedFrame(1, true, encoded, encoded, byteArrayOf(1), 1L))
+            s.onFrame(EncodedFrame(2, false, encoded, encoded, byteArrayOf(1), 1L))
+            now.addAndGet(11_000_000L)
+        }
+        waitFor("short deadline poll expiry") { logs.any {
+            it.contains("reason=age count=2 ageNs=16000000 depth=2 trigger=poll")
+        } }
+        assertEquals(2L, s.framesDropped.get())
+        assertEquals(0L, s.framesSent.get())
+        assertEquals(s.framesDropped.get(), droppedIn(logs))
+    }
+
+    @Test
+    fun shorterDeadlineRecheckLogsEncodedAgeAndClearsDependantsOnce() {
+        for (deadline in listOf(1, 15, 30, 40)) {
+            val logs = CopyOnWriteArrayList<String>()
+            val writerReads = java.util.concurrent.atomic.AtomicInteger()
+            val now = 1_000_000_000L
+            val s = MediaServer(StreamConfig(token = token, guestAddress = "127.0.0.1"),
+                clock = { if (Thread.currentThread().name == "test-media-write" && writerReads.incrementAndGet() >= 2)
+                    now + deadline * 1_000_000L else now }, queueDeadlineMs = deadline, latencyControl = false,
+                videoWriteStallMs = 0, logger = { logs += it })
+            servers += s
+            val (q, writer) = writerGuest(s, java.io.ByteArrayOutputStream(), deadline)
+            q.offer(EncodedFrame(1, true, now - 1L, now - 1L, byteArrayOf(1), 1L), now)
+            q.offer(EncodedFrame(2, false, now - 1L, now - 1L, byteArrayOf(1), 1L), now)
+            writer.start()
+            val age = deadline * 1_000_000L + 1L
+            waitFor("short stale polled aggregate") { logs.any {
+                it.contains("reason=stale_polled count=2 ageNs=$age depth=1 trigger=validate")
+            } }
+            assertEquals(2L, s.framesDropped.get())
+            assertEquals(0L, s.framesSent.get())
+            assertEquals(s.framesDropped.get(), droppedIn(logs))
+            assertTrue(q.waitingForKey)
+            s.close()
+            writer.join(1000L)
+            assertFalse(writer.isAlive)
+        }
     }
 
     @Test

@@ -29,6 +29,57 @@ class DeadlineQueueTest {
     }
 
     @Test
+    fun everyNonzeroDeadlineUsesEncodeAgeForAdmissionPollAndValidation() {
+        for (deadline in 1..40) {
+            val q = queue(deadline)
+            val end = (100L + deadline) * ms
+            assertEquals(0, q.offer(frame(1, true), end).dropped)
+            val entry = q.poll(end).first!!
+            assertEquals(deadline * ms, q.ageNs(entry, end))
+            assertTrue(q.valid(entry, end))
+            assertFalse(q.valid(entry, end + 1L))
+            assertEquals(1, q.offer(frame(2, true), end + 1L).dropped)
+            q.offer(frame(3, true), 100 * ms)
+            val expired = q.poll(end + 1L)
+            assertNull(expired.first)
+            assertEquals(1, expired.second.dropped)
+            assertEquals(DeadlineQueue.Reason.AGE, expired.second.reason)
+            assertTrue(q.waitingForKey)
+        }
+    }
+
+    @Test
+    fun allNonzeroDeadlinesKeepTwoAuCapAndMissingPtsFallback() {
+        for (deadline in 1..40) {
+            val q = queue(deadline)
+            q.offer(frame(1, true, 0), 100 * ms)
+            q.offer(frame(2, false, 0), 100 * ms)
+            assertEquals(2, q.size)
+            assertEquals(2L, q.ageFallbacks)
+            assertEquals(3, q.offer(frame(3, false), 100 * ms).dropped)
+            assertTrue(q.waitingForKey)
+            q.offer(frame(4, true, 0), 100 * ms)
+            val end = (100L + deadline) * ms
+            val entry = q.poll(end).first!!
+            assertEquals(deadline * ms, q.ageNs(entry, end))
+            assertFalse(q.valid(entry, end + 1L))
+        }
+    }
+
+    @Test
+    fun unsafeDeadlineValuesClampToZeroOrForty() {
+        val disabled = queue(-1)
+        repeat(4) { disabled.offer(frame(it, it == 0, 1), 100 * ms) }
+        assertEquals(4, disabled.size)
+        assertEquals(0, disabled.poll(1000 * ms).first!!.frame.seq)
+        for (deadline in listOf(41, Int.MAX_VALUE)) {
+            val q = queue(deadline)
+            q.offer(frame(1, true), 100 * ms)
+            assertNull(q.poll(140 * ms + 1L).first)
+        }
+    }
+
+    @Test
     fun dropPredictiveRequiresNewIdr() {
         val q = queue()
         q.offer(frame(1, true), 100 * ms)

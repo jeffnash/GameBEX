@@ -154,6 +154,148 @@ class StreamP2Test {
     }
 
     @Test
+    fun raExperimentSamplingRejectsInvalidValuesAndDoesNotReadInRelease() {
+        assertEquals(RaExperimentOptions(), RaExperimentOptions.sample(false) { error("release getprop") })
+        for (raw in listOf(null, "", "0", "1", "-1", "9", "17", "64", "8.0", " 16", "bad")) {
+            val samples = mutableListOf<String>()
+            val options = RaExperimentOptions.sample(true) { name -> samples += name; raw }
+            assertEquals(RaExperimentOptions(noSmooth = raw == "1"), options)
+            assertEquals(listOf("ra_audio_latency", "ra_swapchain", "ra_no_smooth"), samples)
+        }
+        assertEquals(RaExperimentOptions(), RaExperimentOptions.sample(true) { "32" })
+        assertEquals(RaExperimentOptions(swapchain = 2), RaExperimentOptions.sample(true) { "2" })
+    }
+
+    @Test
+    fun rsoundLatencyOverridesNeverChangeOpenSlAndSampledArmsKeepTheOverlay() {
+        for (latency in listOf(8, 16, 32)) {
+            val samples = mutableListOf<String>()
+            val options = RaExperimentOptions.sample(true) { name ->
+                samples += name
+                when (name) {
+                    "ra_audio_latency" -> latency.toString()
+                    "ra_swapchain" -> "2"
+                    "ra_no_smooth" -> "1"
+                    else -> error(name)
+                }
+            }
+            for (ready in listOf(false, true)) {
+                for (hostPad in listOf(false, true)) {
+                    val overrides = StreamRaConfig.overrides(ready, diagnostics = false, hasRealHostPad = hostPad, experiments = options)
+                    assertEquals(if (ready) "rsound" else "opensl", overrides["audio_driver"])
+                    assertEquals(if (ready) latency.toString() else "32", overrides["audio_latency"])
+                    assertEquals((!hostPad).toString(), overrides["input_overlay_enable"])
+                    assertEquals("false", overrides["input_overlay_hide_when_gamepad_connected"])
+                    assertEquals(StreamCaps.PAD_NAME, overrides["input_player2_reserved_device"])
+                    assertEquals("2", overrides["video_max_swapchain_images"])
+                    assertEquals("false", overrides["video_smooth"])
+                    val text = StreamRaConfig.cfgText("/sdcard", ready, hostPad, options)
+                    for (key in listOf("audio_latency", "video_smooth", "video_max_swapchain_images", "input_overlay_enable")) {
+                        assertEquals(1, text.lines().count { it.startsWith("$key = ") })
+                        assertTrue(text.contains("$key = \"${overrides[key]}\""))
+                    }
+                }
+            }
+            assertEquals(listOf("ra_audio_latency", "ra_swapchain", "ra_no_smooth"), samples)
+        }
+        assertEquals("32", StreamRaConfig.overrides(true, diagnostics = false, experiments = RaExperimentOptions(audioLatency = 64))["audio_latency"])
+        assertNull(StreamRaConfig.overrides(diagnostics = false, experiments = RaExperimentOptions(swapchain = 3))["video_max_swapchain_images"])
+    }
+
+    @Test
+    fun unsetExperimentConfigMatchesTheOriginalBytes() {
+        val baseline = linkedMapOf(
+            "input_poll_type_behavior" to "0",
+            "input_overlay_enable" to "true",
+            "input_overlay_hide_when_gamepad_connected" to "false",
+            "input_player2_reserved_device" to StreamCaps.PAD_NAME,
+            "input_player2_device_reservation_type" to "2",
+            "input_player2_a_btn" to "97",
+            "input_player2_b_btn" to "96",
+            "input_player2_x_btn" to "100",
+            "input_player2_y_btn" to "99",
+            "input_player2_l_btn" to "102",
+            "input_player2_r_btn" to "103",
+            "input_player2_l2_btn" to "104",
+            "input_player2_r2_btn" to "105",
+            "input_player2_l3_btn" to "106",
+            "input_player2_r3_btn" to "107",
+            "input_player2_start_btn" to "108",
+            "input_player2_select_btn" to "109",
+            "input_player2_up_btn" to "h0up",
+            "input_player2_down_btn" to "h0down",
+            "input_player2_left_btn" to "h0left",
+            "input_player2_right_btn" to "h0right",
+            "input_player2_l_x_plus_axis" to "+0",
+            "input_player2_l_x_minus_axis" to "-0",
+            "input_player2_l_y_plus_axis" to "+1",
+            "input_player2_l_y_minus_axis" to "-1",
+            "input_player2_r_x_plus_axis" to "+2",
+            "input_player2_r_x_minus_axis" to "-2",
+            "input_player2_r_y_plus_axis" to "+3",
+            "input_player2_r_y_minus_axis" to "-3",
+            "input_player2_l2_axis" to "+6",
+            "input_player2_r2_axis" to "+7",
+            "audio_driver" to "opensl",
+            "audio_latency" to "32",
+        )
+        val unset = RaExperimentOptions.sample(true) { null }
+        for (ready in listOf(false, true)) {
+            for (hostPad in listOf(false, true)) {
+                val expected = LinkedHashMap(baseline).apply {
+                    put("input_overlay_enable", (!hostPad).toString())
+                    if (ready) {
+                        put("audio_driver", "rsound")
+                        put("audio_device", "127.0.0.1")
+                    }
+                }
+                assertEquals(expected.entries.toList(), StreamRaConfig.overrides(ready, false, hostPad, unset).entries.toList())
+                val base = GraphicsTuner.retroArchConfigText("/sdcard", resume = true).trimEnd('\n').split('\n')
+                val merged = com.gamebex.client.launch.RetroArchTuner.mergeConfig(base, expected).first.joinToString("\n") + "\n"
+                assertEquals(merged, StreamRaConfig.cfgText("/sdcard", ready, hostPad, unset))
+                assertEquals(merged, StreamRaConfig.cfgText("/sdcard", ready, hostPad, RaExperimentOptions.sample(false) { error("release getprop") }))
+            }
+        }
+    }
+
+    @Test
+    fun playerTwoFreezesRaExperimentsUntilTheNextSessionAndRestoreClearsTheSnapshot() = runBlocking {
+        var samples = 0
+        var latency = 8
+        var arms = true
+        val p2 = StreamPlayer2Impl({ tmp }, dolphin(), hostPads = { emptyList() }, raExperiments = {
+            samples++
+            RaExperimentOptions(latency, if (arms) 2 else 0, arms)
+        }) { true }
+        val initial = p2.prepare(game("n64"), Emu.RETROARCH) as P2Prep.RetroArchConfig
+        assertEquals(1, samples)
+        assertTrue(initial.cfg.readText().contains("audio_latency = \"32\""))
+        latency = 16
+        arms = false
+        repeat(2) {
+            val ready = p2.prepare(game("n64"), Emu.RETROARCH, rsoundReady = true) as P2Prep.RetroArchConfig
+            assertEquals(initial.cfg, ready.cfg)
+            assertTrue(ready.cfg.readText().contains("audio_latency = \"8\""))
+            assertTrue(ready.cfg.readText().contains("video_max_swapchain_images = \"2\""))
+            assertTrue(ready.cfg.readText().contains("video_smooth = \"false\""))
+        }
+        assertEquals(1, samples)
+        p2.prepare(game("n64"), Emu.RETROARCH)
+        assertEquals(2, samples)
+        p2.prepare(game("n64"), Emu.RETROARCH, rsoundReady = true)
+        assertTrue(initial.cfg.readText().contains("audio_latency = \"16\""))
+        assertFalse(initial.cfg.readText().contains("video_max_swapchain_images = \"2\""))
+        assertEquals(2, samples)
+        p2.restore()
+        latency = 32
+        p2.prepare(game("n64"), Emu.RETROARCH, rsoundReady = true)
+        assertTrue(initial.cfg.readText().contains("audio_latency = \"32\""))
+        assertEquals(3, samples)
+        p2.prepare(game("ps2"), Emu.NETHER, rsoundReady = true)
+        assertEquals(3, samples)
+    }
+
+    @Test
     fun rewritingReadinessUsesTheSameSessionFile() {
         val file = StreamRaConfig.write(tmp)!!
         assertTrue(file.readText().contains("audio_driver = \"opensl\""))

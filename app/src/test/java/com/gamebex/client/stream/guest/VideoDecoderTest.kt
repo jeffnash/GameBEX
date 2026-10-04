@@ -1,10 +1,16 @@
 package com.gamebex.client.stream.guest
 
 import com.gamebex.client.stream.proto.MediaFrame
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -20,6 +26,343 @@ class VideoDecoderTest {
             stats.count(reason, count.toLong())
             stats.frameDropped(count)
         }
+    }
+
+    private class RetrySchedule {
+        data class Task(val action: Runnable, val dueMs: Long)
+        var nowMs = 0L
+        val delays = mutableListOf<Long>()
+        val pending = mutableListOf<Task>()
+        val cancelled = mutableListOf<Runnable>()
+
+        fun post(action: Runnable, delayMs: Long) {
+            delays += delayMs
+            pending += Task(action, nowMs + delayMs)
+        }
+
+        fun cancel(action: Runnable) {
+            cancelled += action
+            pending.removeAll { it.action === action }
+        }
+
+        fun advanceBy(delayMs: Long) {
+            val target = nowMs + delayMs
+            while (true) {
+                val next = pending.minByOrNull { it.dueMs }?.takeIf { it.dueMs <= target } ?: break
+                pending.remove(next)
+                nowMs = next.dueMs
+                next.action.run()
+            }
+            nowMs = target
+        }
+    }
+
+    @Test
+    fun configureRetriesSameRequestAtBoundedBackoffAndThenStops() {
+        val schedule = RetrySchedule()
+        val request = DecoderRequest(byteArrayOf(1), 1280, 576, 4, 30)
+        val attempts = mutableListOf<Pair<DecoderRequest, Long>>()
+        var keys = 0
+        val retry = DecoderConfigureRetry(schedule::post, schedule::cancel, {
+            attempts += it to schedule.nowMs
+            false
+        }, { keys++ })
+        retry.configure(request)
+        assertTrue(attempts.isEmpty())
+        schedule.advanceBy(0)
+        schedule.advanceBy(99)
+        assertEquals(1, attempts.size)
+        schedule.advanceBy(1)
+        schedule.advanceBy(299)
+        assertEquals(2, attempts.size)
+        schedule.advanceBy(1)
+        schedule.advanceBy(999)
+        assertEquals(3, attempts.size)
+        schedule.advanceBy(1)
+        assertEquals(listOf(0L, 100L, 400L, 1400L), attempts.map { it.second })
+        attempts.forEach { assertSame(request, it.first) }
+        assertEquals(listOf(0L, 100L, 300L, 1000L), schedule.delays)
+        assertTrue(schedule.pending.isEmpty())
+        repeat(100) {
+            retry.requestKeyframe(request)
+            retry.restart(request)
+        }
+        schedule.advanceBy(10_000)
+        assertEquals(4, attempts.size)
+        assertEquals(0, keys)
+        assertTrue(schedule.pending.isEmpty())
+    }
+
+    @Test
+    fun retrySuccessRequestsOneKeyAndResumesOnlyWithAFreshCurrentEpochKey() {
+        val schedule = RetrySchedule()
+        val losses = Losses()
+        val frames = DecoderFrames(drop = losses::drop)
+        val request = frames.configure(byteArrayOf(1), 1280, 576, 3)
+        var attempts = 0
+        var keys = 0
+        val retry = DecoderConfigureRetry(schedule::post, schedule::cancel, {
+            assertSame(request, it)
+            attempts++
+            if (attempts == 2) {
+                frames.requireKey()
+                true
+            } else {
+                frames.reset("dec_configure_failed")
+                false
+            }
+        }, { keys++ })
+        retry.configure(request)
+        repeat(100) { retry.requestKeyframe(request) }
+        assertEquals(0, keys)
+        schedule.advanceBy(0)
+        repeat(20) { seq ->
+            val accepted = frames.offer(frame(seq, key = seq % 9 == 0), seq.toLong(), 3)
+            if (accepted == DecoderFrames.Offer.NEED_KEY) retry.requestKeyframe(request)
+        }
+        assertEquals(0, keys)
+        schedule.advanceBy(100)
+        assertEquals(2, attempts)
+        assertEquals(1, keys)
+        assertEquals(0, frames.pendingCount)
+        assertSame(request, frames.config)
+        assertEquals(DecoderFrames.Offer.DROPPED, frames.offer(frame(20), 20, 2))
+        assertEquals(DecoderFrames.Offer.DROPPED, frames.offer(frame(21, key = false), 21, 3))
+        assertEquals(DecoderFrames.Offer.ACCEPTED, frames.offer(frame(22), 22, 3))
+        val input = frames.submit()!!
+        assertEquals(22, input.frame.seq)
+        assertEquals(3L, input.codecEpoch)
+        assertEquals(22L, losses.stats.framesDropped)
+        assertEquals(1L, input.pts)
+        schedule.advanceBy(10_000)
+        assertEquals(2, attempts)
+        assertEquals(1, keys)
+        assertEquals(listOf(0L, 100L), schedule.delays)
+        assertTrue(schedule.pending.isEmpty())
+    }
+
+    @Test
+    fun newConfigCancelsOldRetryAndRefreshesItsFullBudget() {
+        val schedule = RetrySchedule()
+        val first = DecoderRequest(byteArrayOf(1), 1280, 576, 1)
+        val second = DecoderRequest(byteArrayOf(2), 960, 432, 2)
+        val attempts = mutableListOf<DecoderRequest>()
+        var keys = 0
+        val retry = DecoderConfigureRetry(schedule::post, schedule::cancel, {
+            attempts += it
+            false
+        }, { keys++ })
+        retry.configure(first)
+        schedule.advanceBy(0)
+        val stale = schedule.pending.single().action
+        retry.configure(second)
+        assertSame(stale, schedule.cancelled.single())
+        stale.run()
+        assertEquals(listOf(first), attempts)
+        schedule.advanceBy(1400)
+        assertEquals(listOf(first, second, second, second, second), attempts)
+        assertEquals(listOf(0L, 100L, 0L, 100L, 300L, 1000L), schedule.delays)
+        assertEquals(0, keys)
+        assertTrue(schedule.pending.isEmpty())
+    }
+
+    @Test
+    fun sameRequestRestartRejectsStaleScheduleGeneration() {
+        val schedule = RetrySchedule()
+        val request = DecoderRequest(byteArrayOf(1), 1280, 576, 1)
+        var attempts = 0
+        var keys = 0
+        val retry = DecoderConfigureRetry(schedule::post, schedule::cancel, {
+            attempts++
+            attempts == 1
+        }, { keys++ })
+        retry.configure(request)
+        schedule.advanceBy(0)
+        assertEquals(1, keys)
+        retry.restart(request)
+        val stale = schedule.pending.single().action
+        retry.configure(request)
+        assertSame(stale, schedule.cancelled.single())
+        stale.run()
+        assertEquals(1, attempts)
+        schedule.advanceBy(0)
+        retry.restart(request)
+        assertEquals(1, schedule.pending.size)
+        schedule.advanceBy(1400)
+        assertEquals(5, attempts)
+        assertEquals(1, keys)
+        assertEquals(listOf(0L, 0L, 0L, 100L, 300L, 1000L), schedule.delays)
+        assertTrue(schedule.pending.isEmpty())
+    }
+
+    @Test
+    fun closeCancelsInitialAndDelayedRetriesEvenIfDequeued() {
+        listOf(false, true).forEach { delayed ->
+            val schedule = RetrySchedule()
+            val request = DecoderRequest(byteArrayOf(1), 1280, 576, 1)
+            var attempts = 0
+            var keys = 0
+            val retry = DecoderConfigureRetry(schedule::post, schedule::cancel, {
+                attempts++
+                false
+            }, { keys++ })
+            retry.configure(request)
+            if (delayed) schedule.advanceBy(0)
+            val stale = schedule.pending.single().action
+            retry.close()
+            retry.close()
+            assertSame(stale, schedule.cancelled.single())
+            stale.run()
+            retry.configure(request)
+            retry.restart(request)
+            retry.requestKeyframe(request)
+            schedule.advanceBy(10_000)
+            assertEquals(if (delayed) 1 else 0, attempts)
+            assertEquals(0, keys)
+            assertTrue(schedule.pending.isEmpty())
+        }
+    }
+
+    @Test
+    fun configOrCloseDuringAttemptRejectsLateSuccessAndFailure() {
+        listOf(false, true).forEach { close ->
+            listOf(false, true).forEach { success ->
+                val schedule = RetrySchedule()
+                val first = DecoderRequest(byteArrayOf(1), 1280, 576, 1)
+                val second = DecoderRequest(byteArrayOf(1), 1280, 576, 1)
+                val attempts = mutableListOf<DecoderRequest>()
+                var keys = 0
+                lateinit var retry: DecoderConfigureRetry
+                retry = DecoderConfigureRetry(schedule::post, schedule::cancel, {
+                    attempts += it
+                    if (it === first) {
+                        if (close) retry.close() else retry.configure(second)
+                        success
+                    } else {
+                        true
+                    }
+                }, { keys++ })
+                retry.configure(first)
+                schedule.advanceBy(0)
+                assertEquals(if (close) listOf(first) else listOf(first, second), attempts)
+                assertEquals(if (close) 0 else 1, keys)
+                assertFalse(schedule.delays.contains(100L))
+                retry.requestKeyframe(first)
+                retry.requestKeyframe(null)
+                assertEquals(if (close) 0 else 1, keys)
+                schedule.advanceBy(10_000)
+                assertTrue(schedule.pending.isEmpty())
+            }
+        }
+    }
+
+    @Test
+    fun configuredRequestsKeyButNewConfigImmediatelySuppressesIt() {
+        val schedule = RetrySchedule()
+        val first = DecoderRequest(byteArrayOf(1), 1280, 576, 1)
+        val second = DecoderRequest(byteArrayOf(1), 1280, 576, 1)
+        var keys = 0
+        val retry = DecoderConfigureRetry(schedule::post, schedule::cancel, { true }, { keys++ })
+        retry.configure(first)
+        schedule.advanceBy(0)
+        assertEquals(1, keys)
+        retry.requestKeyframe(first)
+        assertEquals(2, keys)
+        retry.configure(second)
+        retry.requestKeyframe(first)
+        retry.requestKeyframe(second)
+        assertEquals(2, keys)
+        schedule.advanceBy(0)
+        assertEquals(3, keys)
+        retry.requestKeyframe(first)
+        assertEquals(3, keys)
+        retry.close()
+        retry.requestKeyframe(second)
+        assertEquals(3, keys)
+    }
+
+    @Test
+    fun closeWaitsForKeyframeCallbackAndRejectsOldRequestsAfterReturning() {
+        keyframeCallbackFencesLifecycle(close = true)
+    }
+
+    @Test
+    fun configureWaitsForKeyframeCallbackAndRejectsOldRequestsAfterReturning() {
+        keyframeCallbackFencesLifecycle(close = false)
+    }
+
+    private fun keyframeCallbackFencesLifecycle(close: Boolean) {
+        val schedule = RetrySchedule()
+        val first = DecoderRequest(byteArrayOf(1), 1280, 576, 1)
+        val second = DecoderRequest(byteArrayOf(2), 960, 432, 2)
+        val callbackEntered = CountDownLatch(1)
+        val releaseCallback = CountDownLatch(1)
+        val lifecycleStarted = CountDownLatch(1)
+        val lifecycleReturned = CountDownLatch(1)
+        val blockCallback = AtomicBoolean(false)
+        val keys = AtomicInteger()
+        val failure = AtomicReference<Throwable?>(null)
+        val retry = DecoderConfigureRetry(schedule::post, schedule::cancel, { true }, {
+            if (blockCallback.get()) {
+                callbackEntered.countDown()
+                assertTrue(releaseCallback.await(5, TimeUnit.SECONDS))
+            }
+            keys.incrementAndGet()
+        }, lock = Any())
+        retry.configure(first)
+        schedule.advanceBy(0)
+        assertEquals(1, keys.get())
+        blockCallback.set(true)
+        val requester = Thread {
+            try {
+                retry.requestKeyframe(first)
+            } catch (error: Throwable) {
+                failure.compareAndSet(null, error)
+            }
+        }.apply { isDaemon = true }
+        val lifecycle = Thread {
+            try {
+                lifecycleStarted.countDown()
+                if (close) retry.close() else retry.configure(second)
+                lifecycleReturned.countDown()
+            } catch (error: Throwable) {
+                failure.compareAndSet(null, error)
+            }
+        }.apply { isDaemon = true }
+        try {
+            requester.start()
+            assertTrue(callbackEntered.await(5, TimeUnit.SECONDS))
+            lifecycle.start()
+            assertTrue(lifecycleStarted.await(5, TimeUnit.SECONDS))
+            val deadlineNs = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (lifecycle.state != Thread.State.BLOCKED && lifecycleReturned.count != 0L && System.nanoTime() < deadlineNs) {
+                Thread.yield()
+            }
+            assertEquals(Thread.State.BLOCKED, lifecycle.state)
+            assertEquals(1L, lifecycleReturned.count)
+            assertEquals(1, keys.get())
+        } finally {
+            releaseCallback.countDown()
+            requester.join(5000)
+            lifecycle.join(5000)
+        }
+        assertFalse(requester.isAlive)
+        assertFalse(lifecycle.isAlive)
+        assertNull(failure.get())
+        assertEquals(0L, lifecycleReturned.count)
+        assertEquals(2, keys.get())
+        repeat(20) { retry.requestKeyframe(first) }
+        retry.requestKeyframe(null)
+        retry.requestKeyframe(second)
+        assertEquals(2, keys.get())
+        blockCallback.set(false)
+        schedule.advanceBy(0)
+        assertEquals(if (close) 2 else 3, keys.get())
+        retry.requestKeyframe(first)
+        assertEquals(if (close) 2 else 3, keys.get())
+        retry.close()
+        retry.requestKeyframe(second)
+        assertEquals(if (close) 2 else 3, keys.get())
     }
 
     @Test

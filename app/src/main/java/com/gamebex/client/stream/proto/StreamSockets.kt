@@ -34,10 +34,14 @@ object StreamSockets {
 
     fun inputTos(cs6: Boolean): Int = if (cs6) TOS_CS6 else TOS_INPUT
 
-    fun markInput(s: DatagramSocket, cs6: Boolean = false): Int? {
+    fun markInput(s: DatagramSocket, cs6: Boolean = false): Int? = markDatagram(s, inputTos(cs6))
+
+    fun markAudio(s: DatagramSocket): Int? = markDatagram(s, TOS_INPUT)
+
+    private fun markDatagram(s: DatagramSocket, tos: Int): Int? {
         if (!enabled) return null
         return runCatching {
-            s.trafficClass = inputTos(cs6)
+            s.trafficClass = tos
             s.trafficClass
         }.getOrNull()
     }

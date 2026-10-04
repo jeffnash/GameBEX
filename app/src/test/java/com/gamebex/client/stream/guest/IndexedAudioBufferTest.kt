@@ -26,6 +26,86 @@ class IndexedAudioBufferTest {
         assertEquals(480, present.count { it })
         assertEquals(240L, buffer.snapshot().missing)
     }
+    @Test fun takeStopsAtArrivedHighWaterAndAcceptsNextArrivalAfterGap() {
+        val events = mutableListOf<Pair<String, Long>>()
+        val buffer = IndexedAudioBuffer(onCounter = { name, delta -> events += name to delta })
+        buffer.push(100, 1L, 240, pcm(100))
+        buffer.push(102, 3L, 240, pcm(102))
+        val samples = ShortArray(1_024 * 2) { -1 }
+        val present = BooleanArray(1_024) { true }
+        val captures = LongArray(1_024) { -1L }
+        val sequences = IntArray(1_024) { -1 }
+        val epoch = buffer.snapshot().epoch
+        val read = buffer.take(epoch, 1_024, samples, present, captures, sequences)
+        assertEquals(IndexedAudioBuffer.Read(0L, 720), read)
+        assertEquals(480, present.take(read!!.frames).count { it })
+        assertEquals(100.toShort(), samples[0])
+        assertEquals(0.toShort(), samples[480])
+        assertEquals(102.toShort(), samples[960])
+        assertEquals((-1).toShort(), samples[1_440])
+        assertEquals(-1L, captures[720])
+        assertEquals(-1, sequences[720])
+        assertEquals(720L, buffer.snapshot().next)
+        assertEquals(720L, buffer.snapshot().high)
+        assertEquals(240L, buffer.snapshot().missing)
+        val eventCount = events.size
+        repeat(3) {
+            assertEquals(IndexedAudioBuffer.Read(720L, 0),
+                buffer.take(epoch, 512, samples, present, captures, sequences))
+            assertEquals(720L, buffer.snapshot().next)
+            assertEquals(240L, buffer.snapshot().missing)
+        }
+        assertEquals(eventCount, events.size)
+        assertEquals(0, buffer.push(101, 2L, 240, pcm(101)))
+        assertEquals(240L, buffer.snapshot().late)
+        assertEquals(240, buffer.push(103, 4L, 240, pcm(103)))
+        assertEquals(IndexedAudioBuffer.Read(720L, 240),
+            buffer.take(epoch, 512, samples, present, captures, sequences))
+        assertTrue(present.take(240).all { it })
+        assertEquals(103.toShort(), samples[0])
+        assertEquals(4L, captures[0])
+        assertEquals(103, sequences[0])
+        assertEquals(960L, buffer.snapshot().next)
+        assertEquals(buffer.snapshot().high, buffer.snapshot().next)
+        assertEquals(240L, buffer.snapshot().missing)
+        assertEquals(240L, events.filter { it.first == "a_missing_frames" }.sumOf { it.second })
+        assertEquals(0L, buffer.snapshot().buffered)
+        assertEquals(0L, buffer.snapshot().rebasedFrames)
+    }
+    @Test fun noDataDoesNotAdvanceOrInventLossAndResetRejectsOldEpoch() {
+        val buffer = IndexedAudioBuffer()
+        val samples = ShortArray(1_024)
+        val present = BooleanArray(512)
+        val captures = LongArray(512)
+        val sequences = IntArray(512)
+        val initialEpoch = buffer.snapshot().epoch
+        assertNull(buffer.take(initialEpoch, 512, samples, present, captures, sequences))
+        assertEquals(0L, buffer.snapshot().next)
+        assertEquals(0L, buffer.snapshot().high)
+        assertEquals(0L, buffer.snapshot().missing)
+        assertEquals(240, buffer.push(50, 1L, 240, pcm(50)))
+        assertEquals(IndexedAudioBuffer.Read(0L, 240),
+            buffer.take(initialEpoch, 512, samples, present, captures, sequences))
+        val exhausted = buffer.snapshot()
+        repeat(3) {
+            assertEquals(IndexedAudioBuffer.Read(240L, 0),
+                buffer.take(initialEpoch, 512, samples, present, captures, sequences))
+            assertEquals(exhausted, buffer.snapshot())
+        }
+        assertEquals(240, buffer.push(51, 2L, 240, pcm(51)))
+        buffer.reset()
+        assertNull(buffer.take(initialEpoch, 512, samples, present, captures, sequences))
+        assertEquals(240, buffer.push(999, 3L, 240, pcm(999)))
+        val reconnected = buffer.snapshot()
+        assertTrue(reconnected.epoch > initialEpoch)
+        assertEquals(0L, reconnected.next)
+        assertEquals(240L, reconnected.high)
+        assertEquals(0L, reconnected.missing)
+        assertEquals(0L, reconnected.late)
+        assertEquals(240L, reconnected.evicted)
+        assertEquals(IndexedAudioBuffer.Read(0L, 240),
+            buffer.take(reconnected.epoch, 512, samples, present, captures, sequences))
+    }
     @Test fun late101BeforeTakeFillsHole() {
         val stats = LatencyStats()
         val buffer = IndexedAudioBuffer(onCounter = { name, delta -> stats.count(name, delta) })
@@ -111,6 +191,7 @@ class IndexedAudioBufferTest {
         buffer.push(10, 10L, 240, pcm(10))
         take(buffer, 100)
         buffer.push(10, 10L, 240, pcm(10))
+        buffer.push(12, 12L, 240, pcm(12))
         take(buffer, 240)
         assertEquals(140, buffer.push(11, 11L, 240, pcm(11)))
         buffer.reset()
@@ -124,10 +205,11 @@ class IndexedAudioBufferTest {
         assertEquals(snapshot.missing, counters["a_missing_frames"])
         assertEquals(snapshot.rebasedFrames, counters["audio_explicit_rebase_frames"])
         assertEquals(100L, snapshot.missing)
-        assertEquals(380L, snapshot.evicted)
+        assertEquals(9L, snapshot.gapPackets)
+        assertEquals(620L, snapshot.evicted)
         assertEquals(200L, snapshot.late)
         assertEquals(380L, snapshot.duplicate)
-        assertEquals(620L, snapshot.unique)
+        assertEquals(860L, snapshot.unique)
         val eventCount = events.size
         repeat(3) { buffer.snapshot(); stats.snapshot(0L); stats.statsLine(0L) }
         buffer.reset()

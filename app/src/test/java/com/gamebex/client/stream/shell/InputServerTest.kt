@@ -10,7 +10,11 @@ import com.gamebex.client.stream.proto.StreamWire
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -202,9 +206,10 @@ class InputServerTest {
     }
 
     private fun scripted(pad: VirtualPad, timeoutMs: Long = 1_000L, ackDropEvery: Int = 0,
-        socketFactory: () -> DatagramSocket = { DatagramSocket(null) }): InputServer =
+        socketFactory: () -> DatagramSocket = { DatagramSocket(null) },
+        audioSocketFactory: () -> DatagramSocket = { DatagramSocket() }): InputServer =
         InputServer(pad, key, "127.0.0.1", timeoutMs = timeoutMs, cs6 = false, ackDropEvery = ackDropEvery,
-            socketFactory = socketFactory).also {
+            socketFactory = socketFactory, audioSocketFactory = audioSocketFactory).also {
             servers += it
             it.open(0)
             assertTrue(it.attach(7L))
@@ -321,7 +326,7 @@ class InputServerTest {
                 super.send(packet)
             }
         }
-        val s = scripted(ScriptedPad { _, _ -> false }, socketFactory = { socket })
+        val s = scripted(ScriptedPad { _, _ -> false }, audioSocketFactory = { socket })
         send(s, 1, jump)
         assertNotNull(ack())
         socket.failAudio = true
@@ -330,48 +335,147 @@ class InputServerTest {
         assertEquals(0L, s.audioSent.get())
     }
 
-    @Test fun routeReplacementWaitsForInFlightAudioThenDropsOldRoute() {
-        val entered = java.util.concurrent.CountDownLatch(1)
-        val release = java.util.concurrent.CountDownLatch(1)
-        val socket = object : DatagramSocket(null as java.net.SocketAddress?) {
+    @Test fun blockedAudioDoesNotBlockInputWatchdogOrRouteReplacement() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val audioSocket = object : DatagramSocket() {
             override fun send(packet: DatagramPacket) {
-                if (packet.data.take(4).toByteArray().contentEquals(StreamWire.AUDIO_UDP_MAGIC)) {
-                    entered.countDown()
-                    if (!release.await(1, java.util.concurrent.TimeUnit.SECONDS)) throw IOException("deadline")
-                }
+                entered.countDown()
+                if (!release.await(3, TimeUnit.SECONDS)) throw IOException("deadline")
                 super.send(packet)
             }
         }
-        val s = scripted(ScriptedPad { _, _ -> false }, socketFactory = { socket })
+        val device = ScriptedPad { _, _ -> false }
+        val s = scripted(device, timeoutMs = 80L, audioSocketFactory = { audioSocket })
         send(s, 1, jump)
         assertNotNull(ack())
-        val result = java.util.concurrent.atomic.AtomicReference<AudioSendResult>()
+        val result = AtomicReference<AudioSendResult>()
         val audioThread = Thread { result.set(s.sendAudio(PcmChunk(1, 5L, 1, ByteArray(4)))) }
-        val replacing = java.util.concurrent.CountDownLatch(1)
-        val replaced = java.util.concurrent.CountDownLatch(1)
+        val replaced = CountDownLatch(1)
         val replacement = Thread {
-            replacing.countDown()
             s.attach(8L)
             replaced.countDown()
         }
         try {
             audioThread.start()
-            assertTrue(entered.await(1, java.util.concurrent.TimeUnit.SECONDS))
+            assertTrue(entered.await(1, TimeUnit.SECONDS))
+            send(s, 2, PadState(buttons = PadState.B))
+            assertNotNull(ack())
+            assertEquals(PadState(buttons = PadState.B), s.lastState)
+            waitFor("watchdog during blocked audio", timeoutMs = 1_000L) { s.lastState.isNeutral }
+            assertEquals(1L, release.count)
             replacement.start()
-            assertTrue(replacing.await(1, java.util.concurrent.TimeUnit.SECONDS))
-            assertFalse(replaced.await(20, java.util.concurrent.TimeUnit.MILLISECONDS))
+            assertTrue(replaced.await(200, TimeUnit.MILLISECONDS))
+            assertEquals(AudioSendResult.NO_ROUTE, s.sendAudio(PcmChunk(2, 6L, 1, ByteArray(4))))
             release.countDown()
             audioThread.join(1_000)
-            replacement.join(1_000)
             assertFalse(audioThread.isAlive)
-            assertFalse(replacement.isAlive)
             assertEquals(AudioSendResult.SENT, result.get())
-            assertEquals(AudioSendResult.NO_ROUTE, s.sendAudio(PcmChunk(2, 6L, 1, ByteArray(4))))
+            val audio = DatagramPacket(ByteArray(128), 128)
+            sender.receive(audio)
+            assertNotNull(InputWire.decodeAudio(audio.data, audio.length))
+            assertEquals(audioSocket.localPort, audio.port)
+            assertTrue(audio.port != s.port)
         } finally {
             release.countDown()
             audioThread.join(1_000)
             if (replacement.state != Thread.State.NEW) replacement.join(1_000)
         }
+    }
+
+    @Test fun blockedAckDoesNotBlockInputWatchdogAttachmentOrCloseAndQueueIsBounded() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val socket = object : DatagramSocket(null as java.net.SocketAddress?) {
+            override fun send(packet: DatagramPacket) {
+                entered.countDown()
+                if (!release.await(3, TimeUnit.SECONDS)) throw IOException("deadline")
+                throw IOException("closed")
+            }
+            override fun close() {
+                super.close()
+                release.countDown()
+            }
+        }
+        val device = ScriptedPad { _, _ -> false }
+        val s = scripted(device, timeoutMs = 80L, socketFactory = { socket })
+        val replaced = CountDownLatch(1)
+        val replacement = Thread { s.attach(8L); replaced.countDown() }
+        val closed = CountDownLatch(1)
+        val closer = Thread { s.close(); closed.countDown() }
+        try {
+            send(s, 1, jump)
+            assertTrue(entered.await(1, TimeUnit.SECONDS))
+            repeat(10) { send(s, it + 2, PadState(buttons = PadState.B)) }
+            waitFor("input while ACK blocked") { s.packets.get() == 11L }
+            assertEquals(2L, s.ackDropped.get())
+            waitFor("watchdog while ACK blocked", timeoutMs = 1_000L) { s.lastState.isNeutral }
+            assertEquals(1L, release.count)
+            replacement.start()
+            assertTrue(replaced.await(200, TimeUnit.MILLISECONDS))
+            assertEquals(1L, release.count)
+            closer.start()
+            assertTrue(closed.await(1, TimeUnit.SECONDS))
+            assertTrue(socket.isClosed)
+            assertTrue(s.lastState.isNeutral)
+        } finally {
+            socket.close()
+            if (replacement.state != Thread.State.NEW) replacement.join(1_000)
+            if (closer.state != Thread.State.NEW) closer.join(1_000)
+        }
+    }
+
+    @Test fun audioRouteDeadlineIsRecheckedBeforeSendingAndDroppedDoesNotRequestTcp() {
+        val now = AtomicLong(100L)
+        val reads = AtomicInteger()
+        val sends = AtomicInteger()
+        val audioSocket = object : DatagramSocket() {
+            override fun send(packet: DatagramPacket) { sends.incrementAndGet() }
+        }
+        val s = InputServer(pad, key, "127.0.0.1", clock = {
+            if (Thread.currentThread().name == "audio-deadline" && reads.incrementAndGet() == 2) {
+                now.addAndGet(1_000_000_001L)
+            }
+            now.get()
+        }, cs6 = false, ackDropEvery = 0, audioSocketFactory = { audioSocket }).also { servers += it }
+        s.open(0)
+        assertTrue(s.attach(7L))
+        s.start()
+        send(s, 1, jump)
+        assertNotNull(ack())
+        val result = AtomicReference<AudioSendResult>()
+        val audioThread = Thread({ result.set(s.sendAudio(PcmChunk(1, 5L, 1, ByteArray(4)))) }, "audio-deadline")
+        audioThread.start()
+        audioThread.join(1_000)
+        assertFalse(audioThread.isAlive)
+        assertEquals(AudioSendResult.DROPPED, result.get())
+        assertEquals(0, sends.get())
+        assertEquals(1L, s.audioDropped.get())
+        assertEquals(AudioSendResult.NO_ROUTE, s.sendAudio(PcmChunk(2, 6L, 1, ByteArray(4))))
+    }
+
+    @Test fun cs6InputAndEfAudioUseIndependentOwnedSockets() {
+        val inputSocket = object : DatagramSocket(null as java.net.SocketAddress?) {
+            var tos = -1
+            override fun setTrafficClass(tc: Int) { tos = tc }
+            override fun getTrafficClass(): Int = tos
+        }
+        val audioSocket = object : DatagramSocket() {
+            var tos = -1
+            override fun setTrafficClass(tc: Int) { tos = tc }
+            override fun getTrafficClass(): Int = tos
+        }
+        val s = InputServer(pad, key, "127.0.0.1", cs6 = true, ackDropEvery = 0,
+            socketFactory = { inputSocket }, audioSocketFactory = { audioSocket }).also { servers += it }
+        s.open(0)
+        assertEquals(inputSocket.localPort, s.port)
+        assertEquals(0xC0, inputSocket.tos)
+        assertEquals(0xB8, audioSocket.tos)
+        assertEquals(0xC0, s.actualTos)
+        assertTrue(inputSocket.localPort != audioSocket.localPort)
+        s.close()
+        assertTrue(inputSocket.isClosed)
+        assertTrue(audioSocket.isClosed)
     }
 
     @Test fun ackFaultDropsOnlySuccessfulAckAndRetryReportsWroteFalse() {

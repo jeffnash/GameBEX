@@ -50,6 +50,7 @@ class StreamViewerActivity : ComponentActivity() {
     private var controllerObserver: ControllerRegistry.PadObserver? = null
     private var oldDisplayMode = 0
     private var oldRefreshRate = 0f
+    private var oldMinimalPostProcessing: Boolean? = null
     private var displayManager: DisplayManager? = null
     private val displayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(id: Int) = Unit
@@ -74,6 +75,15 @@ class StreamViewerActivity : ComponentActivity() {
             ?: ViewerOptions.sample(StreamDebug::flag, StreamDebug::int)
         oldDisplayMode = window.attributes.preferredDisplayModeId
         oldRefreshRate = window.attributes.preferredRefreshRate
+        if (Build.VERSION.SDK_INT >= 30) {
+            oldMinimalPostProcessing = applyViewerMinimalPostProcessing(
+                Build.VERSION.SDK_INT, options.minimalPostProcessing,
+                { if (Build.VERSION.SDK_INT >= 30) window.attributes.preferMinimalPostProcessing else false },
+                { value ->
+                    if (Build.VERSION.SDK_INT >= 30) window.attributes = window.attributes.apply { preferMinimalPostProcessing = value }
+                },
+            )
+        }
         window.decorView.post { configureUnbufferedInput() }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         configureDisplay()
@@ -162,10 +172,18 @@ class StreamViewerActivity : ComponentActivity() {
     }
 
     private fun voteFrameRate(surface: Surface) {
-        if (Build.VERSION.SDK_INT >= 30 && options.frameRateVote > 0) {
-            runCatching { surface.setFrameRate(options.frameRateVote.toFloat(), Surface.FRAME_RATE_COMPATIBILITY_DEFAULT) }
-                .onFailure { Log.w(TAG, "frame rate vote", it) }
-        }
+        if (Build.VERSION.SDK_INT < 30) return
+        runCatching {
+            applyViewerFrameRate(
+                Build.VERSION.SDK_INT, options,
+                { rate, compatibility ->
+                    if (Build.VERSION.SDK_INT >= 30) surface.setFrameRate(rate, compatibility)
+                },
+                { rate, compatibility, strategy ->
+                    if (Build.VERSION.SDK_INT >= 31) surface.setFrameRate(rate, compatibility, strategy)
+                },
+            )
+        }.onFailure { Log.w(TAG, "frame rate vote", it) }
     }
 
     private fun configureUnbufferedInput() {
@@ -275,6 +293,11 @@ class StreamViewerActivity : ComponentActivity() {
         window.attributes = window.attributes.apply {
             preferredDisplayModeId = oldDisplayMode
             preferredRefreshRate = oldRefreshRate
+            if (Build.VERSION.SDK_INT >= 30) {
+                restoreViewerMinimalPostProcessing(Build.VERSION.SDK_INT, oldMinimalPostProcessing) {
+                    if (Build.VERSION.SDK_INT >= 30) preferMinimalPostProcessing = it
+                }
+            }
         }
         if (Build.VERSION.SDK_INT >= 30) window.decorView.requestUnbufferedDispatch(InputDevice.SOURCE_CLASS_NONE)
         super.onDestroy()
@@ -308,6 +331,35 @@ internal fun selectViewerDisplayMode(modes: List<ViewerDisplayMode>, width: Int,
 internal fun unbufferedJoystickSources(sdk: Int, enabled: Boolean): Int =
     if (sdk >= 30 && enabled) InputDevice.SOURCE_CLASS_JOYSTICK else InputDevice.SOURCE_CLASS_NONE
 
+internal fun applyViewerFrameRate(
+    sdk: Int,
+    options: ViewerOptions,
+    normal: (Float, Int) -> Unit,
+    always: (Float, Int, Int) -> Unit,
+) {
+    if (sdk < 30 || options.frameRateVote !in 1..120) return
+    val compatibility = if (options.frameRateFixed) Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE else Surface.FRAME_RATE_COMPATIBILITY_DEFAULT
+    if (sdk >= 31 && options.frameRateAlways) {
+        always(options.frameRateVote.toFloat(), compatibility, Surface.CHANGE_FRAME_RATE_ALWAYS)
+    } else {
+        normal(options.frameRateVote.toFloat(), compatibility)
+    }
+}
+
+internal fun applyViewerMinimalPostProcessing(
+    sdk: Int,
+    enabled: Boolean,
+    read: () -> Boolean,
+    write: (Boolean) -> Unit,
+): Boolean? {
+    if (sdk < 30 || !enabled) return null
+    return read().also { write(true) }
+}
+
+internal fun restoreViewerMinimalPostProcessing(sdk: Int, original: Boolean?, write: (Boolean) -> Unit) {
+    if (sdk >= 30 && original != null) write(original)
+}
+
 internal data class ViewerOptions(
     val unbufferedInput: Boolean = false,
     val displayMode: Int = 0,
@@ -316,6 +368,9 @@ internal data class ViewerOptions(
     val touchPadHidden: Boolean = false,
     val fixedSurface: Boolean = false,
     val surfaceOpaque: Boolean = false,
+    val minimalPostProcessing: Boolean = false,
+    val frameRateFixed: Boolean = false,
+    val frameRateAlways: Boolean = false,
 ) {
     fun save() = Bundle().apply {
         putBoolean("unbuffered_input", unbufferedInput)
@@ -325,18 +380,31 @@ internal data class ViewerOptions(
         putBoolean("touch_pad_hidden", touchPadHidden)
         putBoolean("fixed_surface", fixedSurface)
         putBoolean("surface_opaque", surfaceOpaque)
+        putBoolean("minimal_postprocess", minimalPostProcessing)
+        putBoolean("frame_rate_fixed", frameRateFixed)
+        putBoolean("frame_rate_always", frameRateAlways)
     }
 
     companion object {
-        fun sample(flag: (String, Boolean) -> Boolean, int: (String, Int, IntRange) -> Int) = ViewerOptions(
-            unbufferedInput = flag("unbuffered_input", false),
-            displayMode = int("display_mode", 0, -1..Int.MAX_VALUE),
-            frameRateVote = int("frame_rate_vote", 0, 0..120),
-            hudOff = flag("hud_off", false),
-            touchPadHidden = flag("touch_pad_hidden", false),
-            fixedSurface = flag("fixed_surface", false),
-            surfaceOpaque = flag("surface_opaque", false),
-        )
+        fun sample(
+            flag: (String, Boolean) -> Boolean,
+            int: (String, Int, IntRange) -> Int,
+            debug: Boolean = com.gamebex.client.BuildConfig.DEBUG,
+        ): ViewerOptions {
+            if (!debug) return ViewerOptions()
+            return ViewerOptions(
+                unbufferedInput = flag("unbuffered_input", false),
+                displayMode = int("display_mode", 0, -1..Int.MAX_VALUE).takeIf { it >= -1 } ?: 0,
+                frameRateVote = int("frame_rate_vote", 0, 0..120).takeIf { it in 0..120 } ?: 0,
+                hudOff = flag("hud_off", false),
+                touchPadHidden = flag("touch_pad_hidden", false),
+                fixedSurface = flag("fixed_surface", false),
+                surfaceOpaque = flag("surface_opaque", false),
+                minimalPostProcessing = flag("minimal_postprocess", false),
+                frameRateFixed = flag("frame_rate_fixed", false),
+                frameRateAlways = flag("frame_rate_always", false),
+            )
+        }
 
         fun restore(bundle: Bundle) = ViewerOptions(
             unbufferedInput = bundle.getBoolean("unbuffered_input"),
@@ -346,6 +414,9 @@ internal data class ViewerOptions(
             touchPadHidden = bundle.getBoolean("touch_pad_hidden"),
             fixedSurface = bundle.getBoolean("fixed_surface"),
             surfaceOpaque = bundle.getBoolean("surface_opaque"),
+            minimalPostProcessing = bundle.getBoolean("minimal_postprocess"),
+            frameRateFixed = bundle.getBoolean("frame_rate_fixed"),
+            frameRateAlways = bundle.getBoolean("frame_rate_always"),
         )
     }
 }

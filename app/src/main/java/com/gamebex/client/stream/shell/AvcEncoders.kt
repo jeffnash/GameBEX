@@ -30,16 +30,45 @@ object AvcEncoders {
         val maxWidth: Int,
         val maxHeight: Int,
         val supportedLevelIds: Set<Int>? = null,
+        val supportedPal50LevelIds: Set<Int>? = null,
+        val intraRefresh: Boolean = false,
     )
+
+    data class Options(val fps: Int = 0, val intraRefresh: Boolean = false) {
+        fun fpsFor(level: VideoLevel): Int = if (fps == 50 && level.fps == 60) 50 else level.fps
+    }
+
+    data class Configuration(
+        val strict: Boolean,
+        val fps: Int,
+        val intraRefreshPeriod: Int = 0,
+        val intraRefreshFallback: Boolean = false,
+    ) {
+        val iFrameIntervalS: Int get() = if (intraRefreshPeriod > 0) -1 else StreamCaps.I_FRAME_INTERVAL_S
+    }
+
+    fun configurationAttempts(level: VideoLevel, info: EncoderInfo, options: Options): List<Configuration> {
+        val fps = options.fpsFor(level)
+        val periodic = listOf(true, false).map { Configuration(it, fps,
+            intraRefreshFallback = options.intraRefresh) }
+        if (!options.intraRefresh || !info.intraRefresh) return periodic
+        return listOf(true, false).map { Configuration(it, fps, fps * StreamCaps.I_FRAME_INTERVAL_S) } + periodic
+    }
+
+    internal fun intraRefreshConfirmed(configuration: Configuration, reportedPeriod: Int?): Boolean =
+        configuration.intraRefreshPeriod == 0 || (reportedPeriod != null && reportedPeriod > 0)
 
     /**
      * Usable encoders, best first: hardware before software (software can't keep
      * 60 fps at 1600x720 on a Dimensity 6300), then those offering Constrained
      * Baseline, then CBR, then by name so the order is stable.
      */
-    fun rank(all: List<EncoderInfo>, level: VideoLevel): List<EncoderInfo> =
-        all.filter { it.maxWidth >= level.width && it.maxHeight >= level.height &&
-            (it.supportedLevelIds == null || level.index in it.supportedLevelIds) }
+    fun rank(all: List<EncoderInfo>, level: VideoLevel, options: Options = Options()): List<EncoderInfo> =
+        all.filter {
+            val supported = if (options.fpsFor(level) != level.fps) it.supportedPal50LevelIds else it.supportedLevelIds
+            it.maxWidth >= level.width && it.maxHeight >= level.height &&
+                (supported == null || level.index in supported)
+        }
             .sortedWith(
                 compareByDescending<EncoderInfo> { it.hardware }
                     .thenByDescending { PROFILE_CONSTRAINED_BASELINE in it.profiles }
@@ -86,6 +115,15 @@ object AvcEncoders {
                                 video.areSizeAndRateSupported(level.width, level.height, level.fps.toDouble())
                         }.getOrDefault(false)
                     }.map { it.index }.toSet(),
+                    supportedPal50LevelIds = StreamCaps.LEVELS.filter { level ->
+                        level.fps == 60 && runCatching {
+                            aligned(level, video.widthAlignment, video.heightAlignment) &&
+                                video.areSizeAndRateSupported(level.width, level.height, 50.0)
+                        }.getOrDefault(false)
+                    }.map { it.index }.toSet(),
+                    intraRefresh = runCatching {
+                        caps.isFeatureSupported(MediaCodecInfo.CodecCapabilities.FEATURE_IntraRefresh)
+                    }.getOrDefault(false),
                 )
             }.getOrNull()
         }
@@ -96,21 +134,27 @@ object AvcEncoders {
      * encoders refuse a key they don't know instead of ignoring it.
      */
     fun format(level: VideoLevel, bitrate: Int, info: EncoderInfo, strict: Boolean): MediaFormat =
+        format(level, bitrate, info, Configuration(strict, level.fps))
+
+    fun format(level: VideoLevel, bitrate: Int, info: EncoderInfo, configuration: Configuration): MediaFormat =
         MediaFormat.createVideoFormat(MIME, level.width, level.height).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
-            setInteger(MediaFormat.KEY_FRAME_RATE, level.fps)
-            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, StreamCaps.I_FRAME_INTERVAL_S)
+            setInteger(MediaFormat.KEY_FRAME_RATE, configuration.fps)
+            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, configuration.iFrameIntervalS)
+            if (configuration.intraRefreshPeriod > 0) {
+                setInteger(MediaFormat.KEY_INTRA_REFRESH_PERIOD, configuration.intraRefreshPeriod)
+            }
             setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, StreamCaps.REPEAT_FRAME_US)
             setInteger(MediaFormat.KEY_PRIORITY, 0)
             setInteger(MediaFormat.KEY_LATENCY, 1)
             if (Build.VERSION.SDK_INT >= 29) {
-                setFloat(KEY_MAX_FPS_TO_ENCODER, level.fps.toFloat())
+                setFloat(KEY_MAX_FPS_TO_ENCODER, configuration.fps.toFloat())
                 setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
             }
             // No KEY_OPERATING_RATE: on the MT6835 an operating rate of 120 made the encoder batch frames
             // (encode p50 20 -> 50 ms on-device).
-            if (strict) {
+            if (configuration.strict) {
                 profileFor(info)?.let { setInteger(MediaFormat.KEY_PROFILE, it) }
                 if (info.cbr) setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
             }

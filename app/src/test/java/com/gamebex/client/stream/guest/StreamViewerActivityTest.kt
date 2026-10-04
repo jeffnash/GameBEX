@@ -2,6 +2,7 @@ package com.gamebex.client.stream.guest
 
 import android.view.InputDevice
 import android.view.KeyEvent
+import android.view.Surface
 import com.gamebex.client.launch.ControllerRegistry
 import com.gamebex.client.stream.StreamCaps
 import org.junit.Assert.*
@@ -100,13 +101,100 @@ class StreamViewerActivityTest {
         val options = ViewerOptions.sample(
             { name, default -> calls += name; default },
             { name, default, _ -> calls += name; default },
+            debug = true,
         )
         assertEquals(ViewerOptions(), options)
-        assertEquals(7, calls.size)
+        assertEquals(10, calls.size)
         assertEquals(calls.size, calls.toSet().size)
         assertFalse(options.unbufferedInput)
         assertEquals(0, options.frameRateVote)
         repeat(20) { assertEquals(0, options.frameRateVote) }
-        assertEquals(7, calls.size)
+        assertEquals(10, calls.size)
+    }
+
+    @Test fun debugOffDoesNotSampleViewerProperties() {
+        assertEquals(ViewerOptions(), ViewerOptions.sample(
+            { _, _ -> error("release flag read") },
+            { _, _, _ -> error("release int read") },
+            debug = false,
+        ))
+    }
+
+    @Test fun invalidViewerIntegersFallBackToNormal() {
+        val options = ViewerOptions.sample({ _, default -> default }, { _, _, _ -> -2 }, debug = true)
+        assertEquals(ViewerOptions(), options)
+        assertEquals(ViewerOptions(), ViewerOptions.sample({ _, default -> default }, { name, _, _ ->
+            if (name == "frame_rate_vote") 121 else 0
+        }, debug = true))
+    }
+
+    @Test fun displayArmsAreSampledOnlyOnceAndRemainIndependent() {
+        val calls = mutableListOf<String>()
+        var enabled = true
+        val options = ViewerOptions.sample(
+            { name, _ -> calls += name; enabled },
+            { name, default, _ -> calls += name; if (name == "frame_rate_vote") 60 else default },
+            debug = true,
+        )
+        enabled = false
+        repeat(10) {
+            assertTrue(options.minimalPostProcessing)
+            assertTrue(options.frameRateFixed)
+            assertTrue(options.frameRateAlways)
+            assertEquals(60, options.frameRateVote)
+        }
+        assertEquals(10, calls.size)
+        assertEquals(10, calls.toSet().size)
+    }
+
+    @Test fun frameRateVotesKeepBaselineAndGateBothPlatformOverloads() {
+        val normal = mutableListOf<Pair<Float, Int>>()
+        val always = mutableListOf<Triple<Float, Int, Int>>()
+        fun apply(sdk: Int, options: ViewerOptions) = applyViewerFrameRate(
+            sdk, options,
+            { rate, compatibility -> normal += rate to compatibility },
+            { rate, compatibility, strategy -> always += Triple(rate, compatibility, strategy) },
+        )
+        val arms = ViewerOptions(frameRateVote = 60, frameRateFixed = true, frameRateAlways = true)
+        apply(29, arms)
+        apply(31, arms.copy(frameRateVote = 0))
+        apply(31, arms.copy(frameRateVote = -1))
+        apply(31, arms.copy(frameRateVote = 121))
+        assertTrue(normal.isEmpty())
+        assertTrue(always.isEmpty())
+        apply(30, ViewerOptions(frameRateVote = 60))
+        apply(31, ViewerOptions(frameRateVote = 60))
+        assertEquals(listOf(60f to Surface.FRAME_RATE_COMPATIBILITY_DEFAULT, 60f to Surface.FRAME_RATE_COMPATIBILITY_DEFAULT), normal)
+        assertTrue(always.isEmpty())
+        apply(30, arms)
+        assertEquals(60f to Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE, normal.last())
+        apply(31, arms)
+        apply(36, arms.copy(frameRateFixed = false))
+        assertEquals(listOf(
+            Triple(60f, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE, Surface.CHANGE_FRAME_RATE_ALWAYS),
+            Triple(60f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT, Surface.CHANGE_FRAME_RATE_ALWAYS),
+        ), always)
+    }
+
+    @Test fun minimalPostProcessingSavesAndRestoresBothOriginalValues() {
+        for (initial in listOf(false, true)) {
+            var value = initial
+            var reads = 0
+            val writes = mutableListOf<Boolean>()
+            val old = applyViewerMinimalPostProcessing(30, true, { reads++; value }, { value = it; writes += it })
+            assertEquals(initial, old)
+            assertTrue(value)
+            restoreViewerMinimalPostProcessing(30, old) { value = it; writes += it }
+            assertEquals(initial, value)
+            assertEquals(1, reads)
+            assertEquals(listOf(true, initial), writes)
+        }
+    }
+
+    @Test fun minimalPostProcessingOffAndOldApisNeverTouchTheWindow() {
+        assertNull(applyViewerMinimalPostProcessing(29, true, { error("old API read") }, { error("old API write") }))
+        assertNull(applyViewerMinimalPostProcessing(30, false, { error("baseline read") }, { error("baseline write") }))
+        restoreViewerMinimalPostProcessing(29, false) { error("old API restore") }
+        restoreViewerMinimalPostProcessing(30, null) { error("baseline restore") }
     }
 }

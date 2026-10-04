@@ -35,7 +35,7 @@ class DeliveryControl(
             cleanSince = Long.MIN_VALUE
         }
         lastReport = now
-        val bad = dropped || (relativeP95Ns != null && relativeP95Ns > 12 * MS) ||
+        val bad = dropped || (relativeP95Ns != null && relativeP95Ns > 30 * MS) ||
             queueAgeNs > 25 * MS || writeP95Ns > 15 * MS || decoderPending >= 4
         if (bad) {
             lastBad = now
@@ -43,7 +43,7 @@ class DeliveryControl(
             cleanSince = Long.MIN_VALUE
         } else badWindows = 0
         if (dropped || queueAgeNs > 50 * MS || badWindows >= 2) return down(now)
-        if (relativeP95Ns == null || relativeP95Ns > 8 * MS || queueAgeNs > 12 * MS ||
+        if (relativeP95Ns == null || relativeP95Ns > 20 * MS || queueAgeNs > 12 * MS ||
             writeP95Ns > 15 * MS || decoderPending > 1) {
             cleanSince = Long.MIN_VALUE
             return null

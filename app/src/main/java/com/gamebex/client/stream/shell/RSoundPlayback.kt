@@ -31,6 +31,7 @@ interface RSoundPlayer : AutoCloseable {
 internal fun rsoundWriteFully(
     player: RSoundPlayer,
     bytes: ByteArray,
+    onWritten: (Int) -> Unit = {},
     active: () -> Boolean,
 ): Boolean {
     var offset = 0
@@ -44,6 +45,7 @@ internal fun rsoundWriteFully(
             Thread.yield()
         } else {
             emptyWrites = 0
+            onWritten(count)
             offset += count
         }
     }

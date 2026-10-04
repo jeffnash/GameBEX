@@ -45,6 +45,23 @@ class StreamViewerScreenTest {
     )
 
     @Test
+    fun displayOptionsBundleRestoresAcrossRecreationWithoutSamplingProperties() {
+        var samples = 0
+        val options = ViewerOptions.sample(
+            { _, _ -> samples++; true },
+            { name, _, _ -> samples++; if (name == "frame_rate_vote") 60 else -1 },
+            debug = true,
+        )
+        val restored = ViewerOptions.restore(options.save())
+        assertEquals(options, restored)
+        assertEquals(options, ViewerOptions.restore(restored.save()))
+        assertEquals(10, samples)
+        assertEquals(ViewerOptions(), ViewerOptions.restore(android.os.Bundle()))
+        val legacy = android.os.Bundle().apply { putInt("frame_rate_vote", 60) }
+        assertEquals(ViewerOptions(frameRateVote = 60), ViewerOptions.restore(legacy))
+    }
+
+    @Test
     fun hudOffStillShowsGuestAudioFailure() {
         val message = "Guest audio is unavailable (write). Host sound is unchanged."
         rule.setContent {

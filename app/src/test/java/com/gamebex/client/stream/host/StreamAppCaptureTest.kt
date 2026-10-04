@@ -61,6 +61,35 @@ class StreamAppCaptureTest {
         assertEquals(1, stops)
     }
 
+    @Test fun captureRefreshDefaultsAndInvalidValuesKeepTheProjectionRate() {
+        for (raw in listOf(null, "", "0", "59", "61", "-1", "60.0", " 60", "bad")) {
+            var samples = 0
+            val options = CaptureRefreshOptions.sample(true) { name ->
+                assertEquals("capture_hz", name)
+                samples++
+                raw
+            }
+            assertEquals(CaptureRefreshOptions(), options)
+            assertEquals(CaptureRefreshRequest(0, 0, "normal"), options.request(34))
+            assertEquals(1, samples)
+        }
+        assertEquals(CaptureRefreshOptions(), CaptureRefreshOptions.sample(false) { error("release getprop") })
+    }
+
+    @Test fun requestedCaptureRefreshIsSampledOnceAndExplicitlyUnsupportedWithoutProjectionApi() {
+        var raw = "60"
+        var samples = 0
+        val options = CaptureRefreshOptions.sample(true) { samples++; raw }
+        raw = "0"
+        assertEquals(60, options.hz)
+        assertEquals(CaptureRefreshRequest(60, 0, "requested_refresh_rate_requires_api34"), options.request(33))
+        for (sdk in listOf(34, 35, 36)) {
+            assertEquals(CaptureRefreshRequest(60, 0, "projection_refresh_api_unavailable"), options.request(sdk))
+        }
+        repeat(20) { assertEquals(0, options.request(36).appliedHz) }
+        assertEquals(1, samples)
+    }
+
     @Test fun nullSurfaceDetachesWithoutResizing() {
         var detached = false
         assertTrue(CaptureIdentity.surfaceChange({ true }, Any(), false, 0, 0,

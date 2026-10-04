@@ -26,6 +26,7 @@ object StreamRaConfig {
         rsoundReady: Boolean = false,
         diagnostics: Boolean = StreamDebug.prop("ra_log") == "1",
         hasRealHostPad: Boolean = false,
+        experiments: RaExperimentOptions = RaExperimentOptions.sample(),
     ): LinkedHashMap<String, String> = LinkedHashMap<String, String>().apply {
         if (diagnostics) {
             put("log_verbosity", "true")
@@ -72,28 +73,64 @@ object StreamRaConfig {
         if (rsoundReady) {
             put("audio_driver", "rsound")
             put("audio_device", "127.0.0.1")
+            put("audio_latency", experiments.audioLatency.takeIf { it == 8 || it == 16 || it == 32 }?.toString() ?: "32")
         }
+        if (experiments.swapchain == 2) put("video_max_swapchain_images", "2")
+        if (experiments.noSmooth) put("video_smooth", "false")
     }
 
  /** The whole file: the managed config (with save-state resume, as a normal Play) plus [overrides]. */
-    fun cfgText(sharedRoot: String, rsoundReady: Boolean = false, hasRealHostPad: Boolean = false): String {
+    fun cfgText(
+        sharedRoot: String,
+        rsoundReady: Boolean = false,
+        hasRealHostPad: Boolean = false,
+        experiments: RaExperimentOptions = RaExperimentOptions.sample(),
+    ): String {
         val base = GraphicsTuner.retroArchConfigText(sharedRoot, resume = true).trimEnd('\n').split('\n')
-        val (merged, _) = RetroArchTuner.mergeConfig(base, overrides(rsoundReady, hasRealHostPad = hasRealHostPad))
+        val (merged, _) = RetroArchTuner.mergeConfig(base, overrides(rsoundReady, hasRealHostPad = hasRealHostPad, experiments = experiments))
         return merged.joinToString("\n") + "\n"
     }
 
     fun fileUnder(base: File): File = File(GraphicsTuner.sharedDirUnder(base), "ra/$FILE_NAME")
 
  /** Writes the config under [base] (external storage); null when it can't. */
-    fun write(base: File, rsoundReady: Boolean = false, hasRealHostPad: Boolean = false): File? = try {
+    fun write(
+        base: File,
+        rsoundReady: Boolean = false,
+        hasRealHostPad: Boolean = false,
+        experiments: RaExperimentOptions = RaExperimentOptions.sample(),
+    ): File? = try {
         val file = fileUnder(base)
         val dir = file.parentFile ?: throw IOException("no parent for $file")
         if (!dir.isDirectory && !dir.mkdirs() && !dir.isDirectory) throw IOException("Couldn't create $dir")
-        file.writeText(cfgText(base.absolutePath, rsoundReady, hasRealHostPad))
+        file.writeText(cfgText(base.absolutePath, rsoundReady, hasRealHostPad, experiments))
         file
     } catch (_: IOException) {
         null
     } catch (_: SecurityException) {
         null
+    }
+}
+
+data class RaExperimentOptions(
+    val audioLatency: Int = 32,
+    val swapchain: Int = 0,
+    val noSmooth: Boolean = false,
+) {
+    companion object {
+        fun sample(
+            debug: Boolean = com.gamebex.client.BuildConfig.DEBUG,
+            prop: (String) -> String? = StreamDebug::prop,
+        ): RaExperimentOptions {
+            if (!debug) return RaExperimentOptions()
+            val latency = when (prop("ra_audio_latency")) {
+                "8" -> 8
+                "16" -> 16
+                else -> 32
+            }
+            val swapchain = if (prop("ra_swapchain") == "2") 2 else 0
+            val noSmooth = prop("ra_no_smooth") == "1"
+            return RaExperimentOptions(latency, swapchain, noSmooth)
+        }
     }
 }

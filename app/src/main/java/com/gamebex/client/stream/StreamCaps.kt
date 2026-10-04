@@ -72,7 +72,7 @@ object StreamCaps {
     const val SPS_FIXUP: Boolean = true
 
  /** Bump when IStreamShell or the shell code changes so Shizuku restarts the service. */
-    const val SHELL_SERVICE_VERSION: Int = 27
+    const val SHELL_SERVICE_VERSION: Int = 28
 
  /** Dolphin's index for the only device named [PAD_NAME]. */
     const val DOLPHIN_DEVICE_INDEX: Int = 0

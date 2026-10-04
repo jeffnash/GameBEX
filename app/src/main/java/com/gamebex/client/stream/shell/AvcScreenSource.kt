@@ -25,6 +25,10 @@ import java.util.concurrent.atomic.AtomicInteger
 class AvcScreenSource(
     private val encoders: () -> List<AvcEncoders.EncoderInfo> = AvcEncoders::list,
     private val codecDiagnostics: Boolean = StreamDebug.flag("codec_diag"),
+    private val options: AvcEncoders.Options = AvcEncoders.Options(
+        fps = StreamDebug.int("encoder_fps", 0, 0..50).takeIf { it == 50 } ?: 0,
+        intraRefresh = StreamDebug.flag("encoder_intra_refresh"),
+    ),
 ) : VideoSource {
     private val lock = Any()
     private var codec: MediaCodec? = null
@@ -41,7 +45,8 @@ class AvcScreenSource(
     private val catalog by lazy { encoders() }
     private var vendorDiscovered = false
     private var codecEpoch = 0L
-    val eligibleLevels: List<VideoLevel> get() = StreamCaps.LEVELS.filter { AvcEncoders.rank(catalog, it).isNotEmpty() }
+    @Volatile private var intraRefreshDisabled = false
+    val eligibleLevels: List<VideoLevel> get() = StreamCaps.LEVELS.filter { AvcEncoders.rank(catalog, it, options).isNotEmpty() }
     @Volatile private var bitrate = 0
 
     /** The encoder and capture API in use, for logs and the probe. */
@@ -58,6 +63,7 @@ class AvcScreenSource(
             this.sink = sink
             running = true
             restarts = 0
+            intraRefreshDisabled = false
             try {
                 openLocked(level, bitrate)
             } catch (f: StreamFailure) {
@@ -118,11 +124,15 @@ class AvcScreenSource(
     /** Configures the first encoder that accepts [level], then starts capture into it. */
     private fun openLocked(level: VideoLevel, bitrate: Int) {
         val target = appTarget ?: throw StreamFailure(StreamError.DISPLAY_CAPTURE, "explicit screen sharing consent required")
-        val candidates = AvcEncoders.rank(catalog, level)
+        val activeOptions = if (intraRefreshDisabled) options.copy(intraRefresh = false) else options
+        val candidates = AvcEncoders.rank(catalog, level, activeOptions)
         if (candidates.isEmpty()) throw StreamFailure(StreamError.ENCODER, "no H.264 encoder for ${level.width}x${level.height}")
         var last: Throwable? = null
         for (info in candidates) {
-            for (strict in listOf(true, false)) {
+            if (activeOptions.intraRefresh && !info.intraRefresh) {
+                Log.i(TAG, "ENCODER_EXPERIMENT codec=${info.name} intraRefreshFallback=unsupported periodicIdrS=${StreamCaps.I_FRAME_INTERVAL_S}")
+            }
+            for (configuration in AvcEncoders.configurationAttempts(level, info, activeOptions)) {
                 val c = try {
                     MediaCodec.createByCodecName(info.name)
                 } catch (t: Throwable) {
@@ -130,7 +140,7 @@ class AvcScreenSource(
                     break
                 }
                 val input: Surface = try {
-                    c.configure(AvcEncoders.format(level, bitrate, info, strict), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                    c.configure(AvcEncoders.format(level, bitrate, info, configuration), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
                     val s = c.createInputSurface()
                     try {
                         c.start()
@@ -141,7 +151,7 @@ class AvcScreenSource(
                     s
                 } catch (t: Throwable) {
                     last = t
-                    Log.w(TAG, "encoder ${info.name} strict=$strict refused ${level.width}x${level.height}", t)
+                    Log.w(TAG, "encoder ${info.name} strict=${configuration.strict} fps=${configuration.fps} intraRefreshPeriod=${configuration.intraRefreshPeriod} refused ${level.width}x${level.height}", t)
                     runCatching { c.release() }
                     continue
                 }
@@ -162,12 +172,16 @@ class AvcScreenSource(
                     Log.i(TAG, "CODEC_CAPS ${catalog.joinToString { "${it.name}:${it.supportedLevelIds}" }}")
                     runCatching { Log.i(TAG, "CODEC_FORMAT configured=${c.inputFormat}") }
                 }
-                drain = Thread({ drainLoop(c, gen, level) }, "gbx-video-drain").apply {
+                if (configuration.intraRefreshFallback) intraRefreshDisabled = true
+                if (options.fps != 0 || options.intraRefresh) {
+                    Log.i(TAG, "ENCODER_EXPERIMENT codec=${info.name} requestedFps=${level.fps} configuredFps=${configuration.fps} intraRefreshPeriod=${configuration.intraRefreshPeriod} intraRefreshFallback=${configuration.intraRefreshFallback} periodicIdrS=${configuration.iFrameIntervalS}")
+                }
+                drain = Thread({ drainLoop(c, gen, level, configuration) }, "gbx-video-drain").apply {
                     isDaemon = true
                     priority = Thread.MAX_PRIORITY
                     start()
                 }
-                Log.i(TAG, "video: ${info.name} ${level.width}x${level.height}@${level.fps} ${bitrate}bps strict=$strict software=${!info.hardware} via $captureApi")
+                Log.i(TAG, "video: ${info.name} ${level.width}x${level.height}@${configuration.fps} requestedFps=${level.fps} ${bitrate}bps strict=${configuration.strict} software=${!info.hardware} via $captureApi")
                 try {
                     target.onSurface(input, level.width, level.height)
                 } catch (t: Throwable) {
@@ -192,7 +206,7 @@ class AvcScreenSource(
         return drain.also { drain = null }
     }
 
-    private fun drainLoop(c: MediaCodec, gen: Int, requested: VideoLevel) {
+    private fun drainLoop(c: MediaCodec, gen: Int, requested: VideoLevel, configuration: AvcEncoders.Configuration) {
         val info = MediaCodec.BufferInfo()
         var configSent = false
         var actual = requested
@@ -240,11 +254,25 @@ class AvcScreenSource(
                     }
                     index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                         val format = c.outputFormat
+                        val refreshPeriod = runCatching {
+                            if (format.containsKey(MediaFormat.KEY_INTRA_REFRESH_PERIOD))
+                                format.getInteger(MediaFormat.KEY_INTRA_REFRESH_PERIOD) else null
+                        }.getOrNull()
+                        if (!AvcEncoders.intraRefreshConfirmed(configuration, refreshPeriod)) {
+                            synchronized(lock) {
+                                if (!current(c, gen)) return
+                                intraRefreshDisabled = true
+                            }
+                            Log.w(TAG, "ENCODER_EXPERIMENT codec=${c.name} intraRefreshFallback=output_unconfirmed reportedPeriod=$refreshPeriod periodicIdrS=${StreamCaps.I_FRAME_INTERVAL_S}")
+                            throw IllegalStateException("intra refresh not confirmed by encoder output")
+                        }
                         val width = format.getInteger(MediaFormat.KEY_WIDTH)
                         val height = format.getInteger(MediaFormat.KEY_HEIGHT)
-                        val fps = if (format.containsKey(MediaFormat.KEY_FRAME_RATE)) format.getInteger(MediaFormat.KEY_FRAME_RATE) else requested.fps
-                        actual = actualLevelFor(requested, width, height, fps)
-                        Log.i(TAG, "encoder output ${actual.width}x${actual.height}@${actual.fps} rank=${actual.index}")
+                        val fps = runCatching {
+                            if (format.containsKey(MediaFormat.KEY_FRAME_RATE)) format.getInteger(MediaFormat.KEY_FRAME_RATE) else null
+                        }.getOrNull()
+                        actual = actualLevelFor(requested, width, height, fps ?: requested.fps)
+                        Log.i(TAG, "encoder output ${actual.width}x${actual.height}@${actual.fps} rank=${actual.index} configuredFps=${configuration.fps} reportedFps=$fps intraRefreshPeriod=$refreshPeriod")
                         val csd = listOf("csd-0", "csd-1").mapNotNull { key ->
                             format.getByteBuffer(key)?.duplicate()?.let { b -> ByteArray(b.remaining()).also { b.get(it) } }
                         }.fold(ByteArray(0)) { bytes, next -> bytes + next }
@@ -316,10 +344,13 @@ class AvcScreenSource(
             current === candidate && generation == candidateGeneration
 
         internal fun actualLevelFor(requested: VideoLevel, width: Int, height: Int, fps: Int): VideoLevel {
-            if (width <= 0 || height <= 0 || fps <= 0) throw IllegalStateException("encoder reported invalid dimensions or rate")
-            val actual = StreamCaps.LEVELS.firstOrNull { it.width == width && it.height == height && it.fps == fps }
+            if (width <= 0 || height <= 0) throw IllegalStateException("encoder reported invalid dimensions")
+            val sizes = StreamCaps.LEVELS.filter { it.width == width && it.height == height }
+            val actual = sizes.firstOrNull { it.index == requested.index }
+                ?: sizes.firstOrNull { it.fps == requested.fps }
+                ?: sizes.firstOrNull()
                 ?: throw IllegalStateException("encoder reported unsupported format ${width}x${height}@$fps")
-            return requested.copy(index = actual.index, width = width, height = height, fps = fps)
+            return requested.copy(index = actual.index, width = width, height = height)
         }
 
         internal fun captureNsForPts(ptsUs: Long, dequeuedNs: Long): Long {

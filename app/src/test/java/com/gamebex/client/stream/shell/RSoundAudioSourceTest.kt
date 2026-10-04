@@ -7,6 +7,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -376,7 +377,7 @@ class RSoundAudioSourceTest {
         }
     }
 
-    @Test fun blockingLocalWritesPaceSinkAndStopUnblocksWorkersWithoutLateCallbacks() {
+    @Test fun blockingLocalWritesNeverPaceIngressOrGuestAndStopUnblocksWithoutLateCallbacks() {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
         val player = RSoundTestPlayer(
@@ -388,20 +389,335 @@ class RSoundAudioSourceTest {
         try {
             assertTrue(source.start(AudioSink { chunks.add(it) }))
             client(source).use { client ->
-                client.send(ByteArray(1920))
+                client.send(ByteArray(960) { 1 })
                 assertTrue(entered.await(1, TimeUnit.SECONDS))
-                await { chunks.size == 1 }
-                Thread.sleep(40)
-                assertEquals(1, chunks.size)
+                client.send(ByteArray(3 * 960) { 2 })
+                await { chunks.size == 4 }
+                assertEquals(0, player.writtenBytes.get())
+                assertEquals(listOf(1, 2, 3, 4), chunks.map { it.seq })
+                assertEquals(listOf(1, 2, 2, 2), chunks.map { it.data[0].toInt() })
+                assertEquals("rsound", source.audioMode)
+                assertTrue(source.clientConnected)
                 val startNs = System.nanoTime()
                 source.stop()
                 assertTrue(System.nanoTime() - startNs < 1_500_000_000L)
                 assertTrue(player.closed)
                 assertClosed(client.data)
                 Thread.sleep(30)
-                assertEquals(1, chunks.size)
+                assertEquals(4, chunks.size)
             }
         } finally {
+            release.countDown()
+            source.stop()
+        }
+    }
+
+    @Test fun localQueueOverflowFailsExplicitlyAfterEightPendingChunksAndListenerAcceptsReconnect() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val fallback = TestFallback()
+        val logs = CopyOnWriteArrayList<String>()
+        val chunks = CopyOnWriteArrayList<PcmChunk>()
+        val players = CopyOnWriteArrayList<RSoundTestPlayer>()
+        val source = RSoundAudioSource(fallback, RSoundPlaybackFactory {
+            val player = if (players.isEmpty()) RSoundTestPlayer(
+                writer = { _, _, count -> entered.countDown(); release.await(); count },
+                onClose = { release.countDown() },
+            ) else RSoundTestPlayer()
+            player.also { players.add(it) }
+        }, port = 0, logger = { logs.add(it) }, useControlProtocol = true, transportChunkBytes = 960)
+        try {
+            assertTrue(source.start(AudioSink { chunks.add(it) }))
+            client(source, useControlProtocol = true, transportChunkBytes = 960).use { old ->
+                old.send(ByteArray(960) { 1 })
+                assertTrue(entered.await(1, TimeUnit.SECONDS))
+                repeat(8) { index ->
+                    old.send(ByteArray(960) { (index + 2).toByte() })
+                    await { chunks.size == index + 2 }
+                }
+                await {
+                    old.control.getOutputStream().write(RSoundProtocol.controlReply(" INFO 8640"))
+                    assertEquals(" INFO 8640 0", readControlBody(old.control))
+                    logs.last { it.startsWith("RSound INFO") }.contains("localQueueChunks=8 ")
+                }
+                val info = logs.last { it.startsWith("RSound INFO") }
+                assertTrue(info.contains("receivedBytes=8640 "))
+                assertTrue(info.contains("writtenBytes=0 "))
+                assertTrue(info.contains("localQueueChunks=8 "))
+                assertTrue(info.contains("localQueuedAudioUs=40000 "))
+                assertEquals(0, fallback.starts.get())
+                assertEquals(0, players[0].writtenBytes.get())
+                old.send(ByteArray(960) { 10 })
+                await { fallback.running }
+                assertEquals("local-playback", source.failureKind)
+                assertTrue(source.fallbackReason!!.contains("local queue overflow: 8 chunks / 40ms"))
+                val closed = logs.last { it.startsWith("RSound local queue closed") }
+                assertTrue(closed.contains("localPendingChunks=8 "))
+                assertTrue(closed.contains("localInFlightBytes=960 "))
+                assertTrue(closed.contains("localRejectedBytes=960 "))
+                assertTrue(closed.contains("localDiscardedBytes=9600 "))
+                assertTrue(closed.contains("localDiscardedFrames=2400 "))
+                assertTrue(source.rsoundReady)
+                assertTrue(players[0].closed)
+                assertClosed(old.data)
+                client(source, useControlProtocol = true, transportChunkBytes = 960).use { reconnected ->
+                    assertFalse(fallback.running)
+                    assertEquals(null, source.failureKind)
+                    reconnected.send(ByteArray(960) { 9 })
+                    await { players[1].writtenBytes.get() == 960 && chunks.any { it.data[0] == 9.toByte() } }
+                    assertEquals("rsound", source.audioMode)
+                }
+            }
+        } finally {
+            release.countDown()
+            source.stop()
+        }
+    }
+
+    @Test fun consecutive32MillisecondBurstsPreserveChunkerRemainderWithoutNormalOverflow() {
+        val logs = CopyOnWriteArrayList<String>()
+        val accepted = ByteArrayOutputStream(3 * 6144)
+        val player = RSoundTestPlayer(writer = { bytes, offset, count ->
+            Thread.sleep(2)
+            synchronized(accepted) { accepted.write(bytes, offset, count) }
+            count
+        })
+        val fallback = TestFallback()
+        val source = RSoundAudioSource(fallback, RSoundPlaybackFactory { player }, port = 0,
+            logger = { logs.add(it) }, useControlProtocol = true, transportChunkBytes = 960)
+        val pcm = ByteArray(3 * 6144) { (it % 127).toByte() }
+        try {
+            assertTrue(source.start(AudioSink {}))
+            client(source, useControlProtocol = true, transportChunkBytes = 960).use { client ->
+                repeat(3) { burst ->
+                    client.send(pcm.copyOfRange(burst * 6144, (burst + 1) * 6144))
+                    val completeBytes = ((burst + 1) * 6144 / 960) * 960
+                    await { player.writtenBytes.get() == completeBytes }
+                }
+                await { player.writtenBytes.get() == 19 * 960 }
+                assertEquals("rsound", source.audioMode)
+                assertEquals(0, fallback.starts.get())
+                assertEquals(null, source.failureKind)
+                assertArrayEquals(pcm.copyOfRange(0, 19 * 960), synchronized(accepted) { accepted.toByteArray() })
+                client.control.getOutputStream().write(RSoundProtocol.controlReply(" INFO ${pcm.size}"))
+                assertEquals(" INFO ${pcm.size} 0", readControlBody(client.control))
+                val info = logs.last { it.startsWith("RSound INFO") }
+                assertTrue(info.contains("receivedBytes=${pcm.size} "))
+                assertTrue(info.contains("writtenBytes=${19 * 960} "))
+                assertTrue(info.contains("localQueueCapacityChunks=8 "))
+                assertTrue(logs.first { it.startsWith("RSound ready") }.contains("localQueueCapacityMs=40"))
+            }
+        } catch (failure: Throwable) {
+            throw AssertionError("RSound burst failure: mode=${source.audioMode} connected=${source.clientConnected} failureKind=${source.failureKind} fallbackReason=${source.fallbackReason} writtenBytes=${player.writtenBytes.get()} acceptedBytes=${synchronized(accepted) { accepted.size() }} fallbackStarts=${fallback.starts.get()}\n${logs.joinToString("\n")}", failure)
+        } finally {
+            source.stop()
+        }
+    }
+
+    @Test fun localPartialWriteFailureReportsAllUnwrittenQueuedFramesAndNoSuccessfulBytesAsLost() {
+        val secondWrite = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val calls = AtomicInteger()
+        val logs = CopyOnWriteArrayList<String>()
+        val chunks = CopyOnWriteArrayList<PcmChunk>()
+        val fallback = TestFallback()
+        val player = RSoundTestPlayer(writer = { _, _, _ ->
+            if (calls.incrementAndGet() == 1) 480 else {
+                secondWrite.countDown()
+                release.await()
+                -6
+            }
+        }, onClose = { release.countDown() })
+        val source = RSoundAudioSource(fallback, RSoundPlaybackFactory { player }, port = 0,
+            logger = { logs.add(it) }, useControlProtocol = true, transportChunkBytes = 960)
+        try {
+            assertTrue(source.start(AudioSink { chunks.add(it) }))
+            client(source, useControlProtocol = true, transportChunkBytes = 960).use { client ->
+                client.send(ByteArray(960))
+                assertTrue(secondWrite.await(1, TimeUnit.SECONDS))
+                client.send(ByteArray(2 * 960))
+                await { chunks.size == 3 }
+                await {
+                    client.control.getOutputStream().write(RSoundProtocol.controlReply(" INFO 2880"))
+                    assertEquals(" INFO 2880 0", readControlBody(client.control))
+                    logs.last { it.startsWith("RSound INFO") }.contains("localQueueChunks=2 ")
+                }
+                assertTrue(logs.last { it.startsWith("RSound INFO") }.contains("writtenBytes=480 "))
+                release.countDown()
+                await { fallback.running }
+                assertEquals("local-playback", source.failureKind)
+                val loss = logs.single { it.startsWith("RSound local queue closed") }
+                assertTrue(loss.contains("localPendingBytes=1920 "))
+                assertTrue(loss.contains("localInFlightBytes=480 "))
+                assertTrue(loss.contains("localRejectedBytes=0 "))
+                assertTrue(loss.contains("localDiscardedBytes=2400 "))
+                assertTrue(loss.contains("localDiscardedFrames=600 "))
+                assertTrue(loss.contains("writtenBytes=480"))
+                assertEquals(2, calls.get())
+                assertTrue(source.rsoundReady)
+                assertClosed(client.data)
+            }
+        } finally {
+            release.countDown()
+            source.stop()
+        }
+    }
+
+    @Test fun localSpeakerRetainsOwnedBytesInFifoAndInfoCapsAtSuccessfulPartialWrites() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val calls = AtomicInteger()
+        val accepted = CopyOnWriteArrayList<Byte>()
+        val chunks = CopyOnWriteArrayList<PcmChunk>()
+        val logs = CopyOnWriteArrayList<String>()
+        val delegate = RSoundTestPlayer(writer = { bytes, offset, count ->
+            val call = calls.incrementAndGet()
+            if (call == 2) {
+                entered.countDown()
+                release.await()
+            }
+            val written = if (call == 1) 480 else count
+            repeat(written) { accepted.add(bytes[offset + it]) }
+            written
+        }, onClose = { release.countDown() })
+        val player = object : RSoundPlayer by delegate {
+            override fun stats() = RSoundPlaybackStats(100_000, 100_000, null, null, 0)
+        }
+        val source = RSoundAudioSource(null, RSoundPlaybackFactory { player }, port = 0,
+            logger = { logs.add(it) }, useControlProtocol = true, transportChunkBytes = 960)
+        val pcm = List(4) { value -> ByteArray(960) { (value + 1).toByte() } }
+        try {
+            assertTrue(source.start(AudioSink {
+                chunks.add(it)
+                it.data.fill(99)
+            }))
+            client(source, useControlProtocol = true, transportChunkBytes = 960).use { client ->
+                client.send(pcm[0])
+                assertTrue(entered.await(1, TimeUnit.SECONDS))
+                for (bytes in pcm.drop(1)) client.send(bytes)
+                await { chunks.size == 4 }
+                client.control.getOutputStream().write(RSoundProtocol.controlReply(" INFO 3840"))
+                assertEquals(" INFO 3840 480", readControlBody(client.control))
+                val info = logs.last { it.startsWith("RSound INFO") }
+                assertTrue(info.contains("clientBytes=3840 "))
+                assertTrue(info.contains("receivedBytes=3840 "))
+                assertTrue(info.contains("writtenBytes=480 "))
+                assertTrue(info.contains("playedBytes=480 "))
+                release.countDown()
+                await { delegate.writtenBytes.get() == 3840 }
+                assertArrayEquals(pcm.flatMap { it.toList() }.toByteArray(), accepted.toByteArray())
+                client.control.getOutputStream().write(RSoundProtocol.controlReply(" INFO 3840"))
+                assertEquals(" INFO 3840 3840", readControlBody(client.control))
+                assertEquals(listOf(1, 2, 3, 4), chunks.map { it.seq })
+                assertEquals("rsound", source.audioMode)
+            }
+        } finally {
+            release.countDown()
+            source.stop()
+        }
+    }
+
+    @Test fun replacingBlockedLocalWriterClosesOldQueueAndIgnoresRetiredFailure() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val retired = CountDownLatch(1)
+        val oldCalls = AtomicInteger()
+        val players = CopyOnWriteArrayList<RSoundTestPlayer>()
+        val chunks = CopyOnWriteArrayList<PcmChunk>()
+        val fallback = TestFallback()
+        val source = RSoundAudioSource(fallback, RSoundPlaybackFactory {
+            val player = if (players.isEmpty()) RSoundTestPlayer(writer = { _, _, _ ->
+                oldCalls.incrementAndGet()
+                entered.countDown()
+                release.await()
+                retired.countDown()
+                throw IOException("retired local write")
+            }) else RSoundTestPlayer()
+            player.also { players.add(it) }
+        }, port = 0, logger = {})
+        try {
+            assertTrue(source.start(AudioSink { chunks.add(it) }))
+            client(source).use { old ->
+                old.send(ByteArray(960) { 1 })
+                assertTrue(entered.await(1, TimeUnit.SECONDS))
+                old.send(ByteArray(2 * 960) { 2 })
+                await { chunks.size == 3 }
+                client(source).use { replacement ->
+                    assertTrue(players[0].closed)
+                    replacement.send(ByteArray(960) { 9 })
+                    await { players[1].writtenBytes.get() == 960 && chunks.size == 4 }
+                    release.countDown()
+                    assertTrue(retired.await(1, TimeUnit.SECONDS))
+                    replacement.send(ByteArray(960) { 10 })
+                    await { players[1].writtenBytes.get() == 1920 && chunks.size == 5 }
+                    assertEquals(1, oldCalls.get())
+                    assertEquals(0, fallback.starts.get())
+                    assertEquals(null, source.failureKind)
+                    assertEquals("rsound", source.audioMode)
+                    assertEquals(listOf(1, 2, 3, 4, 5), chunks.map { it.seq })
+                    assertEquals(listOf(1, 2, 2, 9, 10), chunks.map { it.data[0].toInt() })
+                }
+            }
+        } finally {
+            release.countDown()
+            source.stop()
+        }
+    }
+
+    @Test fun stopAndRestartBoundLocalWriterJoinAndNeverReplayRetiredQueue() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val retired = CountDownLatch(1)
+        val oldCalls = AtomicInteger()
+        val oldSends = AtomicInteger()
+        val newSends = AtomicInteger()
+        val players = CopyOnWriteArrayList<RSoundTestPlayer>()
+        val fallback = TestFallback()
+        val source = RSoundAudioSource(fallback, RSoundPlaybackFactory {
+            val player = if (players.isEmpty()) RSoundTestPlayer(writer = { _, _, count ->
+                oldCalls.incrementAndGet()
+                entered.countDown()
+                while (release.count > 0) {
+                    try {
+                        release.await()
+                    } catch (_: InterruptedException) {
+                        Unit
+                    }
+                }
+                retired.countDown()
+                count
+            }) else RSoundTestPlayer()
+            player.also { players.add(it) }
+        }, port = 0, logger = {})
+        try {
+            assertTrue(source.start(AudioSink { oldSends.incrementAndGet() }))
+            client(source).use { old ->
+                old.send(ByteArray(960))
+                assertTrue(entered.await(1, TimeUnit.SECONDS))
+                old.send(ByteArray(2 * 960))
+                await { oldSends.get() == 3 }
+                val stopAtNs = System.nanoTime()
+                source.stop()
+                assertTrue(System.nanoTime() - stopAtNs < 1_500_000_000L)
+                assertTrue(players[0].closed)
+                assertClosed(old.data)
+                assertTrue(source.start(AudioSink { newSends.incrementAndGet() }))
+                client(source).use { restarted ->
+                    restarted.send(ByteArray(960))
+                    await { newSends.get() == 1 && players[1].writtenBytes.get() == 960 }
+                    release.countDown()
+                    assertTrue(retired.await(1, TimeUnit.SECONDS))
+                    restarted.send(ByteArray(960))
+                    await { newSends.get() == 2 && players[1].writtenBytes.get() == 1920 }
+                    assertEquals(1, oldCalls.get())
+                    assertEquals(3, oldSends.get())
+                    assertEquals(0, fallback.starts.get())
+                    assertEquals(null, source.failureKind)
+                    assertEquals("rsound", source.audioMode)
+                }
+            }
+        } finally {
+            release.countDown()
             source.stop()
         }
     }
@@ -495,8 +811,10 @@ class RSoundAudioSourceTest {
             client(source).use { client ->
                 client.send(ByteArray(960) { 1 })
                 assertTrue(entered.await(1, TimeUnit.SECONDS))
-                client.send(ByteArray(11 * 960) { 2 })
-                await { player.writtenBytes.get() == 12 * 960 }
+                repeat(11) { index ->
+                    client.send(ByteArray(960) { 2 })
+                    await { player.writtenBytes.get() == (index + 2) * 960 }
+                }
                 assertEquals(1, chunks.size)
                 assertEquals(5L, source.guestDrops)
                 assertEquals(source.guestDrops, source.guestAudioDrops)
@@ -529,8 +847,10 @@ class RSoundAudioSourceTest {
                 await { source.failureKind == "guest-network" && player.writtenBytes.get() == 960 }
                 assertEquals("guest-network", source.audioFailureKind)
                 assertEquals(null, source.fallbackReason)
-                client.send(ByteArray(9600))
-                await { player.writtenBytes.get() == 10560 }
+                repeat(10) { index ->
+                    client.send(ByteArray(960))
+                    await { player.writtenBytes.get() == (index + 2) * 960 }
+                }
                 assertEquals(1, sends.get())
                 assertEquals(0, fallback.starts.get())
                 assertEquals("rsound", source.audioMode)
@@ -573,8 +893,10 @@ class RSoundAudioSourceTest {
             client(source).use { old ->
                 old.send(ByteArray(960))
                 assertTrue(entered.await(1, TimeUnit.SECONDS))
-                old.send(ByteArray(9600))
-                await { players[0].writtenBytes.get() == 10560 }
+                repeat(10) { index ->
+                    old.send(ByteArray(960))
+                    await { players[0].writtenBytes.get() == (index + 2) * 960 }
+                }
                 val stopAtNs = System.nanoTime()
                 source.stop()
                 assertTrue(System.nanoTime() - stopAtNs < 1_500_000_000L)

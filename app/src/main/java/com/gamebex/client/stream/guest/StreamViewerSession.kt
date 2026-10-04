@@ -264,11 +264,11 @@ class StreamViewerSession(
     fun start() {
         scope.launch {
             val sender = InputSender(endpoint.host, endpoint.inputPort, endpoint.token, { sampleNs, appliedNs, ackNs ->
-                stats.add(LatencyStats.Metric.INPUT_RTT, ackNs - sampleNs)
-                if (appliedNs > 0L) clock.estimateHost(appliedNs, ackNs)?.let { estimate ->
+                if (!ended && appliedNs > 0L) clock.estimateHost(appliedNs, ackNs)?.let { estimate ->
                     stats.addClockSample(LatencyStats.Metric.INPUT, estimate.guestNs - sampleNs, estimate.errorBoundNs)
                 }
-            }, onAudio = { seq, captureNs, pcm -> onAudioChunk(seq, captureNs, pcm) }, attachId = attachId)
+            }, onAudio = { seq, captureNs, pcm -> onAudioChunk(seq, captureNs, pcm) }, attachId = attachId,
+                onRtt = { sentNs, ackNs -> if (!ended) stats.add(LatencyStats.Metric.INPUT_RTT, ackNs - sentNs) })
             synchronized(inputLock) {
                 input = sender
                 sender.update(mergePadStates(mapper.state(), touchPadMapper.state()))

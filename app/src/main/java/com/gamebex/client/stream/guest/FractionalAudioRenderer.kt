@@ -62,7 +62,8 @@ class FractionalAudioRenderer(
         if (active == epoch) return
         active = epoch; started = false; everStarted = false
         tags.fill(Long.MIN_VALUE); real.fill(false)
-        fraction = 0.0; pendingMissing = 0L; expanded = 0.0; compressed = 0.0
+        cursor = 0L; firstFrame = 0L; fraction = 0.0
+        pendingMissing = 0L; expanded = 0.0; compressed = 0.0
         fallbackL = 0; fallbackR = 0; concealment.reset(); control.reset(); drift.reset()
     }
 
@@ -94,8 +95,17 @@ class FractionalAudioRenderer(
         out.fill(0, 0, frames * 4)
         count(if (everStarted) "audio_reprime_output_frames" else "audio_startup_output_frames", frames.toLong())
         count("a_silence_frames", frames.toLong())
-        return AudioRenderInfo(active, 0, 0.0, frames, true,
-            spans = listOf(AudioRenderSpan(0, frames, null, 0L, 0)))
+        return AudioRenderInfo(active, cursor, fraction, frames, true,
+            spans = listOf(AudioRenderSpan(0, frames, null, 0L, cursor, fraction, 0.0)))
+    }
+
+    private fun conceal(present: Boolean, left: Int, right: Int) {
+        concealment.sample(present, left, right, concealed)
+        if (concealment.gapStarted) { gapEpisodes++; count("audio_gap_started", 1L) }
+        if (!present) {
+            pendingMissing++
+            count("audio_plc_frames", if (concealed[0] != 0.toShort() || concealed[1] != 0.toShort()) 1L else 0L)
+        }
     }
 
     @Synchronized override fun render(frames: Int, queuedOutputFrames: Int, nowNs: Long, out: ByteArray): AudioRenderInfo {
@@ -104,9 +114,12 @@ class FractionalAudioRenderer(
         synchronizeEpoch(snapshot.epoch)
         if (!snapshot.initialized) return silence(frames, out)
         if (!started) {
+            if (!everStarted) { cursor = snapshot.next; fraction = 0.0 }
             val need = maxOf(0, control.targetFrames - queuedOutputFrames) + 8
-            if (snapshot.spanFrames < need) return silence(frames, out)
-            cursor = snapshot.next; firstFrame = cursor; fraction = 0.0
+            if ((snapshot.high - cursor).toDouble() - fraction < need) return silence(frames, out)
+            if (!everStarted || cursor >= snapshot.next) {
+                cursor = snapshot.next; firstFrame = cursor; fraction = 0.0
+            }
             started = true; everStarted = true
         }
         totalReserveFrames = (snapshot.high - cursor).toDouble() - fraction + queuedOutputFrames
@@ -115,17 +128,16 @@ class FractionalAudioRenderer(
         val begin = cursor
         val beginFraction = fraction
         val lastNeeded = cursor + floor(fraction + (frames - 1) * ratio).toLong() + 8
-        val need = (lastNeeded - snapshot.next + 1).coerceAtLeast(0L).toInt()
-        if (need > 1_024) {
+        val needed = minOf((lastNeeded - snapshot.next + 1).coerceAtLeast(0L),
+            (snapshot.high - snapshot.next).coerceAtLeast(0L))
+        if (needed > 1_024) {
             count("audio_render_bound_failure", 1L); started = false
             return silence(frames, out)
         }
-        val read = buffer.take(active, need, scratch, present, captures, sequences) ?: return silence(frames, out)
-        for (i in 0 until need) {
+        val read = buffer.take(active, needed.toInt(), scratch, present, captures, sequences) ?: return silence(frames, out)
+        for (i in 0 until read.frames) {
             val index = read.first + i
-            concealment.sample(present[i], scratch[i * 2].toInt(), scratch[i * 2 + 1].toInt(), concealed)
-            if (concealment.gapStarted) { gapEpisodes++; count("audio_gap_started", 1L) }
-            if (!present[i]) { pendingMissing++; count("audio_plc_frames", if (concealed[0] != 0.toShort() || concealed[1] != 0.toShort()) 1L else 0L) }
+            conceal(present[i], scratch[i * 2].toInt(), scratch[i * 2 + 1].toInt())
             if (index == firstFrame) { fallbackL = concealed[0].toInt(); fallbackR = concealed[1].toInt() }
             val slot = (index % historySize).toInt()
             tags[slot] = index; history[slot * 2] = concealed[0]; history[slot * 2 + 1] = concealed[1]
@@ -137,27 +149,33 @@ class FractionalAudioRenderer(
         var spanFraction = fraction
         var spanSeq: Int? = null
         var spanStamp = 0L
+        var spanAdvance = 0.0
         var silenceFrames = 0L
         for (i in 0 until frames) {
+            val available = ((snapshot.high - cursor).toDouble() - fraction).coerceAtLeast(0.0)
+            val advance = minOf(ratio, available)
             val weights = kernels[(fraction * 256).roundToInt().coerceIn(0, 256)]
-            var id = sourceIdentity(cursor)
-            if (id.first == null) {
+            var id = if (available > 0.0) sourceIdentity(cursor) else null to 0L
+            if (available > 0.0 && id.first == null) {
                 for (tap in 0..15) {
                     val candidate = sourceIdentity(cursor + tap - 7)
                     if (abs(weights[tap]) > .0001 && candidate.first != null) { id = candidate; break }
                 }
             }
-            if (i == 0) { spanSeq = id.first; spanStamp = id.second }
-            else if (id.first != spanSeq || id.second != spanStamp) {
+            if (i == 0) { spanSeq = id.first; spanStamp = id.second; spanAdvance = advance }
+            else if (id.first != spanSeq || id.second != spanStamp || advance != spanAdvance) {
                 spans.add(AudioRenderSpan(spanStart, i - spanStart, spanSeq, spanStamp, spanIndex,
-                    spanFraction, (i - spanStart) * ratio))
+                    spanFraction, cursor - spanIndex + fraction - spanFraction))
                 spanStart = i; spanIndex = cursor; spanFraction = fraction
-                spanSeq = id.first; spanStamp = id.second
+                spanSeq = id.first; spanStamp = id.second; spanAdvance = advance
             }
+            if (available == 0.0) conceal(false, 0, 0)
             var allZero = true
             for (channel in 0..1) {
                 var sample = 0.0
-                for (tap in 0..15) sample += value(cursor + tap - 7, channel) * weights[tap]
+                if (available > 0.0) {
+                    for (tap in 0..15) sample += value(cursor + tap - 7, channel) * weights[tap]
+                } else sample = concealed[channel].toDouble()
                 val raw = sample.roundToInt()
                 val value = raw.coerceIn(-32768, 32767)
                 if (raw != value) count("audio_clipped_samples", 1L)
@@ -166,12 +184,15 @@ class FractionalAudioRenderer(
                 out[offset] = value.toByte(); out[offset + 1] = (value shr 8).toByte()
             }
             if (id.first == null && allZero) silenceFrames++
-            fraction += ratio
-            val step = floor(fraction).toLong()
-            cursor += step; fraction -= step
+            if (available <= ratio) { cursor = snapshot.high; fraction = 0.0 }
+            else {
+                fraction += advance
+                val step = floor(fraction).toLong()
+                cursor += step; fraction -= step
+            }
         }
         spans.add(AudioRenderSpan(spanStart, frames - spanStart, spanSeq, spanStamp, spanIndex,
-            spanFraction, (frames - spanStart) * ratio))
+            spanFraction, cursor - spanIndex + fraction - spanFraction))
         count("a_silence_frames", silenceFrames)
         val consumed = cursor - begin + fraction - beginFraction
         if (consumed < frames) expanded += frames - consumed else compressed += consumed - frames
@@ -180,7 +201,8 @@ class FractionalAudioRenderer(
         val c = compressed.toLong()
         if (c > 0) { count("audio_compressed_equivalent_frames", c); compressed -= c }
         if (concealment.missingAge >= 4_800) {
-            started = false; concealment.reset(); tags.fill(Long.MIN_VALUE)
+            started = false; concealment.reset()
+            if (cursor >= read.first + read.frames) tags.fill(Long.MIN_VALUE)
             count("audio_reprime_started", 1L)
         }
         return AudioRenderInfo(active, begin, beginFraction, frames, false, consumed, spans)

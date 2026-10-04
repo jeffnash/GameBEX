@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.Surface
+import com.gamebex.client.stream.StreamDebug
 import com.gamebex.client.together.platform.TogetherService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -178,6 +179,10 @@ object StreamAppCapture {
                 }
             }
             projectionCallback = callback
+            val refresh = CaptureRefreshOptions.sample().request(Build.VERSION.SDK_INT)
+            if (refresh.requestedHz > 0) {
+                Log.i(TAG, "CAPTURE_HZ requested=${refresh.requestedHz} applied=${refresh.appliedHz} reason=${refresh.reason}")
+            }
             display = runCatching {
                 p.registerCallback(callback, main)
                 p.createVirtualDisplay(NAME, width, height, dpi, 0, surface, null, main)
@@ -215,4 +220,28 @@ object StreamAppCapture {
 
     private val dpi: Int get() = android.content.res.Resources.getSystem().displayMetrics.densityDpi
 
+}
+
+internal data class CaptureRefreshRequest(val requestedHz: Int, val appliedHz: Int, val reason: String)
+
+internal data class CaptureRefreshOptions(val hz: Int = 0) {
+    fun request(sdk: Int) = CaptureRefreshRequest(
+        requestedHz = if (hz == 60) 60 else 0,
+        appliedHz = 0,
+        reason = when {
+            hz != 60 -> "normal"
+            sdk < 34 -> "requested_refresh_rate_requires_api34"
+            else -> "projection_refresh_api_unavailable"
+        },
+    )
+
+    companion object {
+        fun sample(
+            debug: Boolean = com.gamebex.client.BuildConfig.DEBUG,
+            prop: (String) -> String? = StreamDebug::prop,
+        ): CaptureRefreshOptions {
+            if (!debug) return CaptureRefreshOptions()
+            return CaptureRefreshOptions(if (prop("capture_hz") == "60") 60 else 0)
+        }
+    }
 }

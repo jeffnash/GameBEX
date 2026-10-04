@@ -63,7 +63,10 @@ class RSoundPlaybackTest {
             accepted.write(bytes, offset, size)
             size
         })
-        assertTrue(rsoundWriteFully(player, pcm) { true })
+        val writtenCounts = mutableListOf<Int>()
+        assertTrue(rsoundWriteFully(player, pcm, onWritten = { writtenCounts.add(it) }) { true })
+        assertEquals(pcm.size, writtenCounts.sum())
+        assertTrue(writtenCounts.all { it in 1..37 })
         assertArrayEquals(pcm, accepted.toByteArray())
         assertTrue(calls.get() > 2)
     }
@@ -107,11 +110,41 @@ class RSoundPlaybackTest {
         }
     }
 
+    @Test fun countsOnlySuccessfulWritesEvenWhenLaterPartialWriteFails() {
+        val calls = AtomicInteger()
+        val writtenCounts = mutableListOf<Int>()
+        val player = RSoundTestPlayer(writer = { _, _, _ ->
+            when (calls.incrementAndGet()) {
+                1 -> 4
+                2 -> 0
+                else -> -6
+            }
+        })
+        assertThrows(IOException::class.java) {
+            rsoundWriteFully(player, ByteArray(960), onWritten = { writtenCounts.add(it) }) { true }
+        }
+        assertEquals(listOf(4), writtenCounts)
+        assertEquals(3, calls.get())
+    }
+
+    @Test fun rejectsInvalidWriteCountsWithoutReportingAcceptedBytes() {
+        for (result in listOf(-6, 961)) {
+            val writtenCounts = mutableListOf<Int>()
+            val player = RSoundTestPlayer(writer = { _, _, _ -> result })
+            assertThrows(IOException::class.java) {
+                rsoundWriteFully(player, ByteArray(960), onWritten = { writtenCounts.add(it) }) { true }
+            }
+            assertTrue(writtenCounts.isEmpty())
+        }
+    }
+
     @Test fun cancellationBetweenPartialWritesPreventsAnyFurtherWrite() {
         var active = true
         val calls = AtomicInteger()
         val player = RSoundTestPlayer(writer = { _, _, _ -> calls.incrementAndGet(); active = false; 4 })
-        assertFalse(rsoundWriteFully(player, ByteArray(960)) { active })
+        var writtenBytes = 0
+        assertFalse(rsoundWriteFully(player, ByteArray(960), onWritten = { writtenBytes += it }) { active })
+        assertEquals(4, writtenBytes)
         assertEquals(1, calls.get())
     }
 }

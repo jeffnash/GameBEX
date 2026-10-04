@@ -12,7 +12,7 @@ class DeadlineQueue(deadlineMs: Int = 0) {
     )
     data class Entry(val frame: EncodedFrame, val queuedNs: Long, val revision: Long)
 
-    private val deadline = if (deadlineMs == 40) 40_000_000L else 0L
+    private val deadline = deadlineMs.coerceIn(0, 40) * 1_000_000L
     private val limit = if (deadline != 0L) 2 else StreamCaps.MAX_QUEUED_FRAMES
     private val frames = ArrayDeque<Entry>()
     var epoch: Long = 0L
@@ -39,7 +39,7 @@ class DeadlineQueue(deadlineMs: Int = 0) {
         return clear()
     }
 
-    fun ageNs(now: Long): Long = frames.peekFirst()?.let { age(it, now) } ?: 0L
+    fun ageNs(now: Long): Long = frames.peekFirst()?.let { ageNs(it, now) } ?: 0L
 
     fun offer(frame: EncodedFrame, now: Long): Result {
         if (frame.codecEpoch != epoch) return Result(1, false, false, Reason.EPOCH, depth = size,
@@ -65,7 +65,7 @@ class DeadlineQueue(deadlineMs: Int = 0) {
             val incomingReason = if (incomingExpired) Reason.AGE else Reason.AWAIT_KEY
             return Result(dropped + 1, true, pressure || incomingExpired,
                 if (pressure) reason else incomingReason,
-                if (pressure) oldestAgeNs else age(entry, now), depth, incomingReason)
+                if (pressure) oldestAgeNs else ageNs(entry, now), depth, incomingReason)
         }
         frames.addLast(entry)
         waitingForKey = false
@@ -85,11 +85,11 @@ class DeadlineQueue(deadlineMs: Int = 0) {
     fun valid(entry: Entry, now: Long): Boolean = entry.frame.codecEpoch == epoch &&
         entry.revision == revision && (deadline == 0L || !expired(entry, now))
 
-    private fun age(entry: Entry, now: Long): Long {
+    internal fun ageNs(entry: Entry, now: Long): Long {
         val origin = if (deadline != 0L && entry.frame.encodedNs > 0L) entry.frame.encodedNs else entry.queuedNs
         return (now - origin).coerceAtLeast(0L)
     }
 
-    private fun expired(entry: Entry, now: Long): Boolean = age(entry, now) >
+    private fun expired(entry: Entry, now: Long): Boolean = ageNs(entry, now) >
         if (deadline != 0L) deadline else StreamCaps.MAX_QUEUE_AGE_MS * 1_000_000L
 }

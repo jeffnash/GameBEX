@@ -22,12 +22,15 @@ class InputSender(
     reliableEdges: Boolean = StreamDebug.flag("input_reliable"),
     cs6: Boolean = StreamDebug.flag("input_cs6"),
     private val attachId: Long = StreamToken.attachId(),
+    private val socketFactory: () -> DatagramSocket = { DatagramSocket() },
+    private val onRtt: (sentNs: Long, ackNs: Long) -> Unit = { _, _ -> },
 ) : AutoCloseable {
-    private data class Sent(val sampleNs: Long, val generation: Int?, val cancel: Boolean)
+    private data class Sent(val sampleNs: Long, val generation: Int?, val cancel: Boolean, @Volatile var sentNs: Long? = null)
+    private data class Prepared(val seq: Int, val next: ReliableTransitions.Send, val pending: Sent, val cancellations: Long)
 
     private val key = StreamToken.key(token)
-    private val socket = DatagramSocket().apply {
-        connect(InetSocketAddress(host, port))
+    private val destination = InetSocketAddress(host, port)
+    private val socket = socketFactory().apply {
         soTimeout = 25
     }
     val actualTos: Int? = com.gamebex.client.stream.proto.StreamSockets.markInput(socket, cs6)
@@ -94,37 +97,49 @@ class InputSender(
     private fun sendLoop() {
         try {
             while (!closed) {
-                synchronized(lock) {
-                    while (!closed) {
+                val prepared = synchronized(lock) {
+                    var ready: Prepared? = null
+                    while (!closed && ready == null) {
                         val graceRemaining = if (closing) closeDeadlineNs - System.nanoTime() else Long.MAX_VALUE
                         if (closing && (cancelAcknowledged || graceRemaining <= 0L)) return
                         val now = clock()
                         val next = transitions.next(now)
                         if (next != null) {
-                            send(next)
-                            break
+                            val n = ++seq
+                            val pending = Sent(next.originNs, next.generation, next.cancel)
+                            outstanding[n] = pending
+                            while (outstanding.size > MAX_OUTSTANDING) outstanding.remove(outstanding.keys.first())
+                            ready = Prepared(n, next, pending, transitions.cancellations)
+                        } else {
+                            val delay = minOf(transitions.delayNs(now), graceRemaining).coerceAtLeast(1L)
+                            lock.wait(delay / 1_000_000L, (delay % 1_000_000L).toInt())
                         }
-                        val delay = minOf(transitions.delayNs(now), graceRemaining).coerceAtLeast(1L)
-                        lock.wait(delay / 1_000_000L, (delay % 1_000_000L).toInt())
                     }
-                }
+                    ready
+                } ?: return
+                send(prepared)
             }
         } catch (_: InterruptedException) {
             return
         }
     }
 
-    private fun send(next: ReliableTransitions.Send) {
-        val n = ++seq
+    private fun send(prepared: Prepared) {
+        val next = prepared.next
         val flags = if (next.cancel) StreamWire.INPUT_FLAG_NEUTRAL else 0
-        val bytes = InputWire.encode(InputPacket(flags, key, n, next.originNs, next.state, attachId))
-        outstanding[n] = Sent(next.originNs, next.generation, next.cancel)
-        while (outstanding.size > MAX_OUTSTANDING) outstanding.remove(outstanding.keys.first())
-        sentCount++
+        val bytes = InputWire.encode(InputPacket(flags, key, prepared.seq, next.originNs, next.state, attachId))
+        synchronized(lock) {
+            if (closed || prepared.cancellations != transitions.cancellations) {
+                outstanding.remove(prepared.seq)
+                return
+            }
+            sentCount++
+        }
+        prepared.pending.sentNs = clock()
         try {
-            socket.send(DatagramPacket(bytes, bytes.size))
+            socket.send(DatagramPacket(bytes, bytes.size, destination))
         } catch (_: IOException) {
-            outstanding.remove(n)
+            synchronized(lock) { outstanding.remove(prepared.seq) }
         }
     }
 
@@ -140,30 +155,33 @@ class InputSender(
             } catch (_: IOException) {
                 return
             }
+            if (packet.address != destination.address) continue
             if (hasMagic(packet, StreamWire.AUDIO_UDP_MAGIC)) {
                 val audio = InputWire.decodeAudio(packet.data, packet.length)
                 if (audio != null && audio.key == key) onAudio(audio.seq, audio.captureNs, audio.pcm)
                 continue
             }
-            if (!hasMagic(packet, StreamWire.ACK_MAGIC)) continue
+            if (packet.port != destination.port || !hasMagic(packet, StreamWire.ACK_MAGIC)) continue
             val ack = InputWire.decodeAck(packet.data, packet.length) ?: continue
             if (ack.attachId != attachId) continue
-            val first = synchronized(lock) {
+            val ackNs = clock()
+            val received = synchronized(lock) {
                 val pending = outstanding[ack.seq]
-                if (pending == null || pending.sampleNs != ack.sampleNs) return@synchronized false
+                if (pending == null || pending.sampleNs != ack.sampleNs) return@synchronized null
+                val sentNs = pending.sentNs ?: return@synchronized null
                 outstanding.remove(ack.seq)
                 val generation = pending.generation
                 if (generation != null && transitions.ack(generation)) {
-                    outstanding.entries.removeAll { it.value.generation == generation }
                     if (pending.cancel) cancelAcknowledged = true
                     lock.notifyAll()
                 }
-                if (!ack.wrote || ack.sampleNs == 0L || !measured.add(ack.sampleNs)) false else {
-                    while (measured.size > MAX_OUTSTANDING) measured.remove(measured.first())
-                    true
-                }
-            }
-            if (first) onAck(ack.sampleNs, ack.appliedNs, clock())
+                val first = ack.wrote && ack.sampleNs != 0L && measured.add(ack.sampleNs)
+                while (measured.size > MAX_OUTSTANDING) measured.remove(measured.first())
+                sentNs to first
+            } ?: continue
+            if (closed) continue
+            onRtt(received.first, ackNs)
+            if (!closed && received.second) onAck(ack.sampleNs, ack.appliedNs, ackNs)
         }
     }
 

@@ -303,7 +303,7 @@ class MediaServer(
                     g.video.reset(it.codecEpoch)
                     g.control.addLast(Out.Format(it))
                 } ?: g.control.addLast(Out.Frame(infoFrame()))
-                g.writer = spawn("gbx-media-write") { writeLoop(g) }
+                g.writer = spawn("gbx-media-write", Thread.MAX_PRIORITY) { writeLoop(g) }
                 lock.notifyAll()
             }
         }
@@ -374,8 +374,7 @@ class MediaServer(
                         val valid = synchronized(lock) {
                             val now = clock()
                             if (guest !== g || closed || !g.video.valid(next, now)) {
-                                val ageNs = (now - if (queueDeadlineMs == 40 && f.encodedNs > 0L)
-                                    f.encodedNs else next.queuedNs).coerceAtLeast(0L)
+                                val ageNs = g.video.ageNs(next, now)
                                 val depth = g.video.size
                                 if (guest !== g || closed) {
                                     recordDrop(1, "retired_polled", ageNs, depth, "validate", now)
@@ -579,9 +578,9 @@ class MediaServer(
         runCatching { c?.requestKeyframe() }
     }
 
-    private fun spawn(name: String, body: () -> Unit): Thread = Thread(body, name).apply {
+    private fun spawn(name: String, priority: Int = Thread.NORM_PRIORITY, body: () -> Unit): Thread = Thread(body, name).apply {
         isDaemon = true
-        priority = Thread.MAX_PRIORITY
+        this.priority = priority
         synchronized(threads) { threads += this }
         start()
     }

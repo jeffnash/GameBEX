@@ -15,16 +15,45 @@ class DeliveryControlTest {
     @Test
     fun twoBadWindowsReduce15Percent() {
         val c = control()
-        assertNull(c.window(second, 13 * ms, 0L, 0L, 0, false))
-        assertEquals(DeliveryControl.Action.Bitrate(3_400_000), c.window(2 * second, 13 * ms, 0L, 0L, 0, false))
+        assertNull(c.window(second, 31 * ms, 0L, 0L, 0, false))
+        assertEquals(DeliveryControl.Action.Bitrate(3_400_000), c.window(2 * second, 31 * ms, 0L, 0L, 0, false))
+    }
+
+    @Test
+    fun normalAbsoluteRelativeP95DoesNotRatchetBitrateOrLevel() {
+        val c = control()
+        for (n in 1L..120L) {
+            val p95 = (12 + (n % 14)) * ms
+            assertNull(c.window(n * 500 * ms, p95, 0L, 0L, 0, false))
+        }
+        assertEquals(4_000_000, c.bitrate)
+        assertEquals(1, c.level.index)
+    }
+
+    @Test
+    fun thirtyMsIsNotDistressAndThirtyOneMsStillReduces() {
+        val c = control()
+        for (n in 1L..5L) assertNull(c.window(n * second, 30 * ms, 0L, 0L, 0, false))
+        assertNull(c.window(6 * second, 31 * ms, 0L, 0L, 0, false))
+        assertEquals(DeliveryControl.Action.Bitrate(3_400_000), c.window(7 * second, 31 * ms, 0L, 0L, 0, false))
+    }
+
+    @Test
+    fun cleanThresholdIsTwentyMsNotTheNeutralBandAboveIt() {
+        val c = control()
+        c.localPressure(second, 0L, true)
+        for (n in 2L..23L) assertNull(c.window(n * 500 * ms, 21 * ms, 0L, 0L, 0, false))
+        assertEquals(3_400_000, c.bitrate)
+        for (n in 24L..43L) assertNull(c.window(n * 500 * ms, 20 * ms, 0L, 0L, 0, false))
+        assertEquals(DeliveryControl.Action.Bitrate(3_570_000), c.window(22 * second, 20 * ms, 0L, 0L, 0, false))
     }
 
     @Test
     fun oneBadWindowNoDropDoesNotReact() {
         val c = control()
-        assertNull(c.window(second, 13 * ms, 0L, 0L, 0, false))
+        assertNull(c.window(second, 31 * ms, 0L, 0L, 0, false))
         assertNull(c.window(2 * second, 0L, 0L, 0L, 0, false))
-        assertNull(c.window(3 * second, 13 * ms, 0L, 0L, 0, false))
+        assertNull(c.window(3 * second, 31 * ms, 0L, 0L, 0, false))
     }
 
     @Test

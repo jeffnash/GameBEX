@@ -63,6 +63,60 @@ class AvcEncodersTest {
     }
 
     @Test
+    fun pal50UsesItsOwnJointSupportWithoutChangingLadderOrThirtyFps() {
+        val level = StreamCaps.LEVELS[1]
+        val palOnly = enc("pal", true).copy(supportedLevelIds = setOf(3), supportedPal50LevelIds = setOf(1))
+        val normalOnly = enc("normal", true).copy(supportedLevelIds = setOf(1), supportedPal50LevelIds = emptySet())
+        val options = AvcEncoders.Options(fps = 50)
+        assertEquals(listOf(normalOnly), AvcEncoders.rank(listOf(palOnly, normalOnly), level))
+        assertEquals(listOf(palOnly), AvcEncoders.rank(listOf(palOnly, normalOnly), level, options))
+        assertEquals(listOf(palOnly), AvcEncoders.rank(listOf(palOnly), StreamCaps.LEVELS[3], options))
+        assertEquals(50, options.fpsFor(level))
+        assertEquals(30, options.fpsFor(StreamCaps.LEVELS[3]))
+        assertEquals(60, level.fps)
+        assertEquals(60, AvcEncoders.Options(fps = 49).fpsFor(level))
+    }
+
+    @Test
+    fun defaultOptionsRetainStrictThenRelaxedWithPeriodicIdr() {
+        val configurations = AvcEncoders.configurationAttempts(StreamCaps.LEVELS[1],
+            enc("x", true).copy(intraRefresh = true), AvcEncoders.Options())
+        assertEquals(listOf(true, false), configurations.map { it.strict })
+        assertEquals(listOf(60, 60), configurations.map { it.fps })
+        assertTrue(configurations.all { it.intraRefreshPeriod == 0 && !it.intraRefreshFallback })
+        assertEquals(listOf(10, 10), configurations.map { it.iFrameIntervalS })
+    }
+
+    @Test
+    fun supportedIntraRefreshReplacesPeriodicIdrAndRefusalRestoresItInStableOrder() {
+        val configurations = AvcEncoders.configurationAttempts(StreamCaps.LEVELS[1],
+            enc("x", true).copy(intraRefresh = true), AvcEncoders.Options(fps = 50, intraRefresh = true))
+        assertEquals(listOf(true, false, true, false), configurations.map { it.strict })
+        assertEquals(listOf(500, 500, 0, 0), configurations.map { it.intraRefreshPeriod })
+        assertEquals(listOf(-1, -1, 10, 10), configurations.map { it.iFrameIntervalS })
+        assertEquals(listOf(false, false, true, true), configurations.map { it.intraRefreshFallback })
+        assertTrue(configurations.all { it.fps == 50 })
+    }
+
+    @Test
+    fun unsupportedIntraRefreshNeverDisablesPeriodicIdrOrAddsRefreshKey() {
+        val configurations = AvcEncoders.configurationAttempts(StreamCaps.LEVELS[1],
+            enc("x", true), AvcEncoders.Options(intraRefresh = true))
+        assertEquals(2, configurations.size)
+        assertTrue(configurations.all { it.intraRefreshPeriod == 0 && it.intraRefreshFallback })
+        assertTrue(configurations.all { it.iFrameIntervalS == 10 })
+    }
+
+    @Test
+    fun ignoredOrInvalidRefreshOutputRequiresPeriodicFallback() {
+        val refresh = AvcEncoders.Configuration(true, 50, 500)
+        for (period in listOf(null, 0, -1)) assertFalse(AvcEncoders.intraRefreshConfirmed(refresh, period))
+        assertTrue(AvcEncoders.intraRefreshConfirmed(refresh, 500))
+        assertTrue(AvcEncoders.intraRefreshConfirmed(refresh, 50))
+        assertTrue(AvcEncoders.intraRefreshConfirmed(AvcEncoders.Configuration(true, 60), null))
+    }
+
+    @Test
     fun profileFallsBackToBaselineThenDefault() {
         assertEquals(AvcEncoders.PROFILE_CONSTRAINED_BASELINE, AvcEncoders.profileFor(enc("x", true, setOf(1, 0x10000, 8))))
         assertEquals(AvcEncoders.PROFILE_BASELINE, AvcEncoders.profileFor(enc("x", true, setOf(1, 8))))

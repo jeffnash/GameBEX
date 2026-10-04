@@ -25,12 +25,19 @@ class StreamPlayer2Impl(
     private val externalBase: () -> File,
     private val dolphin: DolphinP2Config,
     private val hostPads: () -> List<ControllerRegistry.Pad> = ControllerRegistry::snapshot,
+    private val raExperiments: () -> RaExperimentOptions = { RaExperimentOptions.sample() },
     /** True the first time it is called for [key] on this phone. */
     private val firstTime: (key: String) -> Boolean,
 ) : StreamPlayer2 {
+    private var raSnapshot: RaExperimentOptions? = null
+
     override suspend fun prepare(game: GameEntity, emu: Emu, rsoundReady: Boolean): P2Prep = when (emu) {
-        Emu.RETROARCH -> StreamRaConfig.write(externalBase(), rsoundReady, hasRealHostPad = hostPads().isNotEmpty())
-            ?.let { P2Prep.RetroArchConfig(it) } ?: P2Prep.Failed(TogetherCopy.configUnwritable)
+        Emu.RETROARCH -> {
+            if (!rsoundReady || raSnapshot == null) raSnapshot = raExperiments()
+            StreamRaConfig.write(externalBase(), rsoundReady, hasRealHostPad = hostPads().isNotEmpty(),
+                experiments = checkNotNull(raSnapshot))
+                ?.let { P2Prep.RetroArchConfig(it) } ?: P2Prep.Failed(TogetherCopy.configUnwritable)
+        }
         Emu.DOLPHIN -> when (val r = dolphin.apply()) {
             DolphinP2Config.Result.Applied -> P2Prep.Written
             is DolphinP2Config.Result.Failed -> P2Prep.Failed(r.text)
@@ -43,7 +50,10 @@ class StreamPlayer2Impl(
         else -> P2Prep.Guide(listOf(TogetherCopy.streamPlayer2Other(emu.label)))
     }
 
-    override suspend fun restore(): Boolean = dolphin.restorePending()
+    override suspend fun restore(): Boolean {
+        raSnapshot = null
+        return dolphin.restorePending()
+    }
 
     companion object {
         private const val PREFS = "stream"
