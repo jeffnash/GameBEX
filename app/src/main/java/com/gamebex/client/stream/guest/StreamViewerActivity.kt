@@ -100,11 +100,16 @@ class StreamViewerActivity : ComponentActivity() {
             )
         }
         if (StreamDebug.prop("tdls") == "1") setTdls(endpoint.host, true)
+        val touchProfile = TouchProfile(folder = endpoint.system, backend = touchBackendFromName(endpoint.backend))
+        val touchPrefs = StreamTouchPrefs(this).load(selectTouchLayout(touchProfile))
         setContent {
             GameBexTheme {
                 val ui by s.ui.collectAsState()
                 StreamViewerScreen(
                     ui = ui,
+                    touchProfile = touchProfile,
+                    touchPrefs = touchPrefs,
+                    onTouchState = s::onTouchState,
                     onSurface = { surface ->
                         if (surface != null) {
                             voteFrameRate(surface)

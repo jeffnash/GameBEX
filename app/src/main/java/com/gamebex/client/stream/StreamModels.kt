@@ -94,6 +94,10 @@ data class StreamEndpoint(
     val audio: Boolean,
     val hostName: String,
     val audioTimestampOrigin: String = "capture",
+ /** PlatformRegistry folder of the hosted game; "" = unknown (generic pad). */
+    val system: String = "",
+ /** Actual host emulator backend; "" = unknown (generic pad). */
+    val backend: String = "",
 )
 
 object StreamJson {

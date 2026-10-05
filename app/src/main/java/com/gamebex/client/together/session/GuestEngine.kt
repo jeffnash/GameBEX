@@ -938,6 +938,8 @@ internal class GuestEngine(
         audio = ready.audio,
         hostName = name,
         audioTimestampOrigin = ready.audioTimestampOrigin,
+        system = ready.system,
+        backend = ready.backend,
     )
 
  /** STREAM guests never run the game: a row-less stand-in carries its title and folder. */

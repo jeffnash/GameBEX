@@ -25,6 +25,7 @@ import com.gamebex.client.together.TogetherAlert
 import com.gamebex.client.together.TogetherCopy
 import com.gamebex.client.together.TogetherEmulators
 import com.gamebex.client.together.TogetherLaunch
+import com.gamebex.client.together.touchBackendForEmuPkg
 import com.gamebex.client.together.TogetherLibrary
 import com.gamebex.client.together.TogetherMode
 import com.gamebex.client.together.TogetherPlatform
@@ -149,6 +150,10 @@ internal class HostEngine(
             val stream: StreamRound? = null,
  /** STREAM: player-2 steps to show once the game runs. */
             val guide: String? = null,
+ /** STREAM: hosted game folder for the guest touch layout; "" = unknown. */
+            val system: String = "",
+ /** STREAM: actual host emulator backend for the guest touch layout; "" = unknown. */
+            val backend: String = "",
         ) : Input
         data class HeadStart(val epoch: Int, val round: Int) : Input
         data class SwitchMode(val mode: TogetherMode) : Input
@@ -1061,7 +1066,9 @@ internal class HostEngine(
                             log(t)
                             EmuRouter.Outcome.Failed(TogetherCopy.noWifi)
                         }
-                        post(Input.HostLaunched(launchEpoch, launchRound, outcome, prep.round, prep.guide))
+                        post(Input.HostLaunched(launchEpoch, launchRound, outcome, prep.round, prep.guide,
+                            system = currentGame.folder,
+                            backend = touchBackendForEmuPkg((outcome as? EmuRouter.Outcome.Launched)?.emuPkg)))
                     }
                 } finally {
                     criticalLaunches.exit(marker)
@@ -1145,6 +1152,8 @@ internal class HostEngine(
                                         height = started.started.height,
                                         audio = started.started.audio,
                                         audioTimestampOrigin = if (started.started.rsound) "bridge-arrival" else "capture",
+                                        system = input.system,
+                                        backend = input.backend,
                                     ),
                                 )
                             }

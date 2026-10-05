@@ -56,15 +56,16 @@ class RSoundAudioSource(
         private var rejectedBytes = 0
         val pendingChunks: Int get() = synchronized(lock) { pending.size }
 
-        fun enqueue(bytes: ByteArray) = synchronized(lock) {
-            if (!alive) return@synchronized
+        fun tryEnqueue(bytes: ByteArray): Boolean = synchronized(lock) {
+            if (!alive) return@synchronized false
             if (pending.size == LOCAL_QUEUE_CHUNKS) {
                 rejectedBytes += bytes.size
-                throw LocalPlaybackFailure(IOException("RSound local queue overflow: $LOCAL_QUEUE_CHUNKS chunks / ${LOCAL_QUEUE_CHUNKS * 5}ms"))
+                return@synchronized false
             }
             pending.addLast(bytes)
             pendingBytes += bytes.size
             lock.notifyAll()
+            true
         }
 
         fun take(): ByteArray? = synchronized(lock) {
@@ -113,6 +114,8 @@ class RSoundAudioSource(
         var quickAckSuccesses = 0L
         var quickAckFailures = 0L
         var quickAckWarning = false
+        var localOverflowStreak = 0
+        var localOverflowDrops = 0L
         val arrivalGaps = LongArray(4096)
         var arrivalGapIndex = 0
         var arrivalGapSamples = 0
@@ -408,7 +411,19 @@ class RSoundAudioSource(
                     synchronized(connection.metrics) {
                         connection.deliverTiming.record(System.nanoTime() - deliverStartNs)
                     }
-                    if (isActive(current, connection)) connection.local.enqueue(localBytes)
+                    if (isActive(current, connection) && !connection.local.tryEnqueue(localBytes)) {
+                        val streak = synchronized(connection.metrics) {
+                            connection.localOverflowStreak += 1
+                            connection.localOverflowDrops += 1
+                            connection.localOverflowStreak
+                        }
+                        if (streak == 1) log("RSound local queue full, dropping chunk; guest delivery retained")
+                        if (streak >= MAX_CONSECUTIVE_LOCAL_OVERFLOWS) {
+                            throw LocalPlaybackFailure(IOException("RSound local queue overflow: $LOCAL_QUEUE_CHUNKS chunks / ${LOCAL_QUEUE_CHUNKS * 5}ms sustained $streak chunks"))
+                        }
+                    } else {
+                        synchronized(connection.metrics) { connection.localOverflowStreak = 0 }
+                    }
                 }
             }
             val input = connection.data.getInputStream()
@@ -692,10 +707,10 @@ class RSoundAudioSource(
     private fun closeLocalQueue(connection: Connection) {
         val snapshot = synchronized(connection.metrics) {
             val loss = connection.local.close() ?: return
-            loss to connection.counters()
+            Triple(loss, connection.counters(), connection.localOverflowDrops)
         }
-        val (loss, counters) = snapshot
-        log("RSound local queue closed localPendingChunks=${loss.pendingChunks} localPendingBytes=${loss.pendingBytes} localInFlightBytes=${loss.inFlightBytes} localRejectedBytes=${loss.rejectedBytes} localDiscardedBytes=${loss.discardedBytes} localDiscardedFrames=${loss.discardedBytes / RSoundProtocol.FRAME_BYTES} receivedBytes=${counters.receivedBytes} writtenBytes=${counters.writtenBytes}")
+        val (loss, counters, overflowDrops) = snapshot
+        log("RSound local queue closed localPendingChunks=${loss.pendingChunks} localPendingBytes=${loss.pendingBytes} localInFlightBytes=${loss.inFlightBytes} localRejectedBytes=${loss.rejectedBytes} localOverflowDrops=$overflowDrops localDiscardedBytes=${loss.discardedBytes} localDiscardedFrames=${loss.discardedBytes / RSoundProtocol.FRAME_BYTES} receivedBytes=${counters.receivedBytes} writtenBytes=${counters.writtenBytes}")
     }
 
     private fun closeConnection(current: Run, connection: Connection) {
@@ -758,6 +773,7 @@ class RSoundAudioSource(
         private const val LOCAL_PLAYBACK = "local-playback"
         private const val GUEST_NETWORK = "guest-network"
         private const val LOCAL_QUEUE_CHUNKS = 8
+        private const val MAX_CONSECUTIVE_LOCAL_OVERFLOWS = 200
         private const val CONTROL_IDLE_MS = 500
         private const val MAX_BUFFER_BYTES = RSoundProtocol.RATE * RSoundProtocol.FRAME_BYTES / 25
     }

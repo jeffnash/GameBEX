@@ -59,6 +59,12 @@ class AvcScreenSourceTest {
     }
 
     @Test
+    fun cropSizeMatchingTheRequestIsAcceptedWithoutALadderRung() {
+        val requested = StreamCaps.LEVELS[1].copy(width = 768, height = 576)
+        assertEquals(requested, AvcScreenSource.actualLevelFor(requested, 768, 576, 60))
+    }
+
+    @Test
     fun encoderCatalogIsDiscoveredOncePerSourceLifetime() {
         var calls = 0
         val info = AvcEncoders.EncoderInfo("fake", true, emptySet(), false, 4096, 2304, setOf(1, 3))

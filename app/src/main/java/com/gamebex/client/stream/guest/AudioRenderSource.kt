@@ -5,7 +5,7 @@ import com.gamebex.client.stream.StreamCaps
 internal fun audioFrameNs(frames: Long): Long = frames * 1_000_000_000L / StreamCaps.AUDIO_RATE
 
 data class AudioPlaybackOptions(
-    val leadFrames: Int = 768,
+    val leadFrames: Int = 512,
     val jit: Boolean = false,
     val regulator: Boolean = false,
     val plc: Boolean = false,
@@ -19,7 +19,7 @@ data class AudioPlaybackOptions(
     companion object {
         fun sample(debug: Boolean, prop: (String) -> String?): AudioPlaybackOptions {
             if (!debug) return AudioPlaybackOptions()
-            val lead = prop("audio_lead_frames")?.toIntOrNull()?.takeIf { it in listOf(256, 384, 512, 768) } ?: 768
+            val lead = prop("audio_lead_frames")?.toIntOrNull()?.takeIf { it in listOf(256, 384, 512, 768) } ?: 512
             val jit = prop("audio_jit") == "1"
             val regulator = prop("audio_regulator") == "1"
             val plc = prop("audio_plc") == "1"

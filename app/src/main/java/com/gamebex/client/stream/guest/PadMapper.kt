@@ -32,9 +32,21 @@ class PadMapper(private val deadZone: Float = DEAD_ZONE) {
     private var rt = 0f
     private var comboSinceNs = NONE
     private var modePressed = false
+    private var directState: PadState? = null
+
+    /**
+     * A complete touch state, stored verbatim. Unlike the physical path, this
+     * skips the dead zone and the trigger/button coupling: the touch engine
+     * already outputs exact wire values. Legacy [onKey]/[onAxes] input clears
+     * it (last writer wins); [reset] clears both.
+     */
+    fun setTouchState(state: PadState) {
+        directState = state.sanitized()
+    }
 
     /** Applies one key; true when the key belongs to the pad (the viewer then consumes it). */
     fun onKey(keyCode: Int, down: Boolean, atNs: Long): Boolean {
+        directState = null
         when (keyCode) {
             KeyEvent.KEYCODE_BUTTON_MODE -> {
                 if (down) modePressed = true
@@ -64,6 +76,7 @@ class PadMapper(private val deadZone: Float = DEAD_ZONE) {
         hatXValue: Float,
         hatYValue: Float,
     ) {
+        directState = null
         lx = dz(leftX)
         ly = dz(leftY)
         rx = dz(rightX)
@@ -75,6 +88,7 @@ class PadMapper(private val deadZone: Float = DEAD_ZONE) {
     }
 
     fun state(): PadState {
+        directState?.let { return it }
         var b = buttons
         if (lt > TRIGGER_PRESSED) b = b or PadState.L2
         if (rt > TRIGGER_PRESSED) b = b or PadState.R2
@@ -102,6 +116,7 @@ class PadMapper(private val deadZone: Float = DEAD_ZONE) {
         modePressed || (comboSinceNs != NONE && nowNs - comboSinceNs >= StreamCaps.LEAVE_HOLD_MS * 1_000_000L)
 
     fun reset() {
+        directState = null
         buttons = 0
         dpadUp = false
         dpadDown = false

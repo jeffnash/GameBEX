@@ -164,6 +164,19 @@ class GuestEngineStreamTest {
     }
 
     @Test
+    fun streamEndpointCarriesSystemAndBackendToTheViewer() = runTest {
+        val rig = rig(this)
+        val pair = open(rig)
+        awaitView(rig, GuestStep.READY)
+        pair.host.send(LinkMsg.Launch(SESSION, 1))
+        pair.host.send(ready().copy(system = "n64", backend = "retroarch"))
+        awaitView(rig, GuestStep.IN_GAME)
+        val launch = rig.emulators.launches.single()
+        assertEquals("n64", launch.stream?.system)
+        assertEquals("retroarch", launch.stream?.backend)
+    }
+
+    @Test
     fun noStreamReadyInTimeIsSaidPlainly() = runTest {
         val rig = rig(this)
         val pair = open(rig)

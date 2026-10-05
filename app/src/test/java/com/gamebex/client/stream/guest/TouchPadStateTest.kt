@@ -123,4 +123,111 @@ class TouchPadStateTest {
         assertEquals(touch, mergePadStates(PadState.NEUTRAL, touch))
         assertEquals(physical, mergePadStates(physical, PadState.NEUTRAL))
     }
+
+    @Test
+    fun legacyPublisherRoundTripsButtonsHatAndLeftStick() {
+        val mapper = PadMapper()
+        val publisher = LegacyTouchPublisher(
+            { key, down, at -> mapper.onKey(key, down, at); Unit },
+            { x, y, _ -> mapper.onAxes(x, y, 0f, 0f, 0f, 0f, 0f, 0f) },
+        )
+        publisher.publish(PadState(buttons = PadState.A or PadState.B, lx = 64, ly = -32, hat = PadState.HAT_UP_RIGHT), 10)
+        assertEquals(PadState.A or PadState.B, mapper.state().buttons)
+        assertEquals(PadState.HAT_UP_RIGHT, mapper.state().hat)
+        assertEquals(64, mapper.state().lx)
+        assertEquals(-32, mapper.state().ly)
+        publisher.publish(PadState(buttons = PadState.A, lx = 64, ly = -32, hat = PadState.HAT_UP), 20)
+        assertEquals(PadState.A, mapper.state().buttons)
+        assertEquals(PadState.HAT_UP, mapper.state().hat)
+        publisher.publish(PadState.NEUTRAL, 30)
+        assertEquals(PadState.NEUTRAL, mapper.state())
+    }
+
+    @Test
+    fun legacyPublisherDropsRightStickAndAnalogTriggers() {
+        var calls = 0
+        val publisher = LegacyTouchPublisher({ _, _, _ -> calls++ }, { _, _, _ -> calls++ })
+        publisher.publish(PadState(rx = 127, ry = -127, lt = 200, rt = 100), 10)
+        assertEquals(0, calls)
+        publisher.publish(PadState(buttons = PadState.L2, lt = 255), 20)
+        assertEquals(1, calls) // The digital bit survives; the level rides it.
+    }
+
+    @Test
+    fun legacyPublisherEmitsOnlyEdges() {
+        val events = mutableListOf<KeyChange>()
+        val publisher = LegacyTouchPublisher({ key, down, at -> events.add(KeyChange(key, down, at)) }, { _, _, _ -> })
+        publisher.publish(PadState(buttons = PadState.A), 10)
+        publisher.publish(PadState(buttons = PadState.A), 20)
+        assertEquals(1, events.size)
+        publisher.publish(PadState.NEUTRAL, 30)
+        assertEquals(2, events.size)
+        assertEquals(KeyChange(KeyEvent.KEYCODE_BUTTON_A, false, 30), events.last())
+    }
+
+    @Test
+    fun touchBitAndHatTablesCoverEveryWireValue() {
+        val bits = listOf(
+            PadState.A, PadState.B, PadState.X, PadState.Y, PadState.L1, PadState.R1,
+            PadState.L2, PadState.R2, PadState.SELECT, PadState.START, PadState.L3, PadState.R3,
+        )
+        assertEquals(12, bits.mapNotNull(::touchBitToKeyCode).toSet().size)
+        assertEquals(null, touchBitToKeyCode(0))
+        assertEquals(null, touchBitToKeyCode(PadState.MODE))
+        (PadState.HAT_UP..PadState.HAT_CENTER).forEach { hat ->
+            val mapper = PadMapper()
+            touchHatKeys(hat).forEach { mapper.onKey(it, true, 1) }
+            assertEquals("hat $hat", hat, mapper.state().hat)
+        }
+    }
+
+    @Test
+    fun setTouchStateBypassesDeadZoneAndTriggerCoupling() {
+        val mapper = PadMapper()
+        mapper.setTouchState(PadState(lx = 1, ly = -1, lt = 128))
+        assertEquals(PadState(lx = 1, ly = -1, lt = 128), mapper.state())
+        mapper.setTouchState(PadState(buttons = PadState.L2, lt = 0))
+        val held = mapper.state()
+        assertEquals(PadState.L2, held.buttons)
+        assertEquals(0, held.lt) // The physical path would force 255 here.
+        mapper.reset()
+        assertEquals(PadState.NEUTRAL, mapper.state())
+    }
+
+    @Test
+    fun legacyInputClearsTheDirectTouchState() {
+        val mapper = PadMapper()
+        mapper.setTouchState(PadState(lx = 100, buttons = PadState.B))
+        mapper.onKey(KeyEvent.KEYCODE_BUTTON_A, true, 1)
+        assertEquals(PadState(buttons = PadState.A), mapper.state())
+        mapper.setTouchState(PadState(rx = 64))
+        mapper.onAxes(0.5f, 0f, 0f, 0f, 0f, 0f, 0f, 0f)
+        // 0.5 * 127 rounds to 64; the direct rx is gone but the A hold stays.
+        assertEquals(PadState(buttons = PadState.A, lx = 64), mapper.state())
+    }
+
+    @Test
+    fun mergeKeepsDirectTouchAgainstPhysicalHolds() {
+        val physical = PadMapper()
+        physical.onKey(KeyEvent.KEYCODE_BUTTON_A, true, 1)
+        physical.onAxes(32 / 127f, 0f, 0f, 0f, 0f, 0f, 0f, 0f)
+        val touch = PadMapper()
+        touch.setTouchState(PadState(buttons = PadState.B, rx = 64, lt = 200))
+        val merged = mergePadStates(physical.state(), touch.state())
+        assertEquals(PadState.A or PadState.B, merged.buttons)
+        assertEquals(32, merged.lx)
+        assertEquals(64, merged.rx)
+        assertEquals(200, merged.lt)
+    }
+
+    @Test
+    fun touchPrefsValidationClampsToSpecRanges() {
+        val clamped = TouchPrefs(sizePercent = 50, opacityPercent = 99, deadZonePercent = 77).validated()
+        assertEquals(85, clamped.sizePercent)
+        assertEquals(80, clamped.opacityPercent)
+        assertEquals(20, clamped.deadZonePercent)
+        assertEquals(TouchPrefs(), TouchPrefs().validated())
+        assertEquals(TouchStickMode.FIXED, TouchPrefs().stickMode)
+        assertEquals(TouchHaptics.OFF, TouchPrefs().haptics)
+    }
 }

@@ -8,6 +8,7 @@ import com.gamebex.client.stream.StreamCaps
 import com.gamebex.client.stream.StreamDebug
 import com.gamebex.client.stream.StreamEndpoint
 import com.gamebex.client.stream.proto.MediaFrame
+import com.gamebex.client.stream.proto.PadState
 import com.gamebex.client.together.TogetherCopy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -352,6 +353,13 @@ class StreamViewerSession(
     fun onTouchAxes(leftX: Float, leftY: Float, atNs: Long) = synchronized(inputLock) {
         if (ended || !touchInputReady()) return@synchronized
         touchPadMapper.onAxes(leftX, leftY, 0f, 0f, 0f, 0f, 0f, 0f)
+        updateInput(atNs)
+    }
+
+    /** One complete touch-controller state (both sticks, triggers, hat, buttons). */
+    fun onTouchState(state: PadState, atNs: Long) = synchronized(inputLock) {
+        if (ended || !touchInputReady()) return@synchronized
+        touchPadMapper.setTouchState(state)
         updateInput(atNs)
     }
 

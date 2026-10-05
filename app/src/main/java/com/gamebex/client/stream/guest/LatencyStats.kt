@@ -336,7 +336,7 @@ class LatencyStats(
             "a_silence_frames", "audio_gap_started", "audio_expanded_equivalent_frames",
             "audio_compressed_equivalent_frames", "audio_explicit_rebase_frames", "audio_startup_output_frames",
             "audio_reprime_output_frames", "audio_abandoned_output_frames", "audio_flushed_queued_frames",
-            "audio_invalid_head", "audio_output_failure", "audio_plc_frames")
+            "audio_invalid_head", "audio_output_failure", "audio_plc_frames", "audio_native_underruns")
         fun fmt(ms: Double?): String = if (ms == null) "-" else String.format(Locale.US, "%.1f", ms)
     }
 }

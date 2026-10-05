@@ -29,6 +29,7 @@ class AvcScreenSource(
         fps = StreamDebug.int("encoder_fps", 0, 0..50).takeIf { it == 50 } ?: 0,
         intraRefresh = StreamDebug.flag("encoder_intra_refresh"),
     ),
+    private val cropOptions: StreamCropOptions = StreamCropOptions.sample(),
 ) : VideoSource {
     private val lock = Any()
     private var codec: MediaCodec? = null
@@ -36,6 +37,7 @@ class AvcScreenSource(
     /** App capture: the app renders the game's window into our surface, so no display mirror. */
     private var appTarget: CaptureTarget? = null
     private var drain: Thread? = null
+    private var cropPass: StreamCropPass? = null
     private var generation = 0
     private var restarts = 0
     private val seq = AtomicInteger()
@@ -122,17 +124,18 @@ class AvcScreenSource(
     }
 
     /** Configures the first encoder that accepts [level], then starts capture into it. */
-    private fun openLocked(level: VideoLevel, bitrate: Int) {
+    private fun openLocked(level: VideoLevel, bitrate: Int, allowCrop: Boolean = true) {
         val target = appTarget ?: throw StreamFailure(StreamError.DISPLAY_CAPTURE, "explicit screen sharing consent required")
         val activeOptions = if (intraRefreshDisabled) options.copy(intraRefresh = false) else options
-        val candidates = AvcEncoders.rank(catalog, level, activeOptions)
-        if (candidates.isEmpty()) throw StreamFailure(StreamError.ENCODER, "no H.264 encoder for ${level.width}x${level.height}")
+        val (encodeLevel, cropRect) = if (allowCrop) streamCropEncodeLevel(level, cropOptions) else level to null
+        val candidates = AvcEncoders.rank(catalog, encodeLevel, activeOptions)
+        if (candidates.isEmpty()) throw StreamFailure(StreamError.ENCODER, "no H.264 encoder for ${encodeLevel.width}x${encodeLevel.height}")
         var last: Throwable? = null
         for (info in candidates) {
             if (activeOptions.intraRefresh && !info.intraRefresh) {
                 Log.i(TAG, "ENCODER_EXPERIMENT codec=${info.name} intraRefreshFallback=unsupported periodicIdrS=${StreamCaps.I_FRAME_INTERVAL_S}")
             }
-            for (configuration in AvcEncoders.configurationAttempts(level, info, activeOptions)) {
+            for (configuration in AvcEncoders.configurationAttempts(encodeLevel, info, activeOptions)) {
                 val c = try {
                     MediaCodec.createByCodecName(info.name)
                 } catch (t: Throwable) {
@@ -140,7 +143,7 @@ class AvcScreenSource(
                     break
                 }
                 val input: Surface = try {
-                    c.configure(AvcEncoders.format(level, bitrate, info, configuration), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                    c.configure(AvcEncoders.format(encodeLevel, bitrate, info, configuration), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
                     val s = c.createInputSurface()
                     try {
                         c.start()
@@ -151,7 +154,7 @@ class AvcScreenSource(
                     s
                 } catch (t: Throwable) {
                     last = t
-                    Log.w(TAG, "encoder ${info.name} strict=${configuration.strict} fps=${configuration.fps} intraRefreshPeriod=${configuration.intraRefreshPeriod} refused ${level.width}x${level.height}", t)
+                    Log.w(TAG, "encoder ${info.name} strict=${configuration.strict} fps=${configuration.fps} intraRefreshPeriod=${configuration.intraRefreshPeriod} refused ${encodeLevel.width}x${encodeLevel.height}", t)
                     runCatching { c.release() }
                     continue
                 }
@@ -176,14 +179,26 @@ class AvcScreenSource(
                 if (options.fps != 0 || options.intraRefresh) {
                     Log.i(TAG, "ENCODER_EXPERIMENT codec=${info.name} requestedFps=${level.fps} configuredFps=${configuration.fps} intraRefreshPeriod=${configuration.intraRefreshPeriod} intraRefreshFallback=${configuration.intraRefreshFallback} periodicIdrS=${configuration.iFrameIntervalS}")
                 }
-                drain = Thread({ drainLoop(c, gen, level, configuration) }, "gbx-video-drain").apply {
+                drain = Thread({ drainLoop(c, gen, encodeLevel, configuration) }, "gbx-video-drain").apply {
                     isDaemon = true
                     priority = Thread.MAX_PRIORITY
                     start()
                 }
-                Log.i(TAG, "video: ${info.name} ${level.width}x${level.height}@${configuration.fps} requestedFps=${level.fps} ${bitrate}bps strict=${configuration.strict} software=${!info.hardware} via $captureApi")
+                Log.i(TAG, "video: ${info.name} ${encodeLevel.width}x${encodeLevel.height}@${configuration.fps} requestedFps=${encodeLevel.fps} ${bitrate}bps strict=${configuration.strict} software=${!info.hardware} via $captureApi")
+                val captureSurface = if (cropRect != null) {
+                    try {
+                        val pass = StreamCropPass(level.width, level.height, cropRect, input)
+                        cropPass = pass
+                        Log.i(TAG, "video crop src=${level.width}x${level.height} rect=${cropRect.left},${cropRect.top} ${cropRect.width}x${cropRect.height} encode=${encodeLevel.width}x${encodeLevel.height}")
+                        pass.inputSurface
+                    } catch (t: Throwable) {
+                        Log.w(TAG, "video crop disabled, EGL unavailable: ${t.javaClass.simpleName}: ${t.message}")
+                        closeLocked()
+                        return openLocked(level, bitrate, allowCrop = false)
+                    }
+                } else input
                 try {
-                    target.onSurface(input, level.width, level.height)
+                    target.onSurface(captureSurface, level.width, level.height)
                 } catch (t: Throwable) {
                     closeLocked()
                     throw StreamFailure(StreamError.DISPLAY_CAPTURE, "capture surface failed", t)
@@ -198,6 +213,8 @@ class AvcScreenSource(
     private fun closeLocked(): Thread? {
         generation += 1
         if (surface != null) runCatching { appTarget?.onSurface(null, 0, 0) }
+        runCatching { cropPass?.release() }
+        cropPass = null
         runCatching { codec?.stop() }
         runCatching { codec?.release() }
         runCatching { surface?.release() }
@@ -345,6 +362,7 @@ class AvcScreenSource(
 
         internal fun actualLevelFor(requested: VideoLevel, width: Int, height: Int, fps: Int): VideoLevel {
             if (width <= 0 || height <= 0) throw IllegalStateException("encoder reported invalid dimensions")
+            if (width == requested.width && height == requested.height) return requested
             val sizes = StreamCaps.LEVELS.filter { it.width == width && it.height == height }
             val actual = sizes.firstOrNull { it.index == requested.index }
                 ?: sizes.firstOrNull { it.fps == requested.fps }

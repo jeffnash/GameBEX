@@ -56,6 +56,8 @@ class PcmPlayerTest {
         assertEquals(5, seen.toSet().size)
         assertEquals(AudioPlaybackOptions(512, true, true, true, 64), options)
         assertEquals(AudioPlaybackOptions(), AudioPlaybackOptions.sample(true) { "invalid" })
+        assertEquals(512, AudioPlaybackOptions().leadFrames)
+        assertEquals(512, AudioPlaybackOptions.sample(true) { "invalid" }.leadFrames)
     }
 
     @Test fun rendersOncePerBlockAndPartialZeroWritesRetainSuffix() {

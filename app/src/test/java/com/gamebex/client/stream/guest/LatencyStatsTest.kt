@@ -207,6 +207,20 @@ class LatencyStatsTest {
     }
 
     @Test
+    fun runCountersAlwaysCarryExplicitNativeUnderrunZero() {
+        var now = 0L
+        val s = LatencyStats(capacity = 2, clock = { now }, measureWarmupSeconds = 10,
+            measureSeconds = 120, runLabel = "zero", runEnabled = true)
+        now = 10_000 * ms
+        s.add(LatencyStats.Metric.DECODE, 1_050_000L)
+        now = 130_000 * ms
+        s.add(LatencyStats.Metric.DECODE, 99 * ms)
+        val lines = s.runLines()
+        assertTrue(lines.last().contains("metric=counters"))
+        assertTrue(lines.last().contains("audio_native_underruns=0"))
+    }
+
+    @Test
     fun deferredRunExcludesConstructorDelayAndStartsWarmupAtFirstRender() {
         var now = 0L
         val s = LatencyStats(clock = { now }, measureWarmupSeconds = 10, measureSeconds = 120,

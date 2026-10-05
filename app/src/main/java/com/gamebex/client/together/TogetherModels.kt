@@ -148,6 +148,10 @@ sealed interface LinkMsg {
         val height: Int,
         val audio: Boolean,
         val audioTimestampOrigin: String = "capture",
+        /** PlatformRegistry folder of the hosted game, e.g. "n64"; "" = unknown (generic pad). */
+        val system: String = "",
+        /** Actual host emulator backend (touchBackendForEmuPkg); "" = unknown (generic pad). */
+        val backend: String = "",
     ) : LinkMsg
 
     @Serializable @SerialName("stream_resumed")
@@ -262,3 +266,15 @@ data class GuestView(
     val message: String? = null,
     val coreInstall: CoreInstallProgress? = null,
 )
+
+/**
+ * The guest touch backend for a launched emulator package.
+ * Unknown packages map to "" (generic pad); never guessed.
+ */
+fun touchBackendForEmuPkg(emuPkg: String?): String = when (emuPkg) {
+    com.gamebex.client.data.Emu.RETROARCH.pkg -> "retroarch"
+    com.gamebex.client.data.Emu.DOLPHIN.pkg -> "dolphin"
+    com.gamebex.client.data.Emu.NETHER.pkg -> "nethersx2"
+    com.gamebex.client.data.Emu.ARMSX2.pkg -> "armsx2"
+    else -> ""
+}

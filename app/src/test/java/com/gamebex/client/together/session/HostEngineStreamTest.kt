@@ -26,6 +26,7 @@ import com.gamebex.client.together.TogetherEmulators
 import com.gamebex.client.together.TogetherLaunch
 import com.gamebex.client.together.TogetherMode
 import com.gamebex.client.together.TogetherTiming
+import com.gamebex.client.together.touchBackendForEmuPkg
 import com.gamebex.client.together.session.fakes.FakeDiscovery
 import com.gamebex.client.together.session.fakes.FakeEmulators
 import com.gamebex.client.together.session.fakes.FakeLibrary
@@ -180,6 +181,27 @@ class HostEngineStreamTest {
         assertEquals(TogetherMode.STREAM, (sent.first { it is LinkMsg.Offer } as LinkMsg.Offer).mode)
         assertNull((sent.first { it is LinkMsg.Offer } as LinkMsg.Offer).game.core)
         assertEquals(StreamWire.VERSION, (sent.first { it is LinkMsg.Hello } as LinkMsg.Hello).streamProto)
+    }
+
+    @Test
+    fun streamReadyCarriesSystemFolderAndActualBackendForGuestPad() = runTest {
+        val h = harness(this)
+        h.emulators.inner.launchOutcomes = ArrayDeque(listOf(EmuRouter.Outcome.Launched("RetroArch", Emu.RETROARCH.pkg)))
+        val pair = h.startGame(this)
+        val ready = pair.host.sent.filterIsInstance<LinkMsg.StreamReady>().single()
+        assertEquals("n64", ready.system)
+        assertEquals("retroarch", ready.backend)
+    }
+
+    @Test
+    fun touchBackendNamesNeverGuessUnknownPackages() {
+        assertEquals("retroarch", touchBackendForEmuPkg(Emu.RETROARCH.pkg))
+        assertEquals("dolphin", touchBackendForEmuPkg(Emu.DOLPHIN.pkg))
+        assertEquals("nethersx2", touchBackendForEmuPkg(Emu.NETHER.pkg))
+        assertEquals("armsx2", touchBackendForEmuPkg(Emu.ARMSX2.pkg))
+        assertEquals("", touchBackendForEmuPkg(Emu.PPSSPP.pkg))
+        assertEquals("", touchBackendForEmuPkg("com.example.other"))
+        assertEquals("", touchBackendForEmuPkg(null))
     }
 
     @Test

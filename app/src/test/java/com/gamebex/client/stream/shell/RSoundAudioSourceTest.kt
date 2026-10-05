@@ -412,7 +412,50 @@ class RSoundAudioSourceTest {
         }
     }
 
-    @Test fun localQueueOverflowFailsExplicitlyAfterEightPendingChunksAndListenerAcceptsReconnect() {
+    @Test fun transientLocalQueueOverflowDropsChunksAndRetainsRsound() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val fallback = TestFallback()
+        val logs = CopyOnWriteArrayList<String>()
+        val chunks = CopyOnWriteArrayList<PcmChunk>()
+        val player = RSoundTestPlayer(
+            writer = { _, _, count -> entered.countDown(); release.await(); count },
+            onClose = { release.countDown() },
+        )
+        val source = RSoundAudioSource(fallback, RSoundPlaybackFactory { player }, port = 0,
+            logger = { logs.add(it) }, useControlProtocol = true, transportChunkBytes = 960)
+        try {
+            assertTrue(source.start(AudioSink { chunks.add(it) }))
+            client(source, useControlProtocol = true, transportChunkBytes = 960).use { old ->
+                old.send(ByteArray(960) { 1 })
+                assertTrue(entered.await(1, TimeUnit.SECONDS))
+                repeat(8) { index ->
+                    old.send(ByteArray(960) { (index + 2).toByte() })
+                    await { chunks.size == index + 2 }
+                }
+                repeat(3) { old.send(ByteArray(960) { 10 }) }
+                await { chunks.size == 12 }
+                Thread.sleep(100)
+                assertFalse(fallback.running)
+                assertEquals(0, fallback.starts.get())
+                assertEquals(null, source.failureKind)
+                assertEquals("rsound", source.audioMode)
+                assertEquals(1, logs.count { it.startsWith("RSound local queue full") })
+                release.countDown()
+                await { player.writtenBytes.get() == 9 * 960 }
+                assertEquals("rsound", source.audioMode)
+            }
+            source.stop()
+            val closed = logs.last { it.startsWith("RSound local queue closed") }
+            assertTrue(closed.contains("localOverflowDrops=3 "))
+            assertTrue(closed.contains("localRejectedBytes=2880 "))
+        } finally {
+            release.countDown()
+            source.stop()
+        }
+    }
+
+    @Test fun sustainedLocalQueueOverflowFailsExplicitlyAndListenerAcceptsReconnect() {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
         val fallback = TestFallback()
@@ -447,16 +490,17 @@ class RSoundAudioSourceTest {
                 assertTrue(info.contains("localQueuedAudioUs=40000 "))
                 assertEquals(0, fallback.starts.get())
                 assertEquals(0, players[0].writtenBytes.get())
-                old.send(ByteArray(960) { 10 })
+                repeat(200) { old.send(ByteArray(960) { 10 }) }
                 await { fallback.running }
                 assertEquals("local-playback", source.failureKind)
-                assertTrue(source.fallbackReason!!.contains("local queue overflow: 8 chunks / 40ms"))
+                assertTrue(source.fallbackReason!!.contains("local queue overflow: 8 chunks / 40ms sustained 200 chunks"))
                 val closed = logs.last { it.startsWith("RSound local queue closed") }
                 assertTrue(closed.contains("localPendingChunks=8 "))
                 assertTrue(closed.contains("localInFlightBytes=960 "))
-                assertTrue(closed.contains("localRejectedBytes=960 "))
-                assertTrue(closed.contains("localDiscardedBytes=9600 "))
-                assertTrue(closed.contains("localDiscardedFrames=2400 "))
+                assertTrue(closed.contains("localRejectedBytes=192000 "))
+                assertTrue(closed.contains("localOverflowDrops=200 "))
+                assertTrue(closed.contains("localDiscardedBytes=200640 "))
+                assertTrue(closed.contains("localDiscardedFrames=50160 "))
                 assertTrue(source.rsoundReady)
                 assertTrue(players[0].closed)
                 assertClosed(old.data)

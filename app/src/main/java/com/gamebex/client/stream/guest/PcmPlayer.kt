@@ -26,6 +26,7 @@ class PcmPlayer(
         factory = { createAndroidPcmOutput(options) },
         write = { output, keepRunning ->
             runCatching { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO) }
+            count("audio_native_underruns", 0L)
             drift.reset()
             val priorUnderruns = trackUnderruns
             var observedUnderruns = 0

@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.gamebex.client.R
+import com.gamebex.client.stream.proto.PadState
 import com.gamebex.client.together.TogetherCopy
 import com.gamebex.client.ui.SpaceGrotesk
 import com.gamebex.client.ui.console.ConsoleColors
@@ -77,6 +78,11 @@ fun StreamViewerScreen(
     fixedSurface: Boolean = false,
     surfaceOpaque: Boolean = false,
     physicalControllerConnected: Boolean = false,
+    touchProfile: TouchProfile? = null,
+    touchPrefs: TouchPrefs = TouchPrefs(),
+    touchViewport: TouchViewport? = null,
+    onTouchState: ((PadState, Long) -> Unit)? = null,
+    onTouchMenu: () -> Unit = {},
 ) {
     var menu by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf(true) }
@@ -130,7 +136,16 @@ fun StreamViewerScreen(
             )
         }
         if (overlays.touchPad) {
-            StreamTouchPad(onTouchKey, onTouchAxes, onReleaseTouchInput, unbufferedInput = unbufferedInput)
+            StreamTouchPad(
+                onTouchKey, onTouchAxes, onReleaseTouchInput,
+                unbufferedInput = unbufferedInput,
+                profile = touchProfile,
+                prefs = touchPrefs,
+                viewport = touchViewport,
+                onTouchState = onTouchState,
+                menuOpen = menu,
+                onMenu = onTouchMenu,
+            )
         }
         if (loading) {
             LoadingOverlay(ui, onLeave)
