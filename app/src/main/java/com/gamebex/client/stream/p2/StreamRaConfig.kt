@@ -21,12 +21,17 @@ import java.util.LinkedHashMap
  */
 object StreamRaConfig {
     const val FILE_NAME: String = "retroarch-stream.cfg"
+    /** First RetroArch versionCode whose overlay auto-hide follows player 1's pad. */
+    const val RETROARCH_V3_VERSION_CODE: Long = 1791174559L
 
     fun overrides(
         rsoundReady: Boolean = false,
         diagnostics: Boolean = StreamDebug.prop("ra_log") == "1",
         hasRealHostPad: Boolean = false,
         experiments: RaExperimentOptions = RaExperimentOptions.sample(),
+        retroArchVersionCode: Long = 0,
+        /** Seeded per-core overlay cfg ([OverlaySeed]); the host shows it and 26b shares it. */
+        overlayCfgPath: String? = null,
     ): LinkedHashMap<String, String> = LinkedHashMap<String, String>().apply {
         if (diagnostics) {
             put("log_verbosity", "true")
@@ -34,11 +39,16 @@ object StreamRaConfig {
             put("log_to_file", "true")
             put("log_to_file_timestamp", "true")
         }
-        put("input_poll_type_behavior", StreamDebug.prop("ra_poll")?.takeIf { it in setOf("0", "1", "2") } ?: "0")
- // input_max_users stays as in the managed config (8): forcing 2 makes RetroArch connect the core's
- // ports 3-4 as RETRO_DEVICE_NONE, and the Dolphin core crashes a few seconds into the game .
-        put("input_overlay_enable", (!hasRealHostPad).toString())
-        put("input_overlay_hide_when_gamepad_connected", "false")
+        put("input_poll_type_behavior", experiments.poll.takeIf { it in 0..2 }?.toString() ?: "0")
+        // input_max_users stays as in the managed config (8): forcing 2 makes RetroArch connect the core's
+        // ports 3-4 as RETRO_DEVICE_NONE, and the Dolphin core crashes a few seconds into the game.
+        // On v3+ with the flag on, RetroArch itself hides the overlay for
+        // player 1's pad (and ignores "GameBEX Player 2"); otherwise the
+        // overlay is decided once at launch.
+        val v3Autohide = retroArchVersionCode >= RETROARCH_V3_VERSION_CODE && experiments.overlayAutohideV3
+        put("input_overlay_enable", (v3Autohide || !hasRealHostPad).toString())
+        put("input_overlay_hide_when_gamepad_connected", v3Autohide.toString())
+        if (!overlayCfgPath.isNullOrBlank()) put("input_overlay", overlayCfgPath)
         put("input_player2_reserved_device", StreamCaps.PAD_NAME)
         put("input_player2_device_reservation_type", "2")
         put("input_player2_a_btn", "97")
@@ -67,7 +77,7 @@ object StreamRaConfig {
         put("input_player2_r_y_minus_axis", "-3")
         put("input_player2_l2_axis", "+6")
         put("input_player2_r2_axis", "+7")
- // OpenSL ES output goes through AudioFlinger's mixer, which playback capture can see.
+        // OpenSL ES output goes through AudioFlinger's mixer, which playback capture can see.
         put("audio_driver", "opensl")
         put("audio_latency", "32")
         if (rsoundReady) {
@@ -79,31 +89,35 @@ object StreamRaConfig {
         if (experiments.noSmooth) put("video_smooth", "false")
     }
 
- /** The whole file: the managed config (with save-state resume, as a normal Play) plus [overrides]. */
+    /** The whole file: the managed config (with save-state resume, as a normal Play) plus [overrides]. */
     fun cfgText(
         sharedRoot: String,
         rsoundReady: Boolean = false,
         hasRealHostPad: Boolean = false,
         experiments: RaExperimentOptions = RaExperimentOptions.sample(),
+        retroArchVersionCode: Long = 0,
+        overlayCfgPath: String? = null,
     ): String {
         val base = GraphicsTuner.retroArchConfigText(sharedRoot, resume = true).trimEnd('\n').split('\n')
-        val (merged, _) = RetroArchTuner.mergeConfig(base, overrides(rsoundReady, hasRealHostPad = hasRealHostPad, experiments = experiments))
+        val (merged, _) = RetroArchTuner.mergeConfig(base, overrides(rsoundReady, hasRealHostPad = hasRealHostPad, experiments = experiments, retroArchVersionCode = retroArchVersionCode, overlayCfgPath = overlayCfgPath))
         return merged.joinToString("\n") + "\n"
     }
 
     fun fileUnder(base: File): File = File(GraphicsTuner.sharedDirUnder(base), "ra/$FILE_NAME")
 
- /** Writes the config under [base] (external storage); null when it can't. */
+    /** Writes the config under [base] (external storage); null when it can't. */
     fun write(
         base: File,
         rsoundReady: Boolean = false,
         hasRealHostPad: Boolean = false,
         experiments: RaExperimentOptions = RaExperimentOptions.sample(),
+        retroArchVersionCode: Long = 0,
+        overlayCfgPath: String? = null,
     ): File? = try {
         val file = fileUnder(base)
         val dir = file.parentFile ?: throw IOException("no parent for $file")
         if (!dir.isDirectory && !dir.mkdirs() && !dir.isDirectory) throw IOException("Couldn't create $dir")
-        file.writeText(cfgText(base.absolutePath, rsoundReady, hasRealHostPad, experiments))
+        file.writeText(cfgText(base.absolutePath, rsoundReady, hasRealHostPad, experiments, retroArchVersionCode, overlayCfgPath))
         file
     } catch (_: IOException) {
         null
@@ -116,21 +130,27 @@ data class RaExperimentOptions(
     val audioLatency: Int = 32,
     val swapchain: Int = 0,
     val noSmooth: Boolean = false,
+    val poll: Int = 0,
+    val overlayAutohideV3: Boolean = false,
 ) {
     companion object {
         fun sample(
             debug: Boolean = com.gamebex.client.BuildConfig.DEBUG,
             prop: (String) -> String? = StreamDebug::prop,
+            flags: (String) -> String? = { null },
         ): RaExperimentOptions {
-            if (!debug) return RaExperimentOptions()
-            val latency = when (prop("ra_audio_latency")) {
+            val p: (String) -> String? = if (debug) prop else ({ _: String -> null })
+            fun pick(name: String) = p(name) ?: flags(name)
+            val latency = when (pick("ra_audio_latency")) {
                 "8" -> 8
                 "16" -> 16
                 else -> 32
             }
-            val swapchain = if (prop("ra_swapchain") == "2") 2 else 0
-            val noSmooth = prop("ra_no_smooth") == "1"
-            return RaExperimentOptions(latency, swapchain, noSmooth)
+            val swapchain = if (pick("ra_swapchain") == "2") 2 else 0
+            val noSmooth = pick("ra_no_smooth") == "1"
+            val poll = pick("ra_poll")?.takeIf { it in setOf("0", "1", "2") }?.toInt() ?: 0
+            val overlayAutohideV3 = pick("overlay_autohide_v3") == "1"
+            return RaExperimentOptions(latency, swapchain, noSmooth, poll, overlayAutohideV3)
         }
     }
 }

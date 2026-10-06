@@ -163,7 +163,7 @@ object HomeCopy {
         is CardState.NeedsBios -> "⚠ Needs BIOS"
         is CardState.NeedsEmulator -> "⚠ Needs emulator"
         is CardState.NeedsFix -> "⚠ Needs setup"
-        CardState.Preparing -> parts(system?.short, "preparing…")
+        is CardState.Preparing -> preparingLine(state, system?.short)
         is CardState.Downloading -> downloadingLine(state, online)
         is CardState.Queued ->
             if (state.armed) "Queued · plays when ready" else "Queued"
@@ -191,6 +191,29 @@ object HomeCopy {
             s.etaSec != null -> "${percent(s.read, s.total)}% · ${eta(s.etaSec)} left"
             else -> "${percent(s.read, s.total)}%"
         }
+    }
+
+ /**
+ * A live prep shows its phase plus bytes ("Extracting
+ * archive… 312 of 996 MB · 31%"); a 20s-stalled one says "Still
+ * working…" with the last known bytes; a never-reported one keeps
+ * the bare "preparing…".
+ */
+    private fun preparingLine(s: CardState.Preparing, short: String?): String {
+        if (s.read < 0 && s.phase == null) return parts(short, "preparing…")
+        val phase = s.phase?.trimEnd('…')?.trimEnd() ?: "Preparing"
+        val pair = when {
+            s.read < 0 -> null
+            s.total != null && s.total > 0 ->
+                "${progressPair(s.read, s.total)} · ${percent(s.read, s.total)}%"
+            else -> size(s.read)
+        }
+        val rest = if (s.stalled) {
+            "Still working… " + (pair ?: phase.replaceFirstChar { it.lowercase(Locale.ENGLISH) })
+        } else {
+            listOfNotNull("$phase…", pair).joinToString(" ")
+        }
+        return parts(short, rest)
     }
 
     private fun percent(read: Long, total: Long): Int =
@@ -241,7 +264,7 @@ object HomeCopy {
             system?.let { "NEEDS THE ${it.name.uppercase(Locale.ENGLISH)} BIOS" } ?: "NEEDS A BIOS"
         is CardState.NeedsEmulator -> "NEEDS AN EMULATOR"
         is CardState.NeedsFix -> "CAN'T START YET"
-        CardState.Preparing -> "PREPARING"
+        is CardState.Preparing -> if (state.stalled) "STILL WORKING" else "PREPARING"
         is CardState.Downloading ->
             if (state.paused) "PAUSED ${percent(state.read, state.total)}%"
             else "DOWNLOADING ${percent(state.read, state.total)}%"
@@ -278,7 +301,7 @@ object HomeCopy {
     fun tvGlyph(state: CardState): TvGlyph? = when (state) {
         is CardState.Saved, is CardState.Played -> TvGlyph.RESUME
         is CardState.Added -> TvGlyph.NEW
-        is CardState.Downloading, is CardState.Queued, CardState.Preparing -> TvGlyph.DOWNLOAD
+        is CardState.Downloading, is CardState.Queued, is CardState.Preparing -> TvGlyph.DOWNLOAD
         is CardState.OffPhone, is CardState.OnSite -> TvGlyph.CLOUD
         is CardState.NeedsBios, is CardState.NeedsEmulator, is CardState.NeedsFix,
         is CardState.DownloadProblem, is CardState.NoRoom, is CardState.Unsupported,
@@ -313,7 +336,7 @@ object HomeCopy {
             }
             is CardState.NeedsEmulator -> "Install ${state.what}, then it starts."
             is CardState.NeedsFix -> state.note.takeIf { it.isNotBlank() }
-            CardState.Preparing -> "Unpacking and checking the files."
+            is CardState.Preparing -> state.phase ?: "Unpacking and checking the files."
             is CardState.Downloading -> {
                 val done = progressPair(state.read, state.total)
                 if (!state.paused && state.etaSec != null) {
@@ -345,7 +368,7 @@ object HomeCopy {
         is CardState.NeedsBios -> "Add BIOS"
         is CardState.NeedsEmulator -> "Install emulator"
         is CardState.NeedsFix -> "Fix setup"
-        CardState.Preparing -> "Preparing…"
+        is CardState.Preparing -> if (state.stalled) "Still working…" else "Preparing…"
         is CardState.Downloading -> when {
             state.paused -> "Resume download"
             state.armed -> "Plays when ready ✓"
@@ -378,7 +401,7 @@ object HomeCopy {
         is CardState.Downloading -> if (state.armed) ButtonTone.ARMED else ButtonTone.NEUTRAL
         is CardState.Queued -> if (state.armed) ButtonTone.ARMED else ButtonTone.NEUTRAL
         is CardState.OffPhone, is CardState.OnSite -> ButtonTone.DOWNLOAD
-        CardState.Preparing, CardState.WaitingForConnection,
+        is CardState.Preparing, CardState.WaitingForConnection,
         is CardState.Unsupported, is CardState.Unavailable, CardState.None,
         -> ButtonTone.NEUTRAL
     }

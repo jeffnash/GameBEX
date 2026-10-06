@@ -21,6 +21,8 @@ import com.gamebex.client.data.local.DownloadRecord
 import com.gamebex.client.data.local.GameEntity
 import com.gamebex.client.data.local.LibraryDb
 import com.gamebex.client.data.local.PrepPipeline
+import com.gamebex.client.data.local.PrepProgress
+import com.gamebex.client.data.local.PrepProgressBus
 import com.gamebex.client.data.local.RomStore
 import com.gamebex.client.launch.CoreInstallProgress
 import com.gamebex.client.launch.EmuRouter
@@ -35,6 +37,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
@@ -682,6 +685,23 @@ class LocalDetailViewModel(
     val preparing: StateFlow<Boolean> = combine(_preparing, AutoPrep.active, _game) { local, auto, g ->
         local || (g != null && g.id in auto)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    private val prepTick = flow {
+        while (true) {
+            emit(Unit)
+            delay(5_000)
+        }
+    }
+
+    /**
+     * Live prep bytes for this game, null when no prep runs.
+     * The tick re-emits so a quiet prep flips to "Still working…"
+     * without waiting for its next byte report.
+     */
+    val prepProgress: StateFlow<PrepProgress?> =
+        combine(PrepProgressBus.byGame, prepTick, _game) { states, _, g ->
+            g?.let { states[it.id] }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private fun refreshBios(g: GameEntity?) {
         // Test instances have no Context; BIOS state is unread there.

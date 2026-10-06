@@ -3,6 +3,8 @@ package com.gamebex.client.ui.home
 import com.gamebex.client.data.Emu
 import com.gamebex.client.data.PlayStates
 import com.gamebex.client.data.local.GameEntity
+import com.gamebex.client.data.local.PrepPhase
+import com.gamebex.client.data.local.PrepProgress
 import com.gamebex.client.net.DownloadEngine
 import com.gamebex.client.ui.LibSort
 import com.gamebex.client.ui.home.model.ArtKind
@@ -141,12 +143,32 @@ class HomeCardFactoryTest {
     }
 
     @Test fun preparingRow() {
-        val card = localCard(CardState.Preparing)
+        val card = localCard(CardState.Preparing())
         assertEquals(HomeAction.None, card.primary)
         assertEquals("Preparing…", card.primaryLabel)
         assertEquals(ButtonTone.NEUTRAL, card.primaryTone)
         assertEquals(HomeAction.Go(HomeDestination.Game(1)), card.secondary)
         assertEquals("PREPARING", card.tv.stateLine)
+    }
+
+    @Test fun prepPatchOverlaysLiveBytes() {
+        val mb = 1024L * 1024
+        val card = localCard(CardState.Preparing())
+        val snap = PrepProgress(1L, PrepPhase.EXTRACTING, 312 * mb, 996 * mb, now, now)
+        val patched = factory.prepPatch(card, snap, now + 1_000)
+        assertEquals("GC · Extracting archive… 312 of 996 MB · 31%", patched.cardLine)
+        assertEquals("PREPARING", patched.tv.stateKey)
+        assertEquals("Extracting archive", patched.tv.factsLine)
+    }
+
+    @Test fun prepPatchMarksStall() {
+        val mb = 1024L * 1024
+        val card = localCard(CardState.Preparing())
+        val snap = PrepProgress(1L, PrepPhase.EXTRACTING, 312 * mb, 996 * mb, now - 60_000, now - 60_000)
+        val patched = factory.prepPatch(card, snap, now)
+        assertEquals("GC · Still working… 312 of 996 MB · 31%", patched.cardLine)
+        assertEquals("STILL WORKING", patched.tv.stateKey)
+        assertEquals("Still working…", patched.primaryLabel)
     }
 
     @Test fun downloadingRow() {
@@ -304,7 +326,7 @@ class HomeCardFactoryTest {
         assertEquals(CardState.NeedsFix("Point the emulator at the folder."), localCard().state)
 
         readyStatus = PlayStates.Status.Preparing
-        assertEquals(CardState.Preparing, localCard().state)
+        assertEquals(CardState.Preparing(), localCard().state)
 
         readyStatus = PlayStates.Status.NeedsSpace
         assertEquals(CardState.NeedsFix(HomeCopy.needsSpace), localCard().state)
@@ -465,7 +487,7 @@ class HomeCardFactoryTest {
         val states = listOf(
             CardState.Saved(now, 1), CardState.Played(now), CardState.Added(now),
             CardState.NeedsBios(listOf("bios.bin")), CardState.NeedsEmulator("Dolphin"),
-            CardState.NeedsFix("note"), CardState.Preparing,
+            CardState.NeedsFix("note"), CardState.Preparing(),
             CardState.Downloading(1, 2, null, paused = false, armed = false),
             CardState.Queued(false), CardState.DownloadProblem("x", false),
             CardState.OffPhone(null, 1), CardState.OnSite(null), CardState.NoRoom(2, 1),

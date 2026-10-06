@@ -61,6 +61,8 @@ import com.gamebex.client.ui.home.HomeStore
 import com.gamebex.client.ui.home.model.HomeDestination
 import com.gamebex.client.ui.home.model.HomeEffect
 import com.gamebex.client.ui.home.model.HomeIntent
+import com.gamebex.client.ui.system.AdvancedScreen
+import com.gamebex.client.ui.system.StreamFlagsScreen
 import com.gamebex.client.ui.system.SystemScreen
 import com.gamebex.client.ui.together.TogetherInviteDialog
 import com.gamebex.client.ui.together.TogetherHubScreen
@@ -715,7 +717,13 @@ private fun ConsoleNavHost(
         }
         composable("emulators") {
             val vm: EmulatorsViewModel = viewModel { EmulatorsViewModel(context.applicationContext) }
-            SystemScreen(vm, focusMemory, rail, onSources = { nav.navigate("sources") }, onTogether = { nav.navigate("together") }, hints = hints)
+            SystemScreen(vm, focusMemory, rail, onSources = { nav.navigate("sources") }, onTogether = { nav.navigate("together") }, onAdvanced = { nav.navigate("advanced") }, hints = hints)
+        }
+        composable("advanced") {
+            AdvancedScreen(onBack = { nav.popBackStack() }, onStreamFlags = { nav.navigate("stream-flags") }, rail, focusMemory, hints = hints)
+        }
+        composable("stream-flags") {
+            StreamFlagsScreen(onBack = { nav.popBackStack() }, rail, focusMemory, hints = hints)
         }
         composable("together") {
             val hubVm: TogetherHubViewModel = viewModel { TogetherHubViewModel(context.applicationContext) }

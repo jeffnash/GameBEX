@@ -34,7 +34,7 @@ object AvcEncoders {
         val intraRefresh: Boolean = false,
     )
 
-    data class Options(val fps: Int = 0, val intraRefresh: Boolean = false) {
+    data class Options(val fps: Int = 0, val intraRefresh: Boolean = false, val keyframesOnRequest: Boolean = false) {
         fun fpsFor(level: VideoLevel): Int = if (fps == 50 && level.fps == 60) 50 else level.fps
     }
 
@@ -43,14 +43,23 @@ object AvcEncoders {
         val fps: Int,
         val intraRefreshPeriod: Int = 0,
         val intraRefreshFallback: Boolean = false,
+        val keyframesOnRequest: Boolean = false,
     ) {
-        val iFrameIntervalS: Int get() = if (intraRefreshPeriod > 0) -1 else StreamCaps.I_FRAME_INTERVAL_S
+        val iFrameIntervalS: Int get() = when {
+            intraRefreshPeriod > 0 -> -1
+            keyframesOnRequest -> StreamCaps.KEYFRAMES_ON_REQUEST_INTERVAL_S
+            else -> StreamCaps.I_FRAME_INTERVAL_S
+        }
     }
+
+    /** Periodic IDR interval for non-intra-refresh attempts under [options]. */
+    fun periodicIdrS(options: Options): Int =
+        if (options.keyframesOnRequest) StreamCaps.KEYFRAMES_ON_REQUEST_INTERVAL_S else StreamCaps.I_FRAME_INTERVAL_S
 
     fun configurationAttempts(level: VideoLevel, info: EncoderInfo, options: Options): List<Configuration> {
         val fps = options.fpsFor(level)
         val periodic = listOf(true, false).map { Configuration(it, fps,
-            intraRefreshFallback = options.intraRefresh) }
+            intraRefreshFallback = options.intraRefresh, keyframesOnRequest = options.keyframesOnRequest) }
         if (!options.intraRefresh || !info.intraRefresh) return periodic
         return listOf(true, false).map { Configuration(it, fps, fps * StreamCaps.I_FRAME_INTERVAL_S) } + periodic
     }

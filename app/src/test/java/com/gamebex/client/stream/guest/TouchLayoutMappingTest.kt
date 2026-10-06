@@ -340,6 +340,35 @@ class TouchLayoutMappingTest {
     }
 
     @Test
+    fun n64MatchesRetroArchOverlayGeometry() {
+        // The fallback matches RA's n64.cfg (v3 APK assets): A/B level
+        // at (0.875, 0.47), C cluster at (0.875, 0.778), Z at (0.80, 0.25).
+        val w = 915f
+        val h = 411f
+        val layout = resolved(TouchLayoutId.N64, w = w, h = h)
+        val ab = layout.clusters.first { it.control.id == "ab" }.buttons
+        val a = ab.first { it.def.id == "a" }
+        val b = ab.first { it.def.id == "b" }
+        assertEquals(a.cy, b.cy, 0.01f) // Level, B left of A.
+        assertTrue(b.cx < a.cx)
+        assertEquals(0.875f * w, (a.cx + b.cx) / 2f, 2f)
+        assertEquals(0.47f * h, (a.cy + b.cy) / 2f, 2f)
+        val c = layout.clusters.first { it.control.id == "c" }.buttons
+        val cup = c.first { it.def.id == "cup" }
+        val cdown = c.first { it.def.id == "cdown" }
+        assertEquals(0.875f * w, (cup.cx + cdown.cx) / 2f, 2f)
+        assertEquals(0.778f * h, (cup.cy + cdown.cy) / 2f, 2f)
+        val z = layout.keys.first { it.control.id == "z" }
+        assertEquals(0.80f * w, z.cx, 2f)
+        assertEquals(0.25f * h, z.cy, 2f)
+        // Wide phones keep Z pinned (RA-anchor wide slot is mid-screen).
+        val wide = resolved(TouchLayoutId.N64, prefs = TouchPrefs(contentAspect = TouchContentAspect.SIXTEEN_NINE), w = w, h = h)
+        val zw = wide.keys.first { it.control.id == "z" }
+        assertEquals(z.cx, zw.cx, 0.01f)
+        assertEquals(z.cy, zw.cy, 0.01f)
+    }
+
+    @Test
     fun n64CStickPresetReplacesTheCButtons() {
         val layout = resolved(TouchLayoutId.N64, prefs = TouchPrefs(n64CStick = true))
         assertTrue(layout.clusters.none { it.control.id == "c" })

@@ -17,13 +17,18 @@ data class AudioPlaybackOptions(
     }
 
     companion object {
-        fun sample(debug: Boolean, prop: (String) -> String?): AudioPlaybackOptions {
-            if (!debug) return AudioPlaybackOptions()
-            val lead = prop("audio_lead_frames")?.toIntOrNull()?.takeIf { it in listOf(256, 384, 512, 768) } ?: 512
-            val jit = prop("audio_jit") == "1"
-            val regulator = prop("audio_regulator") == "1"
-            val plc = prop("audio_plc") == "1"
-            val quantum = prop("audio_output_frames")?.toIntOrNull()?.takeIf { it == 64 || it == 128 } ?: 128
+        fun sample(
+            debug: Boolean,
+            prop: (String) -> String?,
+            flags: (String) -> String? = { null },
+        ): AudioPlaybackOptions {
+            val p: (String) -> String? = if (debug) prop else ({ _: String -> null })
+            fun pick(name: String) = p(name) ?: flags(name)
+            val lead = pick("audio_lead_frames")?.toIntOrNull()?.takeIf { it in listOf(256, 384, 512, 768) } ?: 512
+            val jit = p("audio_jit") == "1"
+            val regulator = pick("audio_regulator") == "1"
+            val plc = p("audio_plc") == "1"
+            val quantum = p("audio_output_frames")?.toIntOrNull()?.takeIf { it == 64 || it == 128 } ?: 128
             return AudioPlaybackOptions(lead, jit, regulator, plc, quantum)
         }
     }

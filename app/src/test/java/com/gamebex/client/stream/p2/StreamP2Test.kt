@@ -155,33 +155,36 @@ class StreamP2Test {
 
     @Test
     fun raExperimentSamplingRejectsInvalidValuesAndDoesNotReadInRelease() {
-        assertEquals(RaExperimentOptions(), RaExperimentOptions.sample(false) { error("release getprop") })
+        assertEquals(RaExperimentOptions(), RaExperimentOptions.sample(false, prop = { error("release getprop") }))
         for (raw in listOf(null, "", "0", "1", "-1", "9", "17", "64", "8.0", " 16", "bad")) {
             val samples = mutableListOf<String>()
-            val options = RaExperimentOptions.sample(true) { name -> samples += name; raw }
-            assertEquals(RaExperimentOptions(noSmooth = raw == "1"), options)
-            assertEquals(listOf("ra_audio_latency", "ra_swapchain", "ra_no_smooth"), samples)
+            val options = RaExperimentOptions.sample(true, prop = { name -> samples += name; raw })
+            assertEquals(RaExperimentOptions(noSmooth = raw == "1", poll = if (raw == "1") 1 else 0, overlayAutohideV3 = raw == "1"), options)
+            assertEquals(listOf("ra_audio_latency", "ra_swapchain", "ra_no_smooth", "ra_poll", "overlay_autohide_v3"), samples)
         }
-        assertEquals(RaExperimentOptions(), RaExperimentOptions.sample(true) { "32" })
-        assertEquals(RaExperimentOptions(swapchain = 2), RaExperimentOptions.sample(true) { "2" })
+        assertEquals(RaExperimentOptions(), RaExperimentOptions.sample(true, prop = { "32" }))
+        assertEquals(RaExperimentOptions(swapchain = 2, poll = 2), RaExperimentOptions.sample(true, prop = { "2" }))
     }
 
     @Test
     fun rsoundLatencyOverridesNeverChangeOpenSlAndSampledArmsKeepTheOverlay() {
         for (latency in listOf(8, 16, 32)) {
             val samples = mutableListOf<String>()
-            val options = RaExperimentOptions.sample(true) { name ->
+            val options = RaExperimentOptions.sample(true, prop = { name ->
                 samples += name
                 when (name) {
                     "ra_audio_latency" -> latency.toString()
                     "ra_swapchain" -> "2"
                     "ra_no_smooth" -> "1"
+                    "ra_poll" -> "0"
+                    "overlay_autohide_v3" -> "0"
                     else -> error(name)
                 }
-            }
+            })
             for (ready in listOf(false, true)) {
                 for (hostPad in listOf(false, true)) {
                     val overrides = StreamRaConfig.overrides(ready, diagnostics = false, hasRealHostPad = hostPad, experiments = options)
+                    assertEquals("0", overrides["input_poll_type_behavior"])
                     assertEquals(if (ready) "rsound" else "opensl", overrides["audio_driver"])
                     assertEquals(if (ready) latency.toString() else "32", overrides["audio_latency"])
                     assertEquals((!hostPad).toString(), overrides["input_overlay_enable"])
@@ -196,10 +199,84 @@ class StreamP2Test {
                     }
                 }
             }
-            assertEquals(listOf("ra_audio_latency", "ra_swapchain", "ra_no_smooth"), samples)
+            assertEquals(listOf("ra_audio_latency", "ra_swapchain", "ra_no_smooth", "ra_poll", "overlay_autohide_v3"), samples)
         }
         assertEquals("32", StreamRaConfig.overrides(true, diagnostics = false, experiments = RaExperimentOptions(audioLatency = 64))["audio_latency"])
         assertNull(StreamRaConfig.overrides(diagnostics = false, experiments = RaExperimentOptions(swapchain = 3))["video_max_swapchain_images"])
+    }
+
+    @Test
+    fun v3OverlayAutohideNeedsVersionAndFlag() {
+        val v3 = StreamRaConfig.RETROARCH_V3_VERSION_CODE
+        assertEquals(1791174559L, v3)
+        val on = RaExperimentOptions(overlayAutohideV3 = true)
+        // v3 + flag: enable + dynamic hide, whatever the launch-time pad state.
+        for (hostPad in listOf(false, true)) {
+            val o = StreamRaConfig.overrides(hasRealHostPad = hostPad, experiments = on, retroArchVersionCode = v3)
+            assertEquals("true", o["input_overlay_enable"])
+            assertEquals("true", o["input_overlay_hide_when_gamepad_connected"])
+        }
+        // v2, unknown version, or flag off: today's launch-time logic.
+        for (hostPad in listOf(false, true)) {
+            val v2 = StreamRaConfig.overrides(hasRealHostPad = hostPad, experiments = on, retroArchVersionCode = v3 - 1)
+            assertEquals((!hostPad).toString(), v2["input_overlay_enable"])
+            assertEquals("false", v2["input_overlay_hide_when_gamepad_connected"])
+            val unknown = StreamRaConfig.overrides(hasRealHostPad = hostPad, experiments = on)
+            assertEquals((!hostPad).toString(), unknown["input_overlay_enable"])
+            assertEquals("false", unknown["input_overlay_hide_when_gamepad_connected"])
+            val off = StreamRaConfig.overrides(hasRealHostPad = hostPad, experiments = RaExperimentOptions(), retroArchVersionCode = v3)
+            assertEquals((!hostPad).toString(), off["input_overlay_enable"])
+            assertEquals("false", off["input_overlay_hide_when_gamepad_connected"])
+        }
+        val text = StreamRaConfig.cfgText("/sdcard", hasRealHostPad = true, experiments = on, retroArchVersionCode = v3)
+        assertEquals(1, text.lines().count { it.startsWith("input_overlay_enable = ") })
+        assertEquals(1, text.lines().count { it.startsWith("input_overlay_hide_when_gamepad_connected = ") })
+        assertTrue(text.contains("input_overlay_enable = \"true\""))
+        assertTrue(text.contains("input_overlay_hide_when_gamepad_connected = \"true\""))
+    }
+
+    @Test fun overlayFlagReachesExperimentsFromFlagsOnRelease() {
+        val flags = mapOf("overlay_autohide_v3" to "1", "ra_poll" to "2")
+        val options = RaExperimentOptions.sample(false, prop = { null }, flags = flags::get)
+        assertEquals(true, options.overlayAutohideV3)
+        assertEquals(2, options.poll)
+        assertEquals(false, RaExperimentOptions.sample(false, prop = { null }, flags = { null }).overlayAutohideV3)
+    }
+
+    @Test fun prepareNamesTheSeededOverlayWhen26bIsOn() = runBlocking {
+        val seeded = File(tmp, "seeded-n64.cfg").apply { writeText("overlays = 1\n") }
+        var asked: String? = null
+        val p2 = StreamPlayer2Impl({ tmp }, dolphin(), hostPads = { emptyList() },
+            overlay26b = { true },
+            seedOverlay = { core -> asked = core; seeded }) { true }
+        val cfg = (p2.prepare(game("n64"), Emu.RETROARCH) as P2Prep.RetroArchConfig).cfg.readText()
+        assertEquals("mupen64plus_next_gles3", asked)
+        assertTrue(cfg.contains("input_overlay = \"${seeded.absolutePath}\""))
+        val p2off = StreamPlayer2Impl({ tmp }, dolphin(), hostPads = { emptyList() },
+            overlay26b = { false },
+            seedOverlay = { error("must not seed") }) { true }
+        val cfgOff = (p2off.prepare(game("n64"), Emu.RETROARCH) as P2Prep.RetroArchConfig).cfg.readText()
+        assertTrue(!cfgOff.contains("input_overlay = "))
+    }
+
+    @Test fun streamConfigOmitsOverlayLineWhenNothingSeeded() {
+        val o = StreamRaConfig.overrides(overlayCfgPath = null)
+        assertTrue(!o.containsKey("input_overlay"))
+        assertEquals("/s/n64.cfg", StreamRaConfig.overrides(overlayCfgPath = "/s/n64.cfg")["input_overlay"])
+    }
+
+    @Test fun prepareWritesV3AutohideWhenVersionAndFlagSaySo() = runBlocking {
+        val p2 = StreamPlayer2Impl({ tmp }, dolphin(), hostPads = { emptyList() },
+            raExperiments = { RaExperimentOptions(overlayAutohideV3 = true) },
+            raVersionCode = { StreamRaConfig.RETROARCH_V3_VERSION_CODE }) { true }
+        val cfg = (p2.prepare(game("n64"), Emu.RETROARCH) as P2Prep.RetroArchConfig).cfg.readText()
+        assertTrue(cfg.contains("input_overlay_enable = \"true\""))
+        assertTrue(cfg.contains("input_overlay_hide_when_gamepad_connected = \"true\""))
+        val p2v2 = StreamPlayer2Impl({ tmp }, dolphin(), hostPads = { emptyList() },
+            raExperiments = { RaExperimentOptions(overlayAutohideV3 = true) },
+            raVersionCode = { StreamRaConfig.RETROARCH_V3_VERSION_CODE - 1 }) { true }
+        val cfg2 = (p2v2.prepare(game("n64"), Emu.RETROARCH) as P2Prep.RetroArchConfig).cfg.readText()
+        assertTrue(cfg2.contains("input_overlay_hide_when_gamepad_connected = \"false\""))
     }
 
     @Test
@@ -239,7 +316,7 @@ class StreamP2Test {
             "audio_driver" to "opensl",
             "audio_latency" to "32",
         )
-        val unset = RaExperimentOptions.sample(true) { null }
+        val unset = RaExperimentOptions.sample(true, prop = { null })
         for (ready in listOf(false, true)) {
             for (hostPad in listOf(false, true)) {
                 val expected = LinkedHashMap(baseline).apply {
@@ -253,7 +330,7 @@ class StreamP2Test {
                 val base = GraphicsTuner.retroArchConfigText("/sdcard", resume = true).trimEnd('\n').split('\n')
                 val merged = com.gamebex.client.launch.RetroArchTuner.mergeConfig(base, expected).first.joinToString("\n") + "\n"
                 assertEquals(merged, StreamRaConfig.cfgText("/sdcard", ready, hostPad, unset))
-                assertEquals(merged, StreamRaConfig.cfgText("/sdcard", ready, hostPad, RaExperimentOptions.sample(false) { error("release getprop") }))
+                assertEquals(merged, StreamRaConfig.cfgText("/sdcard", ready, hostPad, RaExperimentOptions.sample(false, prop = { error("release getprop") })))
             }
         }
     }

@@ -16,6 +16,7 @@ import com.gamebex.client.together.GuestView
 import com.gamebex.client.together.net.JoinLink
 import com.gamebex.client.stream.NoStreamHost
 import com.gamebex.client.stream.NoStreamPlayer2
+import com.gamebex.client.stream.StreamFlags
 import com.gamebex.client.stream.StreamHost
 import com.gamebex.client.stream.StreamPlayer2
 import java.util.concurrent.atomic.AtomicInteger
@@ -51,8 +52,12 @@ class TogetherEngine(
     streamHost: StreamHost = NoStreamHost,
  /** STREAM host: player 2's binding. */
     player2: StreamPlayer2 = NoStreamPlayer2,
+ /** STREAM host flags: raw in-app value or null when unset. */
+    hostFlag: (String) -> String? = { null },
+ /** seeds the core's overlay from the RA APK when RA configures none. */
+    seedOverlayForCore: (String?) -> java.io.File? = { null },
 ) : TogetherController {
-    private val hostEngine = HostEngine(transport, emulators, library, discovery, platform, timing, scope, ioDispatcher, streamHost, player2)
+    private val hostEngine = HostEngine(transport, emulators, library, discovery, platform, timing, scope, ioDispatcher, streamHost, player2, hostFlag = hostFlag, overlay26bEnabled = { StreamFlags.toggleOn("overlay_26b", hostFlag) }, seedOverlayForCore = seedOverlayForCore)
     private val guestEngine = GuestEngine(transport, probes, emulators, library, platform, timing, scope, ioDispatcher)
 
     override val nearby: StateFlow<List<NearbyHost>> = discovery.found

@@ -40,6 +40,7 @@ class RealShellComponents(@Suppress("unused") private val context: Context?) : S
     override fun openPad(): VirtualPad? = VirtualPads.open()
 
     override fun videoSource(): VideoSource = AvcScreenSource()
+    override fun videoSource(config: StreamConfig): VideoSource = AvcScreenSource(config = config)
 
     override fun audioSource(): AudioSource? =
         if (Build.VERSION.SDK_INT >= StreamCaps.MIN_HOST_SDK) ShellContext.get()?.let { PlaybackAudioSource(it) } else null

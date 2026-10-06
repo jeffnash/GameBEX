@@ -123,7 +123,17 @@ object PrepPipeline {
         gameLocks.getOrPut(gameId) { Mutex() }.withLock { block() }
 
     suspend fun prepare(ctx: Context, db: LibraryDb, gameId: Long): PrepReport =
-        withGameLock(gameId) { prepareLocked(ctx, db, gameId) }
+        withGameLock(gameId) {
+            // The bus entry a disc extract opened (below) never
+            // outlives the run — failures and crashes clear it, and the
+            // persisted FAILED/NEEDS_MANUAL state drives the visible
+            // error + Retry instead of a stuck "Preparing…".
+            try {
+                prepareLocked(ctx, db, gameId)
+            } finally {
+                PrepProgressBus.clear(gameId)
+            }
+        }
 
     private suspend fun prepareLocked(ctx: Context, db: LibraryDb, gameId: Long): PrepReport {
         val game = db.games().findById(gameId)
@@ -395,8 +405,17 @@ object PrepPipeline {
             workDir = outDir
         } else {
             runCatching { stage.deleteRecursively() }
+            // Total null until the first extract report names the
+            // declared (expanded) size — the compressed file length
+            // would print a bogus percent.
+            PrepProgressBus.begin(game.id, PrepPhase.EXTRACTING, null, System.currentTimeMillis())
             val extracted = try {
-                ArchiveHub.extract(rom, stage, kind, MAX_ENTRIES, MAX_TOTAL_BYTES)
+                ArchiveHub.extract(rom, stage, kind, MAX_ENTRIES, MAX_TOTAL_BYTES) { w, t ->
+                    PrepProgressBus.progress(
+                        game.id, PrepPhase.EXTRACTING, w, t,
+                        System.currentTimeMillis(),
+                    )
+                }
             } catch (e: CancellationException) {
                 runCatching { stage.deleteRecursively() }
                 throw e
@@ -540,6 +559,7 @@ object PrepPipeline {
         // Staging never survives a failure. Fresh outputs skip publish
         // entirely (validated above, already live).
         if (!fresh) {
+            PrepProgressBus.phase(game.id, PrepPhase.COPYING, System.currentTimeMillis())
             val owned = parseMarkerManifest(marker)
             if (owned.isNotEmpty()) clearOwned(outDir, owned)
             val manifest = collectManifest(stage)

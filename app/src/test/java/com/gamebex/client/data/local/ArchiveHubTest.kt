@@ -219,6 +219,47 @@ class ArchiveHubTest {
         }
     }
 
+    @Test fun declaredTotalSumsZipEntries() {
+        val zip = File(tmp.root, "sized.zip")
+        java.util.zip.ZipOutputStream(zip.outputStream()).use { zos ->
+            zos.putNextEntry(java.util.zip.ZipEntry("a.bin"))
+            zos.write(ByteArray(100))
+            zos.closeEntry()
+            zos.putNextEntry(java.util.zip.ZipEntry("b.bin"))
+            zos.write(ByteArray(300))
+            zos.closeEntry()
+        }
+        assertEquals(400L, ArchiveHub.declaredTotal(zip, ArchiveHub.Kind.ZIP))
+    }
+
+    @Test fun declaredTotalNullForTarStreams() {
+        val tar = File(tmp.root, "sized.tar")
+        writeTar(tar, mapOf("a.bin" to ByteArray(100)))
+        assertEquals(null, ArchiveHub.declaredTotal(tar, ArchiveHub.Kind.TAR))
+    }
+
+    @Test fun extractReportsMonotonicProgress() {
+        val zip = File(tmp.root, "prog.zip")
+        val payload = ByteArray(200_000) { (it % 251).toByte() }
+        java.util.zip.ZipOutputStream(zip.outputStream()).use { zos ->
+            zos.putNextEntry(java.util.zip.ZipEntry("big.bin"))
+            zos.write(payload)
+            zos.closeEntry()
+        }
+        val reports = mutableListOf<Pair<Long, Long?>>()
+        val out = File(tmp.root, "pout").apply { mkdirs() }
+        assertTrue(
+            ArchiveHub.extract(zip, out, ArchiveHub.Kind.ZIP, 10_000, 10_000_000) { w, t ->
+                reports += w to t
+            },
+        )
+        assertTrue(reports.isNotEmpty())
+        assertTrue(reports.all { it.second == 200_000L })
+        val writes = reports.map { it.first }
+        assertEquals(writes.sorted(), writes)
+        assertEquals(200_000L, writes.last())
+    }
+
     private fun writeSevenZ(dest: File, files: Map<String, ByteArray>) {
         SevenZOutputFile(dest).use {
             for ((name, bytes) in files) {

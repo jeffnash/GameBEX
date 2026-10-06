@@ -67,7 +67,18 @@ data class SizeInfo(val bytes: Long?, val label: String)
     data class NeedsEmulator(val what: String) : CardState
     @Immutable
     data class NeedsFix(val note: String) : CardState
-    data object Preparing : CardState
+    /**
+     * A live prep carries its byte counter so the card can show
+     * "Extracting archive… 312 of 996 MB (31%)". [read] < 0 means nothing
+     * reported yet; [stalled] means no progress for 20 s.
+     */
+    @Immutable
+    data class Preparing(
+        val read: Long = -1,
+        val total: Long? = null,
+        val phase: String? = null,
+        val stalled: Boolean = false,
+    ) : CardState
     @Immutable
     data class Downloading(
         val read: Long,

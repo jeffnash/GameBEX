@@ -45,19 +45,33 @@ class PcmPlayerTest {
 
     @Test fun experimentsDefaultOffAndDebugReadOnce() {
         var reads = 0
-        assertEquals(AudioPlaybackOptions(), AudioPlaybackOptions.sample(false) { reads++; "1" })
+        assertEquals(AudioPlaybackOptions(), AudioPlaybackOptions.sample(false, prop = { reads++; "1" }))
         assertEquals(0, reads)
         val seen = mutableListOf<String>()
-        val options = AudioPlaybackOptions.sample(true) { name ->
+        val options = AudioPlaybackOptions.sample(true, prop = { name ->
             seen += name
             when (name) { "audio_lead_frames" -> "512"; "audio_output_frames" -> "64"; else -> "1" }
-        }
+        })
         assertEquals(5, seen.size)
         assertEquals(5, seen.toSet().size)
         assertEquals(AudioPlaybackOptions(512, true, true, true, 64), options)
-        assertEquals(AudioPlaybackOptions(), AudioPlaybackOptions.sample(true) { "invalid" })
+        assertEquals(AudioPlaybackOptions(), AudioPlaybackOptions.sample(true, prop = { "invalid" }))
         assertEquals(512, AudioPlaybackOptions().leadFrames)
-        assertEquals(512, AudioPlaybackOptions.sample(true) { "invalid" }.leadFrames)
+        assertEquals(512, AudioPlaybackOptions.sample(true, prop = { "invalid" }).leadFrames)
+    }
+
+    @Test fun flagsApplyOnReleaseAndAdbPropWinsOnDebug() {
+        val flags = mapOf("audio_lead_frames" to "256", "audio_regulator" to "1")
+        assertEquals(
+            AudioPlaybackOptions(256, false, true, false, 128),
+            AudioPlaybackOptions.sample(false, prop = { "1" }, flags = flags::get),
+        )
+        // Null props fall through to flags even on debug builds.
+        assertEquals(256, AudioPlaybackOptions.sample(true, prop = { null }, flags = flags::get).leadFrames)
+        assertEquals(
+            AudioPlaybackOptions(512, false, false, false, 128),
+            AudioPlaybackOptions.sample(true, prop = { "512" }, flags = flags::get),
+        )
     }
 
     @Test fun rendersOncePerBlockAndPartialZeroWritesRetainSuffix() {

@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.Surface
 import com.gamebex.client.stream.StreamCaps
+import com.gamebex.client.stream.StreamConfig
 import com.gamebex.client.stream.StreamError
 import com.gamebex.client.stream.VideoLevel
 import com.gamebex.client.stream.proto.AnnexB
@@ -25,11 +26,13 @@ import java.util.concurrent.atomic.AtomicInteger
 class AvcScreenSource(
     private val encoders: () -> List<AvcEncoders.EncoderInfo> = AvcEncoders::list,
     private val codecDiagnostics: Boolean = StreamDebug.flag("codec_diag"),
+    private val config: StreamConfig? = null,
     private val options: AvcEncoders.Options = AvcEncoders.Options(
-        fps = StreamDebug.int("encoder_fps", 0, 0..50).takeIf { it == 50 } ?: 0,
+        fps = shellInt("encoder_fps", config?.encoderFps ?: 0, 0..50).takeIf { it == 50 } ?: 0,
         intraRefresh = StreamDebug.flag("encoder_intra_refresh"),
+        keyframesOnRequest = shellFlag("keyframes_on_request", config?.keyframesOnRequest ?: false),
     ),
-    private val cropOptions: StreamCropOptions = StreamCropOptions.sample(),
+    private val cropOptions: StreamCropOptions = StreamCropOptions.resolve(config),
 ) : VideoSource {
     private val lock = Any()
     private var codec: MediaCodec? = null
@@ -133,7 +136,7 @@ class AvcScreenSource(
         var last: Throwable? = null
         for (info in candidates) {
             if (activeOptions.intraRefresh && !info.intraRefresh) {
-                Log.i(TAG, "ENCODER_EXPERIMENT codec=${info.name} intraRefreshFallback=unsupported periodicIdrS=${StreamCaps.I_FRAME_INTERVAL_S}")
+                Log.i(TAG, "ENCODER_EXPERIMENT codec=${info.name} intraRefreshFallback=unsupported periodicIdrS=${AvcEncoders.periodicIdrS(activeOptions)}")
             }
             for (configuration in AvcEncoders.configurationAttempts(encodeLevel, info, activeOptions)) {
                 val c = try {
@@ -280,7 +283,7 @@ class AvcScreenSource(
                                 if (!current(c, gen)) return
                                 intraRefreshDisabled = true
                             }
-                            Log.w(TAG, "ENCODER_EXPERIMENT codec=${c.name} intraRefreshFallback=output_unconfirmed reportedPeriod=$refreshPeriod periodicIdrS=${StreamCaps.I_FRAME_INTERVAL_S}")
+                            Log.w(TAG, "ENCODER_EXPERIMENT codec=${c.name} intraRefreshFallback=output_unconfirmed reportedPeriod=$refreshPeriod periodicIdrS=${configuration.iFrameIntervalS}")
                             throw IllegalStateException("intra refresh not confirmed by encoder output")
                         }
                         val width = format.getInteger(MediaFormat.KEY_WIDTH)

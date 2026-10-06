@@ -7,6 +7,7 @@ import com.gamebex.client.data.local.EnrichItem
 import com.gamebex.client.data.local.LibraryDb
 import com.gamebex.client.data.local.LibraryScanner
 import com.gamebex.client.data.local.PrepPipeline
+import com.gamebex.client.data.local.PrepProgressBus
 import com.gamebex.source.DownloadFile
 import com.gamebex.source.DownloadProvenance
 import java.io.File
@@ -118,6 +119,9 @@ class DownloadIngest(
             // First download per console seeds that console's BIOS in
             // the background, so Play never waits on firmware; prep runs
             // right after so it sees the seeded files.
+            // Link the download row to the game so Downloads
+            // shows the live prep line ("Extracting archive… 31%").
+            PrepProgressBus.linkDownload(rec.id, gameId)
             autoPrep.kick(gameId) { BiosFetcher.seedForGame(appContext, db, gameId) }
         }
         return gameId.takeIf { it > 0 }

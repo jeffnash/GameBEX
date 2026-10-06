@@ -309,9 +309,20 @@ private fun baseTouchLayoutSpec(id: TouchLayoutId): TouchLayoutSpec = when (id) 
         listOf(
             StickControl("stick", TouchAnchor.LP, right = false),
             DpadControl("dpad", TouchAnchor.LS, 104f),
+            // Matches RetroArch's own n64 overlay (overlays/gamepads/n64/n64.cfg):
+            // A/B level at mid-right (B left of A), C-buttons bottom-right, Z at (0.80, 0.25).
             FaceClusterControl(
-                id = "c", anchor = TouchAnchor.RP, atU = 0.90f, atV = 0.42f,
-                wideU = 0.905f, wideV = 0.42f,
+                id = "ab", anchor = TouchAnchor.RP, atU = 0.875f, atV = 0.47f,
+                wideU = 0.875f, wideV = 0.47f,
+                buttons = listOf(
+                    FaceButtonDef("b", "B", -30f, 0f, 56f, 48f, TouchOutput.Buttons(PadState.X)),
+                    FaceButtonDef("a", "A", 30f, 0f, 56f, 48f, TouchOutput.Buttons(PadState.A)),
+                ),
+                chords = setOf(touchChord("a", "b")),
+            ),
+            FaceClusterControl(
+                id = "c", anchor = TouchAnchor.RP, atU = 0.875f, atV = 0.778f,
+                wideU = 0.875f, wideV = 0.778f,
                 buttons = listOf(
                     FaceButtonDef("cup", "▲", 0f, -36f, 48f, 40f, TouchOutput.CButton(TouchOutput.CDir.UP)),
                     FaceButtonDef("cright", "▶", 36f, 0f, 48f, 40f, TouchOutput.CButton(TouchOutput.CDir.RIGHT)),
@@ -319,18 +330,13 @@ private fun baseTouchLayoutSpec(id: TouchLayoutId): TouchLayoutSpec = when (id) 
                     FaceButtonDef("cleft", "◀", -36f, 0f, 48f, 40f, TouchOutput.CButton(TouchOutput.CDir.LEFT)),
                 ),
             ),
-            FaceClusterControl(
-                id = "ab", anchor = TouchAnchor.RP, atU = 0.90f, atV = 0.81f,
-                wideU = 0.88f, wideV = 0.81f,
-                buttons = listOf(
-                    FaceButtonDef("b", "B", -30f, -14f, 56f, 48f, TouchOutput.Buttons(PadState.X)),
-                    FaceButtonDef("a", "A", 30f, 14f, 56f, 48f, TouchOutput.Buttons(PadState.A)),
-                ),
-                chords = setOf(touchChord("a", "b")),
-            ),
             KeyControl("l", TouchAnchor.LO, "L", 64f, 48f, output = TouchOutput.Buttons(PadState.L1)),
             KeyControl("r", TouchAnchor.RO, "R", 64f, 48f, output = TouchOutput.Buttons(PadState.R1)),
-            KeyControl("z", TouchAnchor.RI, "Z", 64f, 48f, output = TouchOutput.Trigger(left = true)),
+            KeyControl(
+                "z", TouchAnchor.RA, "Z", 64f, 48f, output = TouchOutput.Trigger(left = true),
+                // RA's own wide slot is mid-screen; Z stays put on wide phones.
+                wideU = 0.80f, wideV = 0.25f,
+            ),
             startAlone(),
             MenuControl(),
         ),
@@ -678,7 +684,88 @@ fun resolveTouchLayout(
     if (touchFitsSideBar(sideBar, safeWidthPx, safeHeightPx, density, content)) {
         return sideBar.copy(content = content)
     }
-    return resolveAttempt(definition, safeWidthPx, safeHeightPx, density, prefs, wide = true).copy(content = content)
+    return touchShiftWideSecondaries(
+        resolveAttempt(definition, safeWidthPx, safeHeightPx, density, prefs, wide = true).copy(content = content),
+        safeWidthPx, density,
+    )
+}
+
+/** Secondary groups, shifted inward in Wide mode. */
+private val WIDE_SECONDARY_ANCHORS: Set<TouchAnchor> = setOf(TouchAnchor.LS, TouchAnchor.RS)
+
+/**
+ * In Wide mode each secondary (LS/RS) group moves horizontally toward the
+ * screen center until its bounds clear every outer group's bounds by
+ * [TOUCH_CLEARANCE_DP], or the center is reached. Sizes are preserved.
+ * The Menu utility is not an outer group.
+ */
+fun touchShiftWideSecondaries(layout: ResolvedTouchLayout, safeW: Float, density: Float): ResolvedTouchLayout {
+    if (!layout.wide) return layout
+    val m = TOUCH_CLEARANCE_DP * density
+    val centerX = safeW / 2f
+    val outer = mutableListOf<TouchRectPx>()
+    layout.dpads.forEach { if (it.control.anchor !in WIDE_SECONDARY_ANCHORS) outer += it.bounds().grown(m) }
+    layout.sticks.forEach { if (it.control.anchor !in WIDE_SECONDARY_ANCHORS) outer += it.bounds().grown(m) }
+    layout.clusters.forEach { if (it.control.anchor !in WIDE_SECONDARY_ANCHORS) outer += it.bounds().grown(m) }
+    layout.keys.forEach { if (it.control.anchor !in WIDE_SECONDARY_ANCHORS) outer += it.rect.grown(m) }
+    if (outer.isEmpty()) return layout
+    fun shiftFor(cx: Float, bounds: TouchRectPx): Float {
+        if (cx == centerX) return 0f
+        val dir = if (cx < centerX) 1f else -1f
+        var dx = 0f
+        var steps = 0
+        while (steps < 400 && (cx + dx - centerX) * dir < 0f) {
+            val grown = TouchRectPx(bounds.left + dx - m, bounds.top - m, bounds.right + dx + m, bounds.bottom + m)
+            if (outer.none { it.intersects(grown) }) return dx
+            dx += dir * density
+            steps++
+        }
+        return dx
+    }
+    return layout.copy(
+        dpads = layout.dpads.map {
+            if (it.control.anchor in WIDE_SECONDARY_ANCHORS) it.copy(cx = it.cx + shiftFor(it.cx, it.bounds())) else it
+        },
+        sticks = layout.sticks.map {
+            if (it.control.anchor in WIDE_SECONDARY_ANCHORS) it.copy(cx = it.cx + shiftFor(it.cx, it.bounds())) else it
+        },
+        clusters = layout.clusters.map { cluster ->
+            if (cluster.control.anchor !in WIDE_SECONDARY_ANCHORS) cluster
+            else {
+                val bounds = cluster.bounds()
+                val dx = shiftFor((bounds.left + bounds.right) / 2f, bounds)
+                if (dx == 0f) cluster else cluster.copy(buttons = cluster.buttons.map { b -> b.copy(cx = b.cx + dx) })
+            }
+        },
+        keys = layout.keys.map {
+            if (it.control.anchor in WIDE_SECONDARY_ANCHORS) {
+                val dx = shiftFor((it.rect.left + it.rect.right) / 2f, it.rect)
+                if (dx == 0f) it else it.copy(rect = TouchRectPx(it.rect.left + dx, it.rect.top, it.rect.right + dx, it.rect.bottom))
+            } else it
+        },
+    )
+}
+
+/**
+ * The largest size percent in [TouchPrefs.SIZE_MIN, requested] (step
+ * [TouchPrefs.SIZE_STEP]) whose resolved layout has no overlapping hit areas.
+ * The Touch controls slider shows this value when clamping applies.
+ */
+fun effectiveTouchSizePercent(
+    definition: TouchLayoutSpec,
+    safeW: Float,
+    safeH: Float,
+    density: Float,
+    prefs: TouchPrefs,
+    viewport: TouchViewport?,
+): Int {
+    var size = prefs.validated().sizePercent
+    while (size > TouchPrefs.SIZE_MIN) {
+        val layout = resolveTouchLayout(definition, safeW, safeH, density, prefs.copy(sizePercent = size), viewport)
+        if (touchLayoutOverlaps(layout).isEmpty()) return size
+        size -= TouchPrefs.SIZE_STEP
+    }
+    return TouchPrefs.SIZE_MIN
 }
 
 private fun resolveAttempt(

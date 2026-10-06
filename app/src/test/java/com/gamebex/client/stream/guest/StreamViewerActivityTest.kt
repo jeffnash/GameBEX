@@ -98,11 +98,7 @@ class StreamViewerActivityTest {
 
     @Test fun optionsDefaultOffAndSampleEachPropertyOnce() {
         val calls = mutableListOf<String>()
-        val options = ViewerOptions.sample(
-            { name, default -> calls += name; default },
-            { name, default, _ -> calls += name; default },
-            debug = true,
-        )
+        val options = ViewerOptions.sample { name -> calls += name; null }
         assertEquals(ViewerOptions(), options)
         assertEquals(10, calls.size)
         assertEquals(calls.size, calls.toSet().size)
@@ -112,30 +108,42 @@ class StreamViewerActivityTest {
         assertEquals(10, calls.size)
     }
 
-    @Test fun debugOffDoesNotSampleViewerProperties() {
-        assertEquals(ViewerOptions(), ViewerOptions.sample(
-            { _, _ -> error("release flag read") },
-            { _, _, _ -> error("release int read") },
-            debug = false,
-        ))
+    @Test fun lookupValuesMapToOptions() {
+        val options = ViewerOptions.sample { name ->
+            when (name) {
+                "frame_rate_vote" -> "60"
+                "display_mode" -> "-1"
+                else -> "1"
+            }
+        }
+        assertTrue(options.unbufferedInput)
+        assertEquals(-1, options.displayMode)
+        assertEquals(60, options.frameRateVote)
+        assertTrue(options.hudOff)
+        assertTrue(options.touchPadHidden)
+        assertTrue(options.fixedSurface)
+        assertTrue(options.surfaceOpaque)
+        assertTrue(options.minimalPostProcessing)
+        assertTrue(options.frameRateFixed)
+        assertTrue(options.frameRateAlways)
     }
 
     @Test fun invalidViewerIntegersFallBackToNormal() {
-        val options = ViewerOptions.sample({ _, default -> default }, { _, _, _ -> -2 }, debug = true)
+        val options = ViewerOptions.sample { "-2" }
         assertEquals(ViewerOptions(), options)
-        assertEquals(ViewerOptions(), ViewerOptions.sample({ _, default -> default }, { name, _, _ ->
-            if (name == "frame_rate_vote") 121 else 0
-        }, debug = true))
+        assertEquals(ViewerOptions(), ViewerOptions.sample { name ->
+            if (name == "frame_rate_vote") "121" else null
+        })
     }
 
     @Test fun displayArmsAreSampledOnlyOnceAndRemainIndependent() {
         val calls = mutableListOf<String>()
         var enabled = true
-        val options = ViewerOptions.sample(
-            { name, _ -> calls += name; enabled },
-            { name, default, _ -> calls += name; if (name == "frame_rate_vote") 60 else default },
-            debug = true,
-        )
+        val options = ViewerOptions.sample { name ->
+            calls += name
+            if (!enabled) error("resampled after construction")
+            if (name == "frame_rate_vote") "60" else "1"
+        }
         enabled = false
         repeat(10) {
             assertTrue(options.minimalPostProcessing)

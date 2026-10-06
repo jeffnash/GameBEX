@@ -28,6 +28,8 @@ open class FakeRomSource(
     var latestResult: suspend (String?) -> CatalogPage = { CatalogPage(emptyList()) }
     var browseResult: suspend (String?, String?, String?) -> CatalogPage = { _, _, _ -> CatalogPage(emptyList()) }
     var searchResult: suspend (String) -> CatalogPage = { CatalogPage(emptyList()) }
+    /** When set, cursor-aware paged search answers instead of [searchResult]. */
+    var searchPaged: (suspend (String, String?, String?) -> CatalogPage)? = null
     var detailResult: suspend (SourceRef) -> RomDetail = { throw UnsupportedOperationException("detail") }
     var variantsResult: suspend (SourceRef) -> List<DownloadFile> = { emptyList() }
     var resolveResult: suspend (DownloadFile) -> TransferRequest = {
@@ -57,8 +59,8 @@ open class FakeRomSource(
     }
 
     override suspend fun search(query: String, platformId: String?, cursor: String?): CatalogPage {
-        calls += "search:$query"
-        return searchResult(query)
+        calls += "search:$query:$platformId:$cursor"
+        return searchPaged?.invoke(query, platformId, cursor) ?: searchResult(query)
     }
 
     override suspend fun detail(ref: SourceRef): RomDetail {

@@ -27,6 +27,9 @@ import com.gamebex.client.launch.ControllerRegistry
 import com.gamebex.client.stream.StreamCaps
 import com.gamebex.client.stream.StreamDebug
 import com.gamebex.client.stream.StreamEndpoint
+import com.gamebex.client.stream.StreamFlagPrefs
+import com.gamebex.client.stream.StreamFlagSide
+import com.gamebex.client.stream.StreamFlags
 import com.gamebex.client.stream.StreamJson
 import com.gamebex.client.ui.GameBexTheme
 import kotlinx.coroutines.MainScope
@@ -71,8 +74,16 @@ class StreamViewerActivity : ComponentActivity() {
             return
         }
         val loopback = intent.getBooleanExtra(StreamGuestRuntime.EXTRA_LOOPBACK, false)
+        val flagPrefs = StreamFlagPrefs(this)
+        val lookup: (String) -> String? = { name ->
+            (if (com.gamebex.client.BuildConfig.DEBUG) StreamDebug.prop(name) else null) ?: flagPrefs.get(name)
+        }
         options = savedInstanceState?.getBundle(VIEWER_OPTIONS)?.let { ViewerOptions.restore(it) }
-            ?: ViewerOptions.sample(StreamDebug::flag, StreamDebug::int)
+            ?: ViewerOptions.sample(lookup).let { sampled ->
+                if (sampled.displayMode == 0 && lookup("display_mode") == "60hz") {
+                    sampled.copy(displayMode = sixtyHzModeId() ?: 0)
+                } else sampled
+            }
         oldDisplayMode = window.attributes.preferredDisplayModeId
         oldRefreshRate = window.attributes.preferredRefreshRate
         if (Build.VERSION.SDK_INT >= 30) {
@@ -92,7 +103,15 @@ class StreamViewerActivity : ComponentActivity() {
             hide(WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
-        val s = StreamGuestRuntime.attach(endpoint, loopback)
+        val s = StreamGuestRuntime.attach(
+            endpoint,
+            loopback,
+            guestFlag = flagPrefs.lookup(),
+            activeFlagsLine = StreamFlags.activeSummary(
+                com.gamebex.client.BuildConfig.DEBUG, StreamDebug::prop, flagPrefs.lookup(),
+                sides = setOf(StreamFlagSide.WATCHING, StreamFlagSide.BOTH),
+            ),
+        )
         session = s
         controllerObserver = ControllerRegistry.observe(this) { pads ->
             physicalControllerConnected = updateViewerControllerPresence(
@@ -101,7 +120,9 @@ class StreamViewerActivity : ComponentActivity() {
         }
         if (StreamDebug.prop("tdls") == "1") setTdls(endpoint.host, true)
         val touchProfile = TouchProfile(folder = endpoint.system, backend = touchBackendFromName(endpoint.backend))
-        val touchPrefs = StreamTouchPrefs(this).load(selectTouchLayout(touchProfile))
+        val touchPrefsStore = StreamTouchPrefs(this)
+        val touchLayoutId = selectTouchLayout(touchProfile)
+        var touchPrefs by mutableStateOf(touchPrefsStore.load(touchLayoutId))
         setContent {
             GameBexTheme {
                 val ui by s.ui.collectAsState()
@@ -128,6 +149,18 @@ class StreamViewerActivity : ComponentActivity() {
                     fixedSurface = options.fixedSurface,
                     surfaceOpaque = options.surfaceOpaque,
                     physicalControllerConnected = physicalControllerConnected,
+                    useHostOverlay = StreamFlags.toggleOn(OVERLAY_26B_FLAG, lookup),
+                    onTouchPrefsChange = { next ->
+                        // Settings changes release input before replacing geometry.
+                        s.releaseTouchInput()
+                        touchPrefsStore.save(touchLayoutId, next)
+                        touchPrefs = next.validated()
+                    },
+                    onResetTouchPrefs = {
+                        s.releaseTouchInput()
+                        touchPrefsStore.reset(touchLayoutId)
+                        touchPrefs = TouchPrefs()
+                    },
                 )
             }
         }
@@ -145,6 +178,17 @@ class StreamViewerActivity : ComponentActivity() {
 
     @Suppress("DEPRECATION")
     private fun viewerDisplay() = if (Build.VERSION.SDK_INT >= 30) display else windowManager.defaultDisplay
+
+    /** The current-resolution 60 Hz mode id for the display_mode flag, or null when absent. */
+    @Suppress("DEPRECATION")
+    private fun sixtyHzModeId(): Int? = runCatching {
+        val d = viewerDisplay() ?: return null
+        val current = d.mode
+        d.supportedModes.firstOrNull {
+            it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight &&
+                it.refreshRate in 59.9f..60.1f
+        }?.modeId
+    }.getOrNull()
 
     /**
      * Asks for the display's highest refresh rate at the current resolution while the viewer is in front:
@@ -391,23 +435,25 @@ internal data class ViewerOptions(
     }
 
     companion object {
-        fun sample(
-            flag: (String, Boolean) -> Boolean,
-            int: (String, Int, IntRange) -> Int,
-            debug: Boolean = com.gamebex.client.BuildConfig.DEBUG,
-        ): ViewerOptions {
-            if (!debug) return ViewerOptions()
+        /**
+         * Samples from a merged lookup (adb prop on debug, else the
+         * in-app flag, else null for default). The caller owns adb gating.
+         */
+        fun sample(lookup: (String) -> String? = { null }): ViewerOptions {
+            fun flag(name: String) = lookup(name) == "1"
+            fun int(name: String, default: Int, range: IntRange) =
+                lookup(name)?.toIntOrNull()?.takeIf { it in range } ?: default
             return ViewerOptions(
-                unbufferedInput = flag("unbuffered_input", false),
-                displayMode = int("display_mode", 0, -1..Int.MAX_VALUE).takeIf { it >= -1 } ?: 0,
-                frameRateVote = int("frame_rate_vote", 0, 0..120).takeIf { it in 0..120 } ?: 0,
-                hudOff = flag("hud_off", false),
-                touchPadHidden = flag("touch_pad_hidden", false),
-                fixedSurface = flag("fixed_surface", false),
-                surfaceOpaque = flag("surface_opaque", false),
-                minimalPostProcessing = flag("minimal_postprocess", false),
-                frameRateFixed = flag("frame_rate_fixed", false),
-                frameRateAlways = flag("frame_rate_always", false),
+                unbufferedInput = flag("unbuffered_input"),
+                displayMode = int("display_mode", 0, -1..Int.MAX_VALUE),
+                frameRateVote = int("frame_rate_vote", 0, 0..120),
+                hudOff = flag("hud_off"),
+                touchPadHidden = flag("touch_pad_hidden"),
+                fixedSurface = flag("fixed_surface"),
+                surfaceOpaque = flag("surface_opaque"),
+                minimalPostProcessing = flag("minimal_postprocess"),
+                frameRateFixed = flag("frame_rate_fixed"),
+                frameRateAlways = flag("frame_rate_always"),
             )
         }
 

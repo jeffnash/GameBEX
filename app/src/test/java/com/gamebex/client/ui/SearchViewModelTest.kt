@@ -179,4 +179,90 @@ class SearchViewModelTest {
         )
         assertEquals("mario", vm.query.value)
     }
+
+    private fun sysEntry(key: String, title: String, platformId: String?) =
+        CatalogFixtures.entry(itemKey = key, title = title, platformId = platformId)
+
+    private fun searchCalls(source: FakeRomSource): Int = source.calls.count { it.startsWith("search") }
+
+    @Test fun ignoredPlatformFetchesFurtherPagesUpToTheBudget(): Unit = runBlocking {
+        val source = twoSystems(PlatformSource("s"))
+        val pages = mapOf<String?, CatalogPage>(
+            null to CatalogPage(
+                listOf(sysEntry("gb/a", "Tetris A", "gb"), sysEntry("gba/x", "Tetris X", "gba")),
+                next = "c2",
+            ),
+            "c2" to CatalogPage(
+                listOf(sysEntry("gb/b", "Tetris B", "gb"), sysEntry("gba/y", "Tetris Y", "gba")),
+                next = "c3",
+            ),
+            "c3" to CatalogPage(listOf(sysEntry("gb/c", "Tetris C", "gb")), next = "c4"),
+        )
+        source.searchPaged = { _, _, cursor -> pages[cursor] ?: CatalogPage(emptyList()) }
+        val access = ready(source)
+        access.select("s")
+        val vm = SearchViewModel(access, SavedStateHandle())
+        awaitTrue { vm.consoles.value.isNotEmpty() }
+        vm.onQuery("tetris")
+        awaitTrue { !vm.searching.value && vm.results.value.size == 2 }
+        source.calls.clear()
+        vm.selectSystem("gb")
+        awaitTrue { !vm.searching.value && vm.results.value.size == 3 }
+        assertEquals(setOf("Tetris A", "Tetris B", "Tetris C"), vm.results.value.map { it.title }.toSet())
+        assertEquals(3, searchCalls(source))
+        assertTrue(source.calls.filter { it.startsWith("search") }.all { it.startsWith("search:tetris:gb:") })
+    }
+
+    @Test fun honoredPlatformAndUnfilteredSearchFetchOnePage(): Unit = runBlocking {
+        val source = twoSystems(PlatformSource("s"))
+        source.searchPaged = { _, platform, _ ->
+            if (platform == "gb") CatalogPage(listOf(sysEntry("gb/a", "Tetris A", "gb")), next = "c2")
+            else CatalogPage(
+                listOf(sysEntry("gb/a", "Tetris A", "gb"), sysEntry("gba/x", "Tetris X", "gba")),
+                next = "c2",
+            )
+        }
+        val access = ready(source)
+        access.select("s")
+        val vm = SearchViewModel(access, SavedStateHandle())
+        awaitTrue { vm.consoles.value.isNotEmpty() }
+        vm.onQuery("tetris")
+        awaitTrue { !vm.searching.value && vm.results.value.size == 2 }
+        assertEquals(1, searchCalls(source))
+        vm.selectSystem("gb")
+        awaitTrue { !vm.searching.value && vm.results.value.size == 1 }
+        assertEquals(2, searchCalls(source))
+    }
+
+    @Test fun enoughMatchesOrEndOfFeedStopsTheFollowUp(): Unit = runBlocking {
+        val source = twoSystems(PlatformSource("s"))
+        val many = (1..30).map { sysEntry("gb/g$it", "Tetris $it", "gb") } + sysEntry("gba/x", "Tetris X", "gba")
+        source.searchPaged = { _, _, cursor ->
+            when (cursor) {
+                null -> CatalogPage(many, next = "c2")
+                else -> CatalogPage(listOf(sysEntry("gb/more", "Tetris More", "gb")))
+            }
+        }
+        val access = ready(source)
+        access.select("s")
+        val vm = SearchViewModel(access, SavedStateHandle())
+        awaitTrue { vm.consoles.value.isNotEmpty() }
+        vm.onQuery("tetris")
+        awaitTrue { !vm.searching.value && vm.results.value.size == 31 }
+        source.calls.clear()
+        vm.selectSystem("gb")
+        awaitTrue { !vm.searching.value && vm.results.value.size == 30 }
+        assertEquals(1, searchCalls(source))
+    }
+
+    @Test fun ignoreDetectionIgnoresUnlabeledItems(): Unit {
+        val gb = sysEntry("gb/a", "Tetris", "gb")
+        val gba = sysEntry("gba/x", "Tetris", "gba")
+        val unlabeled = sysEntry("x/u", "Tetris", null)
+        assertTrue(searchPageIgnoresSystem(listOf(gb, gba), "gb"))
+        assertTrue(searchPageIgnoresSystem(listOf(gba), "gb"))
+        assertTrue(!searchPageIgnoresSystem(listOf(gb), "gb"))
+        assertTrue(!searchPageIgnoresSystem(listOf(gb, unlabeled), "gb"))
+        assertTrue(!searchPageIgnoresSystem(emptyList(), "gb"))
+    }
 }

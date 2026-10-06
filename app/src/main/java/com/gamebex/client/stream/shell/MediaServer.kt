@@ -42,8 +42,8 @@ class MediaServer(
     private val config: StreamConfig,
     private val clock: () -> Long = System::nanoTime,
     private val tickMs: Long = 100L,
-    private val queueDeadlineMs: Int = StreamDebug.int("queue_deadline_ms", 0, 0..40),
-    private val latencyControl: Boolean = StreamDebug.flag("latency_cc"),
+    private val queueDeadlineMs: Int = shellInt("queue_deadline_ms", config.queueDeadlineMs, 0..40),
+    private val latencyControl: Boolean = shellFlag("latency_cc", config.latencyCc),
     private val videoWriteStallMs: Int = StreamDebug.int("video_write_stall_ms", 0, 0..50),
     private val logger: (String) -> Unit = { System.err.println(it) },
 ) : MediaChannel {

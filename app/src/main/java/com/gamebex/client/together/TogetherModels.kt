@@ -4,8 +4,13 @@ import com.gamebex.client.launch.CoreInstallProgress
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/** Link protocol version, sent in [LinkMsg.Hello]. Bump on any incompatible change. */
-const val TOGETHER_PROTO: Int = 2
+/**
+ * Link protocol version, sent in [LinkMsg.Hello]. Bump on any incompatible change.
+ * 3 adds [LinkMsg.StreamOverlay] (26b: the guest renders the host's RetroArch
+ * overlay). Older apps drop the unknown "t" discriminator in LinkJson.decode
+ * instead of failing the link; every new field carries a default.
+ */
+const val TOGETHER_PROTO: Int = 3
 
 object TogetherPorts {
     /** GameBEX link (TCP). [LinkTransport.listen] falls back to an ephemeral port. */
@@ -152,6 +157,33 @@ sealed interface LinkMsg {
         val system: String = "",
         /** Actual host emulator backend (touchBackendForEmuPkg); "" = unknown (generic pad). */
         val backend: String = "",
+    ) : LinkMsg
+
+    /** One overlay image: path as written in the cfg → base64-encoded bytes. */
+    @Serializable
+    data class OverlayImage(val name: String, val base64: String = "")
+
+    /**
+     * Host → guest, STREAM only, right after [StreamReady] when the guest-facing
+     * flag `overlay_26b` is on (default off): the host's active RetroArch
+     * overlay cfg plus its images, so the guest renders the host's own pad
+     * (26b). Fits one link JSON frame (see HostOverlayBundle caps); [truncated]
+     * means images were dropped and the guest draws vector fallback art for
+     * them. A guest that can't use it ([OverlayLayout.usableForPlay] false)
+     * renders the 26a layout for the profile instead.
+     */
+    @Serializable @SerialName("stream_overlay")
+    data class StreamOverlay(
+        val sessionId: String,
+        val round: Int,
+        /** Overlay page name (e.g. "landscape"); "" = unnamed. */
+        val name: String = "",
+        /** The overlay .cfg text (UTF-8), possibly trimmed to its first page. */
+        val cfg: String = "",
+        /** Images referenced by the cfg, relative path as written → base64 bytes. */
+        val images: List<OverlayImage> = emptyList(),
+        /** True when cfg/images were capped; missing images render as fallback art. */
+        val truncated: Boolean = false,
     ) : LinkMsg
 
     @Serializable @SerialName("stream_resumed")

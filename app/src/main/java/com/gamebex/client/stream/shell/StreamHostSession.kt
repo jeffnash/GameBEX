@@ -51,12 +51,13 @@ class StreamHostSession(
             val channel = components.mediaChannel(effectiveConfig)
             media = channel
             channel.open(config.mediaPort)
-            val receiver = InputServer(openedPad, StreamToken.key(config.token), config.guestAddress, clock)
+            val receiver = InputServer(openedPad, StreamToken.key(config.token), config.guestAddress, clock,
+                cs6 = shellFlag("input_cs6", config.inputCs6))
             input = receiver
             receiver.open(config.inputPort)
             channel.onGuestAttached = { attachId -> receiver.attach(attachId) }
             channel.onGuestDetached = { attachId -> receiver.detach(attachId) }
-            val source = components.videoSource()
+            val source = components.videoSource(effectiveConfig)
             video = source
             source.captureInto(capture)
             source.start(level, level.maxBitrate, channel)

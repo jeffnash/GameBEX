@@ -108,6 +108,30 @@ class AvcEncodersTest {
     }
 
     @Test
+    fun keyframesOnRequestDisablesPeriodicIdrButKeepsStrictThenRelaxed() {
+        val configurations = AvcEncoders.configurationAttempts(StreamCaps.LEVELS[1],
+            enc("x", true), AvcEncoders.Options(keyframesOnRequest = true))
+        assertEquals(listOf(true, false), configurations.map { it.strict })
+        assertEquals(
+            listOf(StreamCaps.KEYFRAMES_ON_REQUEST_INTERVAL_S, StreamCaps.KEYFRAMES_ON_REQUEST_INTERVAL_S),
+            configurations.map { it.iFrameIntervalS },
+        )
+        assertEquals(StreamCaps.KEYFRAMES_ON_REQUEST_INTERVAL_S, AvcEncoders.periodicIdrS(AvcEncoders.Options(keyframesOnRequest = true)))
+        assertEquals(10, AvcEncoders.periodicIdrS(AvcEncoders.Options()))
+    }
+
+    @Test
+    fun intraRefreshAttemptsStillReplacePeriodicIdrUnderKeyframesOnRequest() {
+        val configurations = AvcEncoders.configurationAttempts(StreamCaps.LEVELS[1],
+            enc("x", true).copy(intraRefresh = true),
+            AvcEncoders.Options(fps = 50, intraRefresh = true, keyframesOnRequest = true))
+        assertEquals(
+            listOf(-1, -1, StreamCaps.KEYFRAMES_ON_REQUEST_INTERVAL_S, StreamCaps.KEYFRAMES_ON_REQUEST_INTERVAL_S),
+            configurations.map { it.iFrameIntervalS },
+        )
+    }
+
+    @Test
     fun ignoredOrInvalidRefreshOutputRequiresPeriodicFallback() {
         val refresh = AvcEncoders.Configuration(true, 50, 500)
         for (period in listOf(null, 0, -1)) assertFalse(AvcEncoders.intraRefreshConfirmed(refresh, period))

@@ -47,11 +47,10 @@ class StreamViewerScreenTest {
     @Test
     fun displayOptionsBundleRestoresAcrossRecreationWithoutSamplingProperties() {
         var samples = 0
-        val options = ViewerOptions.sample(
-            { _, _ -> samples++; true },
-            { name, _, _ -> samples++; if (name == "frame_rate_vote") 60 else -1 },
-            debug = true,
-        )
+        val options = ViewerOptions.sample { name ->
+            samples++
+            if (name == "frame_rate_vote") "60" else "-1"
+        }
         val restored = ViewerOptions.restore(options.save())
         assertEquals(options, restored)
         assertEquals(options, ViewerOptions.restore(restored.save()))

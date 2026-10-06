@@ -108,6 +108,7 @@ fun SystemScreen(
     rail: RailHost,
     onSources: () -> Unit = {},
     onTogether: () -> Unit = {},
+    onAdvanced: () -> Unit = {},
     hints: ConsoleHints? = null,
 ) {
     val g = LocalConsoleGeometry.current
@@ -534,6 +535,7 @@ fun SystemScreen(
                 onFolders = { folders.show() },
                 onControls = { showControls = true },
                 onFiles = { context.openAllFilesSettings() },
+                onAdvanced = onAdvanced,
             )
         }
 
@@ -992,6 +994,7 @@ private fun DeviceDialog(
     onFolders: () -> Unit,
     onControls: () -> Unit,
     onFiles: () -> Unit,
+    onAdvanced: () -> Unit,
 ) {
     val first = remember { androidx.compose.ui.focus.FocusRequester() }
     fun go(action: () -> Unit): () -> Unit = { onDismiss(); action() }
@@ -1008,6 +1011,7 @@ private fun DeviceDialog(
                 add("Controls & text size" to onControls)
                 add(TogetherCopy.deviceMenuOption to onTogether)
                 if (sdPresent) add((if (grantOk) "Storage: granted" else "Storage: grant") to onFiles)
+                add("Advanced" to onAdvanced)
             }
             // Two columns keep all options on screen at large text sizes.
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

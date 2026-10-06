@@ -408,6 +408,9 @@ class InputServerTest {
             assertTrue(entered.await(1, TimeUnit.SECONDS))
             repeat(10) { send(s, it + 2, PadState(buttons = PadState.B)) }
             waitFor("input while ACK blocked") { s.packets.get() == 11L }
+            // The ACK-sender thread lags the packet counter under load;
+            // wait for the bounded-queue drops to land, then assert exact.
+            waitFor("ack drops settle") { s.ackDropped.get() == 2L }
             assertEquals(2L, s.ackDropped.get())
             waitFor("watchdog while ACK blocked", timeoutMs = 1_000L) { s.lastState.isNeutral }
             assertEquals(1L, release.count)

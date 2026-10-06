@@ -50,6 +50,10 @@ class StreamViewerSession(
     private val endpoint: StreamEndpoint,
     private val loopback: Boolean = false,
     private val onLeave: () -> Unit = {},
+    /** Watching-side Stream flags: raw in-app value or null when unset. */
+    private val guestFlag: (String) -> String? = { null },
+    /** Precomputed stats line for this phone's non-default flags, if any. */
+    private val activeFlagsLine: String? = null,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val runLabel = if (BuildConfig.DEBUG) StreamDebug.prop("run_label").orEmpty() else ""
@@ -63,7 +67,7 @@ class StreamViewerSession(
     private val clock = ClockSync()
     private val attachId = com.gamebex.client.stream.StreamToken.attachId()
     private val jitter = PcmJitterBuffer(onCounter = { name, delta -> stats.count(name, delta) })
-    private val audioOptions = AudioPlaybackOptions.sample(BuildConfig.DEBUG, StreamDebug::prop)
+    private val audioOptions = AudioPlaybackOptions.sample(BuildConfig.DEBUG, StreamDebug::prop, flags = guestFlag)
     private val audioDrift = AudioDrift()
     private val indexedAudio = IndexedAudioBuffer(onCounter = { name, delta -> stats.count(name, delta) })
     private val audioRenderer = if (audioOptions.regulator) FractionalAudioRenderer(
@@ -84,7 +88,8 @@ class StreamViewerSession(
     private val lock = Any()
     private var decoder: VideoDecoder? = null
     private var videoConfig: DecoderRequest? = null
-    private val latestOutput = StreamDebug.flag("latest_output")
+    private val latestOutput = (((if (BuildConfig.DEBUG) StreamDebug.prop("latest_output") else null)
+        ?: guestFlag("latest_output")) == "1")
     private val codecDiag = StreamDebug.flag("codec_diag")
     private val decoderOverride = if (BuildConfig.DEBUG) StreamDebug.prop("decoder") else null
     private val vendorDiscovery = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -269,6 +274,7 @@ class StreamViewerSession(
                     stats.addClockSample(LatencyStats.Metric.INPUT, estimate.guestNs - sampleNs, estimate.errorBoundNs)
                 }
             }, onAudio = { seq, captureNs, pcm -> onAudioChunk(seq, captureNs, pcm) }, attachId = attachId,
+                cs6 = (((if (BuildConfig.DEBUG) StreamDebug.prop("input_cs6") else null) ?: guestFlag("input_cs6")) == "1"),
                 onRtt = { sentNs, ackNs -> if (!ended) stats.add(LatencyStats.Metric.INPUT_RTT, ackNs - sentNs) })
             synchronized(inputLock) {
                 input = sender
@@ -503,7 +509,7 @@ class StreamViewerSession(
     private fun refreshStats(log: Boolean) {
         synchronized(lock) { refreshAudioCounters() }
         val now = System.nanoTime()
-        if (_ui.value.showStats) _ui.update { it.copy(stats = StreamStatsText.lines(stats.snapshot(now), endpoint.audioTimestampOrigin)) }
+        if (_ui.value.showStats) _ui.update { it.copy(stats = StreamStatsText.lines(stats.snapshot(now), endpoint.audioTimestampOrigin, activeFlagsLine)) }
         if (log) {
             Log.i(TAG, "${stats.statsLine(now)} audio_origin=${endpoint.audioTimestampOrigin}")
             val mapping = synchronized(lock) {

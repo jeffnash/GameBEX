@@ -126,14 +126,27 @@ object ArchiveHub {
     /**
      * Extracts with caps + zip-slip/conflict discipline. False = safety
      * caps hit (caller routes to needs-manual); throws otherwise.
+     *
+     * [onProgress] gets (bytes written, declared total or null)
+     * after every buffer, so multi-minute Dreamcast extracts show a bar.
+     * ZIP/7Z declare per-entry sizes; TAR streams don't, hence null.
      */
-    fun extract(file: File, outDir: File, kind: Kind, maxEntries: Int, maxBytes: Long): Boolean {
+    fun extract(
+        file: File,
+        outDir: File,
+        kind: Kind,
+        maxEntries: Int,
+        maxBytes: Long,
+        onProgress: (written: Long, total: Long?) -> Unit = { _, _ -> },
+    ): Boolean {
         outDir.mkdirs()
         val base = outDir.canonicalPath
         val written = mutableSetOf<String>()
         val budget = Budget()
+        val total = declaredTotal(file, kind)
+        val report = { onProgress(budget.total, total) }
         val write = fun(rel: String, open: () -> InputStream): Boolean =
-            writeOne(outDir, base, rel, written, budget, maxEntries, maxBytes, open)
+            writeOne(outDir, base, rel, written, budget, maxEntries, maxBytes, open, report)
         when (kind) {
             Kind.ZIP -> ZipFile(file).use { zf ->
                 val it = zf.entries()
@@ -198,6 +211,38 @@ object ArchiveHub {
         override fun skip(n: Long): Long = wrapped.skip(n)
     }
 
+    /**
+     * Sum of declared uncompressed entry sizes, or null when the format
+     * doesn't declare them (TAR streams) or any entry hides its size.
+     * Best-effort: a failure here must never break extraction.
+     */
+    fun declaredTotal(file: File, kind: Kind): Long? = runCatching {
+        when (kind) {
+            Kind.ZIP -> ZipFile(file).use { zf ->
+                var sum = 0L
+                val it = zf.entries()
+                while (it.hasMoreElements()) {
+                    val e = it.nextElement()
+                    if (e.isDirectory) continue
+                    if (e.size < 0) return null
+                    sum += e.size
+                }
+                sum.takeIf { it > 0 }
+            }
+            Kind.SEVEN_Z -> SevenZFile.Builder().setFile(file).get().use { zf ->
+                var sum = 0L
+                while (true) {
+                    val e = zf.nextEntry ?: break
+                    if (e.isDirectory) continue
+                    if (e.size < 0) return null
+                    sum += e.size
+                }
+                sum.takeIf { it > 0 }
+            }
+            else -> null
+        }
+    }.getOrNull()
+
     private fun writeOne(
         outDir: File,
         base: String,
@@ -207,6 +252,7 @@ object ArchiveHub {
         maxEntries: Int,
         maxBytes: Long,
         open: () -> InputStream,
+        report: () -> Unit = {},
     ): Boolean {
         val rel = normalizeEntry(rawName) ?: return true
         if (++budget.count > maxEntries) return false
@@ -224,6 +270,7 @@ object ArchiveHub {
                         if (n < 0) break
                         out.write(buf, 0, n)
                         budget.total += n
+                        report()
                         if (budget.total > maxBytes) return false
                     }
                 }

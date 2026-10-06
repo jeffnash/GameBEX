@@ -39,11 +39,16 @@ object StreamGuestRuntime {
     }
 
     /** The live session for [ep] unless it has ended; otherwise leaves it and starts a new one. */
-    fun attach(ep: StreamEndpoint, loopback: Boolean): StreamViewerSession = synchronized(lock) {
+    fun attach(
+        ep: StreamEndpoint,
+        loopback: Boolean,
+        guestFlag: (String) -> String? = { null },
+        activeFlagsLine: String? = null,
+    ): StreamViewerSession = synchronized(lock) {
         val current = session
         if (current != null && endpoint == ep && current.ui.value.status != ViewerStatus.ENDED) return current
         current?.leave()
-        val next = StreamViewerSession(ep, loopback) { detach() }
+        val next = StreamViewerSession(ep, loopback, { detach() }, guestFlag, activeFlagsLine)
         session = next
         endpoint = ep
         _viewerOpen.value = true

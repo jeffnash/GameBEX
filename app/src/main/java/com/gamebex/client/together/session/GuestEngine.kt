@@ -39,6 +39,7 @@ import com.gamebex.client.together.DownloadState
 import com.gamebex.client.together.net.JoinLink
 import com.gamebex.client.stream.StreamEndpoint
 import com.gamebex.client.stream.StreamToken
+import com.gamebex.client.stream.guest.StreamOverlayStore
 import com.gamebex.client.stream.proto.StreamWire
 import com.gamebex.client.together.proto.BlobSink
 import java.io.File
@@ -397,6 +398,7 @@ internal class GuestEngine(
         byeReceived = false
         playAddress = null
         streamReady = null
+        StreamOverlayStore.clear()
         streamSignal = CompletableDeferred()
         resources = SessionResources()
         replaceView(token, GuestView(GuestStep.CONNECTING, input.target.name))
@@ -698,6 +700,7 @@ internal class GuestEngine(
             is LinkMsg.CoreEnd -> handleCoreEnd(message)
             is LinkMsg.CoreUnavailable -> if (message.sessionId == offer?.sessionId) handleCoreUnavailable()
             is LinkMsg.StreamReady -> handleStreamReady(message)
+            is LinkMsg.StreamOverlay -> handleStreamOverlay(message)
             is LinkMsg.StreamResumed, is LinkMsg.Ping, is LinkMsg.Pong, is LinkMsg.GuestState, is LinkMsg.CoreRequest -> Unit
         }
     }
@@ -719,6 +722,7 @@ internal class GuestEngine(
         cancelStepJobs()
         clearCoreTransfer()
         round = message.round
+        StreamOverlayStore.clear()
         lastLaunchFailed = false
         liveSignal = CompletableDeferred()
         streamSignal = CompletableDeferred()
@@ -891,6 +895,28 @@ internal class GuestEngine(
         }
         streamReady = message
         streamSignal.complete(message)
+    }
+
+ /**
+ * the host's RetroArch overlay for this round. Stored for the
+ * viewer, which renders it only when the guest flag `overlay_26b` is on
+ * and the play page is usable — otherwise the 26a layout stands in.
+ * Anything for another session/round, or with no cfg, is ignored.
+ */
+    private fun handleStreamOverlay(message: LinkMsg.StreamOverlay) {
+        if (message.sessionId != offer?.sessionId || message.round != round) {
+            log("26b drop: stale session/round")
+            return
+        }
+        if (message.cfg.isBlank()) {
+            log("rejected stream_overlay: empty cfg")
+            return
+        }
+        StreamOverlayStore.publish(message.round, message)
+        val usable = runCatching {
+            com.gamebex.client.stream.guest.OverlayCfg.parse(message.cfg, message.name).mapped().usableForPlay
+        }.getOrDefault(false)
+        log("26b recv: ${message.name} cfg=${message.cfg.length}B images=${message.images.size} usable=$usable")
     }
 
  /** The guest closed its viewer while the host still streams; open it again. */

@@ -54,6 +54,16 @@ object TogetherRuntime {
             platform = TogetherPlatformImpl(app, prefs),
             streamHost = StreamShellClient.forApp(app),
             player2 = StreamPlayer2Impl.forApp(app),
+            hostFlag = com.gamebex.client.stream.StreamFlagPrefs(app).lookup(),
+            seedOverlayForCore = seed@{ core ->
+                val asset = com.gamebex.client.stream.p2.OverlaySeed.assetForCore(core) ?: return@seed null
+                val apk = com.gamebex.client.stream.p2.OverlaySeed.findRetroArchApk(app.packageManager) ?: return@seed null
+                @Suppress("DEPRECATION")
+                com.gamebex.client.stream.p2.OverlaySeed.seed(
+                    apk, asset,
+                    java.io.File(android.os.Environment.getExternalStorageDirectory(), "RetroArch"),
+                )
+            },
         )
     }
 }

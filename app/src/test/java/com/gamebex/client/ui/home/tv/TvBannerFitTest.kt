@@ -137,7 +137,7 @@ class TvBannerFitTest {
             "needs-bios" to CardState.NeedsBios(listOf("sega_101.bin")),
             "needs-emulator" to CardState.NeedsEmulator("Dolphin"),
             "needs-fix" to CardState.NeedsFix("Point it at your ROMs folder."),
-            "preparing" to CardState.Preparing,
+            "preparing" to CardState.Preparing(),
             "downloading" to CardState.Downloading(64L, 100L, 180L, paused = false, armed = false),
             "downloading-armed" to
                 CardState.Downloading(64L, 100L, 180L, paused = false, armed = true),

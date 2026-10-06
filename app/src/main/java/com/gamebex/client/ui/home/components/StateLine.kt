@@ -69,7 +69,7 @@ fun stateLineColor(state: CardState, line: String = ""): Color {
     }
     return when (state) {
         is CardState.Saved, is CardState.Played, is CardState.Added,
-        CardState.Preparing,
+        is CardState.Preparing,
         -> ConsoleColors.TextSecondary
         is CardState.NeedsBios, is CardState.NeedsEmulator, is CardState.NeedsFix,
         is CardState.NoRoom,

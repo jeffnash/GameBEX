@@ -5,6 +5,9 @@ import com.gamebex.client.data.PlayStates
 import com.gamebex.client.data.PlatformRegistry
 import com.gamebex.client.data.local.DownloadRecord
 import com.gamebex.client.data.local.GameEntity
+import com.gamebex.client.data.local.PrepProgress
+import com.gamebex.client.data.local.PrepProgressBus
+import com.gamebex.client.data.local.label
 import com.gamebex.client.net.DownloadEngine
 import com.gamebex.client.ui.LibSort
 import com.gamebex.client.ui.home.model.ArtKind
@@ -87,7 +90,7 @@ class HomeCardFactory(
         is PlayStates.Status.NeedsCore ->
             CardState.NeedsEmulator("the RetroArch ${CoreNames.display(status.core)} core")
         is PlayStates.Status.NeedsManual -> CardState.NeedsFix(status.note)
-        is PlayStates.Status.Preparing -> CardState.Preparing
+        is PlayStates.Status.Preparing -> CardState.Preparing()
         is PlayStates.Status.NeedsSpace -> CardState.NeedsFix(HomeCopy.needsSpace)
         is PlayStates.Status.NeedsVolume -> CardState.Unavailable(HomeCopy.needsVolume)
         is PlayStates.Status.Blocked -> CardState.Unsupported(status.reason)
@@ -125,7 +128,7 @@ class HomeCardFactory(
             // An ingest failure is a DownloadProblem; a clean ingest
             // is the file arriving (Preparing).
             DownloadEngine.ST_INGEST ->
-                if (snapshot.error.isNullOrBlank()) CardState.Preparing
+                if (snapshot.error.isNullOrBlank()) CardState.Preparing()
                 else CardState.DownloadProblem(problemText(snapshot, HomeCopy.downloadStopped), verify = false)
             else ->
                 CardState.DownloadProblem(problemText(snapshot, HomeCopy.downloadStopped), verify = false)
@@ -135,6 +138,31 @@ class HomeCardFactory(
         snapshot.error?.takeIf { it.isNotBlank() }
             ?: snapshot.note?.takeIf { it.isNotBlank() }
             ?: fallback
+
+    /**
+     * Overlay a live prep snapshot onto a Preparing card, in
+     * place — same pattern as the download byte-tick patch. A prep that
+     * finished (absent from the bus) keeps its card; the debounced
+     * rebuild re-derives the real state from the DB.
+     */
+    fun prepPatch(card: HomeCard, snap: PrepProgress, nowMs: Long = System.currentTimeMillis()): HomeCard {
+        val state = CardState.Preparing(
+            read = snap.bytesWritten,
+            total = snap.totalBytes,
+            phase = snap.phase.label,
+            stalled = PrepProgressBus.isStalled(snap, nowMs),
+        )
+        return card.copy(
+            state = state,
+            cardLine = HomeCopy.cardLine(state, card.system, nowMs),
+            primaryLabel = HomeCopy.primaryLabel(state),
+            tv = card.tv.copy(
+                stateKey = HomeCopy.tvStateKey(state, null, nowMs, card.system),
+                stateDetail = HomeCopy.tvStateDetail(state, null, nowMs),
+                factsLine = HomeCopy.tvFacts(state, card.system, null, null),
+            ),
+        )
+    }
 
     /** A library game card (RESUME / NEW / SEARCH_YOURS / SURPRISE). */
     fun localCard(
@@ -401,7 +429,7 @@ class HomeCardFactory(
         is CardState.NeedsBios, is CardState.NeedsEmulator, is CardState.NeedsFix,
         is CardState.Unsupported, is CardState.Unavailable,
         -> HomeAction.Go(HomeDestination.Game(gameId ?: 0))
-        CardState.Preparing, CardState.WaitingForConnection -> HomeAction.None
+        is CardState.Preparing, CardState.WaitingForConnection -> HomeAction.None
         is CardState.Downloading ->
             if (state.paused) HomeAction.ResumeDownload(downloadId ?: 0)
             else HomeAction.TogglePlayWhenReady(downloadId ?: 0)

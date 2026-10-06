@@ -1,5 +1,6 @@
 package com.gamebex.client.together.session
 
+import android.os.Environment
 import android.util.Log
 import com.gamebex.client.data.Emu
 import com.gamebex.client.data.local.GameEntity
@@ -41,12 +42,15 @@ import com.gamebex.client.stream.StreamCaps
 import com.gamebex.client.stream.StreamConfig
 import com.gamebex.client.stream.StreamDebug
 import com.gamebex.client.stream.StreamEmus
+import com.gamebex.client.stream.StreamFlags
 import com.gamebex.client.stream.StreamHost
 import com.gamebex.client.stream.StreamPlayer2
 import com.gamebex.client.stream.StreamStarted
 import com.gamebex.client.stream.StreamStatus
 import com.gamebex.client.stream.StreamToken
+import com.gamebex.client.stream.guest.HostOverlayBundle
 import com.gamebex.client.stream.proto.StreamWire
+import java.io.File
 import java.util.Collections
 import java.security.SecureRandom
 import java.util.concurrent.atomic.AtomicLong
@@ -77,6 +81,12 @@ private const val CORE_INSTALL_CANCELLED = "Core installation cancelled."
 /** STREAM: status polls (2 s apart) with no new guest input before the host is warned the guest went quiet. */
 private const val SILENT_POLLS = 2
 
+/** RetroArch's shared config dir; null when storage is unreachable. */
+private fun defaultOverlayConfigDir(): File? = runCatching {
+    @Suppress("DEPRECATION")
+    File(Environment.getExternalStorageDirectory(), "RetroArch").takeIf { it.isDirectory }
+}.getOrNull()
+
 /** The host half of the Play together session actor. */
 internal class HostEngine(
     private val transport: LinkTransport,
@@ -94,6 +104,14 @@ internal class HostEngine(
  /** a game's modes, best first. Tests pass their own. */
     private val modesFor: (GameEntity) -> List<TogetherMode> = TogetherSupport::modesFor,
     private val streamAudioOverride: () -> String? = { StreamDebug.prop("ra_audio") },
+ /** 26b, flag `overlay_26b` (default off): share the host's RetroArch overlay with the guest. */
+    private val overlay26bEnabled: () -> Boolean = { false },
+ /** RetroArch's shared config dir (`.../RetroArch`); null skips the overlay. Tests pass temp dirs. */
+    private val overlayConfigDir: () -> File? = { defaultOverlayConfigDir() },
+ /** seeds the core's overlay from the RA APK when RA configures none. Tests pass their own. */
+    private val seedOverlayForCore: (String?) -> File? = { null },
+ /** STREAM host flags: raw in-app value or null when unset. Tests pass their own. */
+    private val hostFlag: (String) -> String? = { null },
     private val controlOptions: () -> TogetherControlOptions = TogetherControlOptions::read,
     private val controlLog: (String) -> Unit = { Log.i("GameBEXControl", it) },
     private val monotonicNs: () -> Long = System::nanoTime,
@@ -1100,7 +1118,7 @@ internal class HostEngine(
         if (prepared is P2Prep.Failed) return StreamPrep(failure = EmuRouter.Outcome.Failed(prepared.text))
         val rsoundRequested = emu == Emu.RETROARCH && streamAudioOverride() != "opensl"
         val token = StreamToken.generate()
-        val started = streamHost.start(StreamConfig(token = token, guestAddress = guestAddress, rsound = rsoundRequested))
+        val started = streamHost.start(streamConfigForFlags(token, guestAddress, rsoundRequested, hostFlag))
         if (!started.ok) {
             return StreamPrep(failure = EmuRouter.Outcome.Failed(TogetherCopy.streamStartFailed(started.error)))
         }
@@ -1156,6 +1174,10 @@ internal class HostEngine(
                                         backend = input.backend,
                                     ),
                                 )
+ // the guest renders the host's own overlay when it can use it.
+                                hostOverlayMessage(game, input.backend, currentSession, input.round)?.let {
+                                    currentGuest.send(it)
+                                }
                             }
                         }
                     } catch (cancelled: CancellationException) {
@@ -1211,6 +1233,48 @@ internal class HostEngine(
                 message = message,
             )
         }
+    }
+
+ /**
+ * the host's active RetroArch overlay for the guest, or null when the
+ * flag is off, the host runs another emulator, or nothing is readable
+ * (then the guest falls back to 26a). Runs on IO: reads shared storage.
+ */
+    private fun hostOverlayMessage(
+        currentGame: GameEntity?,
+        backend: String,
+        sessionId: String,
+        round: Int,
+    ): LinkMsg.StreamOverlay? {
+        if (!overlay26bEnabled()) {
+            runCatching { android.util.Log.i("GameBEXTogether", "26b skip: flag off") }
+            return null
+        }
+        if (currentGame == null || backend != "retroarch") {
+            runCatching { android.util.Log.i("GameBEXTogether", "26b skip: game=$currentGame backend=$backend") }
+            return null
+        }
+        val configDir = overlayConfigDir() ?: run {
+            runCatching { android.util.Log.i("GameBEXTogether", "26b skip: no RA config dir") }
+            return null
+        }
+        val core = TogetherSupport.coreFor(currentGame, TogetherMode.RA_NETPLAY)
+ // A stock RetroArch configures no overlay: fall back to the
+ // seeded per-core cfg (idempotent — usually already on disk
+ // from session-config time) before giving up to 26a.
+        val msg = runCatching {
+            HostOverlayBundle.read(configDir, core, sessionId, round)
+                ?: runCatching { seedOverlayForCore(core) }
+                    .getOrNull()?.let { HostOverlayBundle.packFile(it, sessionId, round) }
+        }.getOrNull()
+        runCatching {
+            android.util.Log.i(
+                "GameBEXTogether",
+                if (msg == null) "26b skip: nothing packed core=$core"
+                else "26b send: core=$core cfg=${msg.cfg.length}B images=${msg.images.size}",
+            )
+        }
+        return msg
     }
 
     private fun handleHeadStart(input: Input.HeadStart) {
@@ -1720,3 +1784,26 @@ internal class HostEngine(
         runCatching { Log.w("GameBEXTogether", t.message, t) }
     }
 }
+
+/**
+ * Host Stream flags → [StreamConfig]. The shell-uid process cannot
+ * read app prefs, so every host-side flag travels in the config; the shell
+ * re-applies the adb prop on debug builds only. Pure for tests.
+ */
+internal fun streamConfigForFlags(
+    token: String,
+    guestAddress: String,
+    rsound: Boolean,
+    hostFlag: (String) -> String?,
+): StreamConfig = StreamConfig(
+    token = token,
+    guestAddress = guestAddress,
+    rsound = rsound,
+    level = hostFlag("start_level")?.toIntOrNull()?.takeIf { it in 0..3 } ?: 1,
+    queueDeadlineMs = hostFlag("queue_deadline_ms")?.toIntOrNull()?.takeIf { it in 0..40 } ?: 0,
+    latencyCc = hostFlag("latency_cc") == "1",
+    inputCs6 = hostFlag("input_cs6") == "1",
+    encoderFps = hostFlag("encoder_fps")?.toIntOrNull()?.takeIf { it == 50 } ?: 0,
+    keyframesOnRequest = StreamFlags.toggleOn("keyframes_on_request", hostFlag),
+    crop = hostFlag("stream_crop") == "1",
+)

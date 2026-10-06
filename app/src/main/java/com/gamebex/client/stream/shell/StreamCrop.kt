@@ -11,6 +11,7 @@ import android.opengl.GLES11Ext
 import android.opengl.EGLExt
 import android.util.Log
 import android.view.Surface
+import com.gamebex.client.stream.StreamConfig
 import com.gamebex.client.stream.StreamDebug
 import com.gamebex.client.stream.VideoLevel
 import java.nio.ByteBuffer
@@ -35,11 +36,21 @@ data class StreamCropOptions(val enabled: Boolean = false, val aspectNum: Int = 
         ): StreamCropOptions {
             if (!debug) return StreamCropOptions()
             if (prop("stream_crop") != "1") return StreamCropOptions()
-            val (num, den) = when (prop("stream_crop_aspect")) {
-                "16:9" -> 16 to 9
-                else -> 4 to 3
-            }
+            val (num, den) = aspectOf(prop("stream_crop_aspect"))
             return StreamCropOptions(true, num, den)
+        }
+
+        /** Shell entry: StreamConfig value with the adb override on debug builds. */
+        fun resolve(config: StreamConfig?): StreamCropOptions {
+            val enabled = shellFlag("stream_crop", config?.crop ?: false)
+            if (!enabled) return StreamCropOptions()
+            val (num, den) = aspectOf(shellString("stream_crop_aspect", config?.cropAspect ?: "4:3", setOf("4:3", "16:9")))
+            return StreamCropOptions(true, num, den)
+        }
+
+        private fun aspectOf(value: String?): IntArray = when (value) {
+            "16:9" -> intArrayOf(16, 9)
+            else -> intArrayOf(4, 3)
         }
     }
 }

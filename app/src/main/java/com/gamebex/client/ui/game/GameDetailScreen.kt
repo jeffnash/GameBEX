@@ -65,6 +65,7 @@ import com.gamebex.client.data.DownloadFile
 import com.gamebex.client.data.local.ArtStore
 import com.gamebex.client.data.local.DownloadRecord
 import com.gamebex.client.data.local.GameEntity
+import com.gamebex.client.data.local.PrepProgress
 import com.gamebex.client.ui.AssistActivity
 import com.gamebex.client.ui.LocalDetailViewModel
 import com.gamebex.client.ui.console.ConsoleColors
@@ -145,7 +146,9 @@ fun GameDetailScreen(
     val missingEmu by vm.missingEmu.collectAsState()
     val bios by vm.bios.collectAsState()
     val preparing by vm.preparing.collectAsState()
-    val prepBusy = preparing
+    val prepSnap by vm.prepProgress.collectAsState()
+    // The VM flag misses launch-time prep, which only shows on the progress bus.
+    val prepBusy = preparing || prepSnap != null
     val artStatus by vm.artStatus.collectAsState()
     val catalog by vm.catalog.collectAsState()
     val catalogDl by vm.catalogDl.collectAsState()
@@ -651,7 +654,7 @@ fun GameDetailScreen(
             val (stateText, stateColor) = ent?.let {
                 if (lp.playable.status is PlayStates.Status.Preparing && !prepBusy)
                     "Not prepared yet." to ConsoleColors.TextSecondary
-                else stateLine(lp, it)
+                else stateLine(lp, it, prepSnap)
             } ?: catalogStateLine(lp.playable.status, pres.platformLabel)
             if (coreFetch != null) {
                 CoreInstallStatus(coreFetch!!, Modifier.padding(top = g.x(6)))
@@ -1109,7 +1112,11 @@ private const val NOT_ON_PHONE_LINE = "Not on this phone"
 private const val NOT_ON_PHONE_CTA = "Download again"
 
 /** Human state line for the ready-state page. No package IDs, .so names, or paths. */
-private fun stateLine(lp: LocalPresentation, ent: GameEntity): Pair<String, Color> = when (val s = lp.playable.status) {
+private fun stateLine(
+    lp: LocalPresentation,
+    ent: GameEntity,
+    prepSnap: PrepProgress? = null,
+): Pair<String, Color> = when (val s = lp.playable.status) {
     // A tombstone reads as a download again, never "Storage volume is missing".
     is PlayStates.Status.Available -> NOT_ON_PHONE_LINE to ConsoleColors.Accent
     is PlayStates.Status.Ready,
@@ -1126,7 +1133,8 @@ private fun stateLine(lp: LocalPresentation, ent: GameEntity): Pair<String, Colo
         else "Missing BIOS: ${s.names.take(2).joinToString(", ")}${if (s.names.size > 2) "…" else ""}"
         ) to ConsoleColors.Warning
     is PlayStates.Status.NeedsManual -> s.note.ifBlank { "Needs a manual fix" } to ConsoleColors.Warning
-    is PlayStates.Status.Preparing -> "Preparing…" to ConsoleColors.TextSecondary
+    is PlayStates.Status.Preparing ->
+        (prepSnap?.displayLine(System.currentTimeMillis()) ?: "Preparing…") to ConsoleColors.TextSecondary
     is PlayStates.Status.NeedsVolume -> "Storage volume is missing" to ConsoleColors.Error
     is PlayStates.Status.NeedsSpace -> "Not enough free space" to ConsoleColors.Warning
     // Route reasons are internal notes; show plain copy instead.

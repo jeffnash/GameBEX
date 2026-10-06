@@ -36,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -53,6 +54,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gamebex.client.R
 import com.gamebex.client.data.PlatformRegistry
+import com.gamebex.client.data.local.PrepProgressBus
 import com.gamebex.client.net.DownloadEngine
 import com.gamebex.client.ui.console.ConsoleColors
 import com.gamebex.client.ui.console.ConsoleDesign
@@ -70,6 +72,7 @@ import com.gamebex.client.ui.console.rememberScreenFocus
 import com.gamebex.client.ui.console.rememberShelfState
 import com.gamebex.client.ui.console.screenFocus
 import com.gamebex.client.ui.presentation.relativeDayLabel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -234,13 +237,13 @@ private fun stateColor(status: String): Color = when (status) {
     else -> ConsoleColors.TextSecondary
 }
 
-// ---------- landscape screen ----------
-
 /** Design canvas x → content-box-local design px (rail is 96). */
 private fun cx(canvasX: Int): Int = canvasX - ConsoleDesign.RAIL_WIDTH.toInt()
 
 private const val ZONE_LIST = 0
 private const val ZONE_PANE = 1
+/** How often a live prep line is re-evaluated for "Still working…". */
+private const val PREP_TICK_MS = 5_000L
 
 @Composable
 internal fun ConsoleDownloadsScreen(
@@ -486,8 +489,22 @@ private fun Modifier.downloadRowChrome(
 @Composable
 private fun ActiveDownloadRow(row: DownloadRow, focused: Boolean, selected: Boolean, onClick: () -> Unit) {
     val g = LocalConsoleGeometry.current
-    val pct = downloadPercent(row.read, row.total)
-    val fraction = if (row.total > 0) (row.read.toFloat() / row.total).coerceIn(0f, 1f) else 0f
+    // A finished download whose game is still prepping shows the
+    // live prep line ("Extracting archive… 31%") instead of "Finishing…".
+    val preps by PrepProgressBus.byGame.collectAsStateWithLifecycle()
+    val prep = remember(preps) { PrepProgressBus.forDownload(row.id) }
+    var prepNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(prep != null) {
+        while (prep != null) {
+            delay(PREP_TICK_MS)
+            prepNow = System.currentTimeMillis()
+        }
+    }
+    val prepPct = prep?.let { PrepProgressBus.percentOf(it) }
+    val stateLabel = prep?.displayLine(prepNow) ?: downloadStateLabel(row.status)
+    val pct = prepPct ?: downloadPercent(row.read, row.total)
+    val fraction = prepPct?.let { it / 100f }
+        ?: if (row.total > 0) (row.read.toFloat() / row.total).coerceIn(0f, 1f) else 0f
     val complete = row.status == DownloadEngine.ST_INGEST || (row.total > 0 && row.read >= row.total)
     Column(
         modifier = Modifier
@@ -518,7 +535,7 @@ private fun ActiveDownloadRow(row: DownloadRow, focused: Boolean, selected: Bool
                 horizontalAlignment = Alignment.End,
             ) {
                 Text(
-                    downloadStateLabel(row.status), color = stateColor(row.status),
+                    stateLabel, color = stateColor(row.status),
                     fontSize = g.tMin(15), lineHeight = g.t(19),
                     fontWeight = if (row.status in ATTENTION) FontWeight.Bold else FontWeight.Normal,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End,
@@ -716,7 +733,11 @@ private fun SelectedJob(row: DownloadRow) {
         modifier = Modifier.padding(top = g.x(12)),
     )
     val pct = downloadPercent(row.read, row.total)
-    val progress = when {
+    val preps by PrepProgressBus.byGame.collectAsStateWithLifecycle()
+    val prepLine = remember(preps) {
+        PrepProgressBus.forDownload(row.id)?.displayLine(System.currentTimeMillis())
+    }
+    val progress = prepLine ?: when {
         row.status == DownloadEngine.ST_DONE -> row.total.takeIf { it > 0 }?.let { formatSize(it) }
         row.total > 0 -> "${formatSize(row.read)} of ${formatSize(row.total)}" + (pct?.let { " · $it%" } ?: "")
         row.read > 0 -> formatSize(row.read)

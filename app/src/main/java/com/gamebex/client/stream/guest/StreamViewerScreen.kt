@@ -22,8 +22,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -83,9 +89,15 @@ fun StreamViewerScreen(
     touchViewport: TouchViewport? = null,
     onTouchState: ((PadState, Long) -> Unit)? = null,
     onTouchMenu: () -> Unit = {},
+    useHostOverlay: Boolean = false,
+    /** The Touch controls page writes through these; the activity persists them per layout. */
+    onTouchPrefsChange: (TouchPrefs) -> Unit = {},
+    onResetTouchPrefs: () -> Unit = {},
 ) {
     var menu by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf(true) }
+    var touchPage by remember { mutableStateOf(false) }
+    var effectiveSize by remember { mutableStateOf<Int?>(null) }
     val surfaceCallback by rememberUpdatedState(onSurface)
     val releaseTouchCallback by rememberUpdatedState(onReleaseTouchInput)
     val overlays = viewerOverlays(ui.status, ui.waitingForVideo, hudEnabled, touchPadHidden, physicalControllerConnected)
@@ -136,7 +148,7 @@ fun StreamViewerScreen(
             )
         }
         if (overlays.touchPad) {
-            StreamTouchPad(
+            StreamOverlayPad(
                 onTouchKey, onTouchAxes, onReleaseTouchInput,
                 unbufferedInput = unbufferedInput,
                 profile = touchProfile,
@@ -145,6 +157,8 @@ fun StreamViewerScreen(
                 onTouchState = onTouchState,
                 menuOpen = menu,
                 onMenu = onTouchMenu,
+                useHostOverlay = useHostOverlay,
+                onEffectiveSize = { effectiveSize = it },
             )
         }
         if (loading) {
@@ -219,7 +233,111 @@ fun StreamViewerScreen(
                             Text(if (ui.showStats) TogetherCopy.hideStats else TogetherCopy.showStats, color = Color.White)
                         }
                     }
+                    if (overlays.touchPad) {
+                        OutlinedButton(onClick = {
+                            touchPage = true
+                            menu = false
+                        }, modifier = Modifier.testTag(TAG_TOUCH_PAGE_OPEN)) {
+                            Text("Touch controls", color = Color.White)
+                        }
+                    }
                 }
+            }
+            if (touchPage && controlsVisible) {
+                TouchControlsPage(
+                    prefs = touchPrefs,
+                    effectiveSize = effectiveSize,
+                    onChange = onTouchPrefsChange,
+                    onReset = onResetTouchPrefs,
+                    onClose = { touchPage = false },
+                    modifier = Modifier.align(Alignment.Center),
+                )
+            }
+        }
+    }
+}
+
+private const val TAG_TOUCH_PAGE_OPEN: String = "stream-menu-touch"
+
+/**
+ * The Touch controls settings page (viewer Menu → Touch controls). The size
+ * row shows the effective (clamped) value when the pad had to shrink the
+ * requested size to keep hit areas apart.
+ */
+@Composable
+private fun TouchControlsPage(
+    prefs: TouchPrefs,
+    effectiveSize: Int?,
+    onChange: (TouchPrefs) -> Unit,
+    onReset: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val valid = prefs.validated()
+    Box(
+        modifier.fillMaxSize()
+            .background(Color(0xD0000000))
+            .clickable(onClick = {})
+            .testTag("touch-controls-page"),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier.width(420.dp)
+                .background(ConsoleColors.Background, RoundedCornerShape(12.dp))
+                .padding(20.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Touch controls", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            val eff = effectiveSize ?: valid.sizePercent
+            Text(
+                if (eff != valid.sizePercent) "Size: ${valid.sizePercent}% (using $eff% — clamped to avoid overlap)"
+                else "Size: ${valid.sizePercent}%",
+                color = Color.White, fontSize = 14.sp,
+                modifier = Modifier.testTag("touch-size-value"),
+            )
+            Slider(
+                value = valid.sizePercent.toFloat(),
+                onValueChange = { onChange(valid.copy(sizePercent = it.toInt())) },
+                valueRange = TouchPrefs.SIZE_MIN.toFloat()..TouchPrefs.SIZE_MAX.toFloat(),
+                steps = (TouchPrefs.SIZE_MAX - TouchPrefs.SIZE_MIN) / TouchPrefs.SIZE_STEP - 1,
+                modifier = Modifier.fillMaxWidth().testTag("touch-size-slider"),
+            )
+            Text(
+                "Opacity: ${valid.opacityPercent}%",
+                color = Color.White, fontSize = 14.sp,
+                modifier = Modifier.testTag("touch-opacity-value"),
+            )
+            Slider(
+                value = valid.opacityPercent.toFloat(),
+                onValueChange = { onChange(valid.copy(opacityPercent = it.toInt())) },
+                valueRange = TouchPrefs.OPACITY_MIN.toFloat()..TouchPrefs.OPACITY_MAX.toFloat(),
+                steps = (TouchPrefs.OPACITY_MAX - TouchPrefs.OPACITY_MIN) / TouchPrefs.OPACITY_STEP - 1,
+                modifier = Modifier.fillMaxWidth().testTag("touch-opacity-slider"),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        onChange(valid.copy(stickMode = if (valid.stickMode == TouchStickMode.FIXED) TouchStickMode.FLOATING else TouchStickMode.FIXED))
+                    },
+                    modifier = Modifier.testTag("touch-stick-mode"),
+                ) { Text("Stick: ${valid.stickMode.name.lowercase().replaceFirstChar { it.uppercase() }}", color = Color.White) }
+                OutlinedButton(
+                    onClick = { onChange(valid.copy(swapSides = !valid.swapSides)) },
+                    modifier = Modifier.testTag("touch-swap"),
+                ) { Text(if (valid.swapSides) "Sides: swapped" else "Sides: normal", color = Color.White) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        onChange(valid.copy(haptics = if (valid.haptics == TouchHaptics.OFF) TouchHaptics.LIGHT else TouchHaptics.OFF))
+                    },
+                    modifier = Modifier.testTag("touch-haptics"),
+                ) { Text("Haptics: ${if (valid.haptics == TouchHaptics.OFF) "Off" else "Light"}", color = Color.White) }
+                OutlinedButton(onClick = onReset, modifier = Modifier.testTag("touch-reset")) {
+                    Text("Reset", color = Color.White)
+                }
+                Button(onClick = onClose, modifier = Modifier.testTag("touch-close")) { Text("Done") }
             }
         }
     }

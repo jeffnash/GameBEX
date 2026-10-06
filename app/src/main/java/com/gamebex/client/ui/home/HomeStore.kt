@@ -11,6 +11,8 @@ import com.gamebex.client.data.local.GameEntity
 import com.gamebex.client.data.local.LibraryDb
 import com.gamebex.client.data.local.LibraryScanner
 import com.gamebex.client.data.local.PrepPipeline
+import com.gamebex.client.data.local.PrepProgress
+import com.gamebex.client.data.local.PrepProgressBus
 import com.gamebex.client.data.local.RomStore
 import com.gamebex.client.net.DownloadEngine
 import com.gamebex.client.ui.UserErrors
@@ -59,6 +61,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -233,6 +236,28 @@ class HomeStore internal constructor(
                 }
             }
         }
+        launchTarget.launch {
+ // Live prep bytes patch Preparing cards in place.
+ // The 5s tick also flips a quiet prep to "Still working…"
+ // without waiting for its next byte report.
+            combine(PrepProgressBus.byGame, prepTick()) { states, _ -> states }
+                .collect { states ->
+                    try {
+                        patchPrep(states)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        logW(TAG, "prep patch failed", e)
+                    }
+                }
+        }
+    }
+
+    private fun prepTick(): Flow<Unit> = flow {
+        while (true) {
+            emit(Unit)
+            delay(PREP_TICK_MS)
+        }
     }
 
     private fun dataFlow(): Flow<DataInput> = combine(
@@ -376,6 +401,33 @@ class HomeStore internal constructor(
                 if (section.group != HomeGroup.DOWNLOADING) return@map section
                 section.copy(cards = section.cards.map { card ->
  // position is assigned by HomeGrouping at assembly (TV channel = position + 1).
+                    patched[card.key]?.copy(position = card.position) ?: card
+                })
+            })
+        }
+    }
+
+ /**
+ * Live prep snapshots patch Preparing cards in place, same
+ * as the download byte-tick patch. Only cards whose game is on the
+ * bus and still Preparing are touched; a finished or failed prep is
+ * re-derived by the debounced rebuild (FAILED -> NeedsFix w/ Retry).
+ */
+    private suspend fun patchPrep(states: Map<Long, PrepProgress>) {
+        if (states.isEmpty()) return
+        val targets = _model.value.cards.filter { card ->
+            card.state is CardState.Preparing && card.gameId != null && states.containsKey(card.gameId)
+        }
+        if (targets.isEmpty()) return
+        val nowMs = System.currentTimeMillis()
+        val patched = withContext(io) {
+            targets.associate { card ->
+                card.key to factory.prepPatch(card, states.getValue(card.gameId!!), nowMs)
+            }
+        }
+        _model.update { cur ->
+            cur.copy(sections = cur.sections.map { section ->
+                section.copy(cards = section.cards.map { card ->
                     patched[card.key]?.copy(position = card.position) ?: card
                 })
             })
@@ -655,6 +707,8 @@ class HomeStore internal constructor(
 
  /** backoff before restarting a failed pipeline. */
         private const val PIPELINE_RESTART_MS = 500L
+ /** Re-evaluate live preps this often for "Still working…". */
+        private const val PREP_TICK_MS = 5_000L
         private const val SITE_DEBOUNCE_MS = 400L
         private const val SIZE_LOOKUPS = 6
 

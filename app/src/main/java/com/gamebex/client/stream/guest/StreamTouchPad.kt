@@ -75,6 +75,8 @@ internal fun StreamTouchPad(
     onTouchState: ((PadState, Long) -> Unit)? = null,
     menuOpen: Boolean = false,
     onMenu: () -> Unit = {},
+    /** Reports the clamped size percent for the Touch controls page. */
+    onEffectiveSize: (Int) -> Unit = {},
 ) {
     val keyCallback by rememberUpdatedState(onTouchKey)
     val axesCallback by rememberUpdatedState(onTouchAxes)
@@ -113,9 +115,18 @@ internal fun StreamTouchPad(
         val density = LocalDensity.current
         val safeWidthPx = with(density) { maxWidth.toPx() }
         val safeHeightPx = with(density) { maxHeight.toPx() }
-        val resolved = remember(definition, safeWidthPx, safeHeightPx, effectivePrefs, viewport, profile) {
-            resolveTouchLayout(
+        val resolvedSize = remember(definition, safeWidthPx, safeHeightPx, effectivePrefs, viewport, profile) {
+            effectiveTouchSizePercent(
                 definition, safeWidthPx, safeHeightPx, density.density, effectivePrefs,
+                viewport ?: profile?.viewport,
+            )
+        }
+        val sizeCallback by rememberUpdatedState(onEffectiveSize)
+        LaunchedEffect(resolvedSize) { sizeCallback(resolvedSize) }
+        val geometryPrefs = remember(effectivePrefs, resolvedSize) { effectivePrefs.copy(sizePercent = resolvedSize) }
+        val resolved = remember(definition, safeWidthPx, safeHeightPx, geometryPrefs, viewport, profile) {
+            resolveTouchLayout(
+                definition, safeWidthPx, safeHeightPx, density.density, geometryPrefs,
                 viewport ?: profile?.viewport,
             )
         }

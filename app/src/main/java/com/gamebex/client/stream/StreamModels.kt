@@ -11,17 +11,25 @@ enum class StreamError { SHELL_UNAVAILABLE, OLD_ANDROID, DISPLAY_CAPTURE, ENCODE
 /** What the host app asks the shell process to run (IStreamShell.start, as JSON). */
 @Serializable
 data class StreamConfig(
- /** 32 lower-case hex characters ([StreamToken]). */
+    /** 32 lower-case hex characters ([StreamToken]). */
     val token: String,
- /** The joined guest's IPv4; media and input are accepted only from it. */
+    /** The joined guest's IPv4; media and input are accepted only from it. */
     val guestAddress: String,
     val mediaPort: Int = StreamCaps.MEDIA_PORT,
     val inputPort: Int = StreamCaps.INPUT_PORT,
- /** Index into [StreamCaps.LEVELS] to start at: level 1 on these phones (early check V-2). */
+    /** Index into [StreamCaps.LEVELS] to start at. */
     val level: Int = 1,
     val audio: Boolean = true,
     val appCapture: Boolean = true,
     val rsound: Boolean = false,
+    /** Host Stream flags: resolved in-app values; the shell prefers the adb prop on debug builds. */
+    val queueDeadlineMs: Int = 0,
+    val latencyCc: Boolean = false,
+    val inputCs6: Boolean = false,
+    val encoderFps: Int = 0,
+    val keyframesOnRequest: Boolean = false,
+    val crop: Boolean = false,
+    val cropAspect: String = "4:3",
 )
 
 /** Result of IStreamShell.start. Ports are the ones really bound (the preferred ones may be taken). */
@@ -33,10 +41,10 @@ data class StreamStarted(
     val width: Int = 0,
     val height: Int = 0,
     val audio: Boolean = false,
- /** "uhid" or "hid-tool". */
+    /** "uhid" or "hid-tool". */
     val padBackend: String? = null,
     val error: StreamError? = null,
- /** Shell-side detail for logs; never shown to people. */
+    /** Shell-side detail for logs; never shown to people. */
     val detail: String? = null,
     val rsound: Boolean = false,
 )
@@ -94,9 +102,9 @@ data class StreamEndpoint(
     val audio: Boolean,
     val hostName: String,
     val audioTimestampOrigin: String = "capture",
- /** PlatformRegistry folder of the hosted game; "" = unknown (generic pad). */
+    /** PlatformRegistry folder of the hosted game; "" = unknown (generic pad). */
     val system: String = "",
- /** Actual host emulator backend; "" = unknown (generic pad). */
+    /** Actual host emulator backend; "" = unknown (generic pad). */
     val backend: String = "",
 )
 
@@ -131,7 +139,7 @@ object StreamToken {
         return ByteArray(16) { i -> token.substring(i * 2, i * 2 + 2).toInt(16).toByte() }
     }
 
- /** First 8 token bytes as a big-endian long: the key every input packet carries. */
+    /** First 8 token bytes as a big-endian long: the key every input packet carries. */
     fun key(token: String): Long {
         val b = bytes(token)
         var k = 0L

@@ -19,6 +19,8 @@
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <!-- Stream: the viewer holds a low-latency Wi-Fi lock while it is in front. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Stream: optional touch-pad haptics, off by default. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- Package visibility for emulator presence checks + intent resolution. -->
     <queries>

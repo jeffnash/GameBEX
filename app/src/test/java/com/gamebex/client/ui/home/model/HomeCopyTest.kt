@@ -166,10 +166,32 @@ class HomeCopyTest {
 
     @Test
     fun preparingRowIsDisabled() = assertRow(
-        CardState.Preparing, gc,
+        CardState.Preparing(), gc,
         "GC · preparing…", "PREPARING",
         "Unpacking and checking the files.",
         "Preparing…", ButtonTone.NEUTRAL, TvTone.NORMAL,
+    )
+
+    @Test
+    fun preparingRowShowsLiveBytes() = assertRow(
+        CardState.Preparing(
+            read = 312L * HomeCopy.MB, total = 996L * HomeCopy.MB,
+            phase = "Extracting archive",
+        ), gc,
+        "GC · Extracting archive… 312 of 996 MB · 31%", "PREPARING",
+        "Extracting archive",
+        "Preparing…", ButtonTone.NEUTRAL, TvTone.NORMAL,
+    )
+
+    @Test
+    fun stalledPreparingRowSaysStillWorking() = assertRow(
+        CardState.Preparing(
+            read = 312L * HomeCopy.MB, total = 996L * HomeCopy.MB,
+            phase = "Extracting archive", stalled = true,
+        ), gc,
+        "GC · Still working… 312 of 996 MB · 31%", "STILL WORKING",
+        "Extracting archive",
+        "Still working…", ButtonTone.NEUTRAL, TvTone.NORMAL,
     )
 
     @Test

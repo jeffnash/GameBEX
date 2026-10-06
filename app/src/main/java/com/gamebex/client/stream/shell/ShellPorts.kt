@@ -188,6 +188,7 @@ interface ShellComponents {
     fun openPad(): VirtualPad?
 
     fun videoSource(): VideoSource
+    fun videoSource(config: StreamConfig): VideoSource = videoSource()
 
     /** Null when this Android version can't capture playback. */
     fun audioSource(): AudioSource?

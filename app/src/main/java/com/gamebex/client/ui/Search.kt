@@ -51,11 +51,23 @@ fun searchResultKeys(results: List<RomEntry>): List<String> {
 /**
  * Narrows a result page to [platformId] (null = every system). Results
  * with no known system stay, so a source that ignores the search's platform
- * input still narrows without hiding unlabeled games. Order is kept. Pure.
+ * input still narrows without hiding unlabeled games. Order is kept.
  */
 fun filterSearchBySystem(entries: List<RomEntry>, platformId: String?): List<RomEntry> =
     if (platformId == null) entries
     else entries.filter { it.platformId == null || it.platformId == platformId }
+
+/** Page budget when the source ignores the platform input. */
+const val SYSTEM_SEARCH_MAX_PAGES: Int = 3
+const val SYSTEM_SEARCH_MAX_MATCHES: Int = 30
+
+/**
+ * True when a result page shows the source ignored the platform input: at
+ * least one labeled item belongs to another system. Unlabeled items can't
+ * tell (they stay under [filterSearchBySystem]), so they don't count.
+ */
+fun searchPageIgnoresSystem(items: List<RomEntry>, platformId: String): Boolean =
+    items.any { it.platformId != null && it.platformId != platformId }
 
 /** One search request: equal inputs never fetch twice in a row. */
 private data class SearchInput(
@@ -185,7 +197,27 @@ class SearchViewModel(private val sources: SourceAccess, private val saved: Save
                     val source = withContext(Dispatchers.IO) { sources.open(sel.id, sel.revision) }
                     if (gen != searchGen || currentSourceId != sel.id) return@collectLatest
                     _sourceName.value = source.name
-                    val raw = withContext(Dispatchers.IO) { source.search(q, sys).items }
+                    val first = withContext(Dispatchers.IO) { source.search(q, sys) }
+                    if (gen != searchGen || currentSourceId != sel.id) return@collectLatest
+                    // A source that ignores the platform input gets
+                    // its further pages fetched (bounded) so the system chip
+                    // narrows more than the first page.
+                    val raw = if (sys == null || !searchPageIgnoresSystem(first.items, sys)) {
+                        first.items
+                    } else {
+                        val matches = filterSearchBySystem(first.items, sys).toMutableList()
+                        var cursor = first.next
+                        var pages = 1
+                        while (cursor != null && pages < SYSTEM_SEARCH_MAX_PAGES && matches.size < SYSTEM_SEARCH_MAX_MATCHES) {
+                            if (gen != searchGen || currentSourceId != sel.id) return@collectLatest
+                            val page = withContext(Dispatchers.IO) { source.search(q, sys, cursor) }
+                            if (gen != searchGen || currentSourceId != sel.id) return@collectLatest
+                            matches += filterSearchBySystem(page.items, sys)
+                            cursor = page.next
+                            pages++
+                        }
+                        matches.distinctBy { it.key }
+                    }
                     if (gen != searchGen || currentSourceId != sel.id) return@collectLatest
                     _results.value = rankSearchResults(q, filterSearchBySystem(raw, sys))
                 } catch (e: CancellationException) {

@@ -34,6 +34,11 @@ object StreamCaps {
     )
     const val MIN_BITRATE: Int = 1_500_000
     const val I_FRAME_INTERVAL_S: Int = 10
+ /**
+ * KEY_I_FRAME_INTERVAL for keyframes-on-request. 0 would make every frame an
+ * I-frame; no session lasts 24 h, so IDRs come only at startup and on request.
+ */
+    const val KEYFRAMES_ON_REQUEST_INTERVAL_S: Int = 86_400
     const val REPEAT_FRAME_US: Long = 100_000L
 
  /** Encoded frames the host may queue before it drops to the next keyframe. */
@@ -72,7 +77,7 @@ object StreamCaps {
     const val SPS_FIXUP: Boolean = true
 
  /** Bump when IStreamShell or the shell code changes so Shizuku restarts the service. */
-    const val SHELL_SERVICE_VERSION: Int = 31
+    const val SHELL_SERVICE_VERSION: Int = 32
 
  /** Dolphin's index for the only device named [PAD_NAME]. */
     const val DOLPHIN_DEVICE_INDEX: Int = 0

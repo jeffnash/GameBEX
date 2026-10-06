@@ -47,6 +47,14 @@ object RetroCoreProbe {
         false
     }
 
+    /** RetroArch's version code, or 0 when it isn't installed (auto-hide gate). */
+    fun versionCode(ctx: Context): Long = try {
+        val info = ctx.packageManager.getPackageInfo(RA_PKG, 0)
+        if (android.os.Build.VERSION.SDK_INT >= 28) info.longVersionCode else @Suppress("DEPRECATION") info.versionCode.toLong()
+    } catch (_: PackageManager.NameNotFoundException) {
+        0L
+    }
+
     /**
      * Only an accessible directory listing proves the setup folders absent.
      * File.exists() on another app's inaccessible private directory says
