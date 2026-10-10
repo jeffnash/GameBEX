@@ -39,7 +39,12 @@ object NoStreamHost : StreamHost {
 /** How player 2 gets bound in the host's emulator. */
 interface StreamPlayer2 {
     /** Prepares [emu]'s player-2 binding for [game] before the host launch. Never throws. */
-    suspend fun prepare(game: GameEntity, emu: Emu, rsoundReady: Boolean = false): P2Prep
+    suspend fun prepare(
+        game: GameEntity,
+        emu: Emu,
+        rsoundReady: Boolean = false,
+        p2SlotMode: com.gamebex.client.stream.p2.P2SlotMode = com.gamebex.client.stream.p2.P2SlotMode.OFF,
+    ): P2Prep
 
     /** Puts back everything [prepare] changed. Idempotent; also runs after a crash. */
     suspend fun restore(): Boolean
@@ -47,7 +52,7 @@ interface StreamPlayer2 {
 
 /** Default for builds and tests without player-2 binding: every emulator gets a plain refusal. */
 object NoStreamPlayer2 : StreamPlayer2 {
-    override suspend fun prepare(game: GameEntity, emu: Emu, rsoundReady: Boolean): P2Prep = P2Prep.Failed(com.gamebex.client.together.TogetherCopy.streamUnavailable)
+    override suspend fun prepare(game: GameEntity, emu: Emu, rsoundReady: Boolean, p2SlotMode: com.gamebex.client.stream.p2.P2SlotMode): P2Prep = P2Prep.Failed(com.gamebex.client.together.TogetherCopy.streamUnavailable)
     override suspend fun restore(): Boolean = true
 }
 
@@ -60,6 +65,12 @@ sealed interface P2Prep {
 
     /** GameBEX can't write this emulator's bindings; show these steps (NetherSX2). */
     data class Guide(val lines: List<String>) : P2Prep
+
+    /**
+     * The emulator has no second controller on one phone (single-system
+     * portables, mouse/keypad machines); the guest pad stays idle.
+     */
+    data object NoSecondPad : P2Prep
 
     data class Failed(val text: String) : P2Prep
 }

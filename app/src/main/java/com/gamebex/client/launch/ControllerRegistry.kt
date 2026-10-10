@@ -73,7 +73,8 @@ object ControllerRegistry {
      */
     fun pads(devices: List<DeviceInfo>): List<Pad> {
         val candidates = devices.filter {
-            !it.isVirtual && it.name != StreamCaps.PAD_NAME && ControllerProbe.isGamepadSource(it.sources)
+            !it.isVirtual && it.name != StreamCaps.PAD_NAME && it.name != StreamCaps.PLACEHOLDER_PAD_NAME &&
+                ControllerProbe.isGamepadSource(it.sources)
         }
         val plain = candidates.filterNot { isSubDevice(it.name) }.map { it.name.trim().lowercase() }.toSet()
         return candidates

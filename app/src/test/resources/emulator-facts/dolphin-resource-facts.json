@@ -1,0 +1,1142 @@
+{
+  "apk_sha256": "42dca296ecded69c19bd049034edd90a7ff5c7ba1df742210bd7cf8e4e26392e",
+  "runtime_read_required": true,
+  "integer_resources": [
+    {
+      "resource": "integer/BUTTON_A_PORTRAIT_X",
+      "observed_values": [
+        "      () 638",
+        "    resource 0x7f0b0001 integer/BUTTON_A_PORTRAIT_Y"
+      ],
+      "source_line": 9291
+    },
+    {
+      "resource": "integer/BUTTON_A_PORTRAIT_Y",
+      "observed_values": [
+        "      () 534",
+        "    resource 0x7f0b0002 integer/BUTTON_A_X"
+      ],
+      "source_line": 9293
+    },
+    {
+      "resource": "integer/BUTTON_A_X",
+      "observed_values": [
+        "      () 865",
+        "    resource 0x7f0b0003 integer/BUTTON_A_Y"
+      ],
+      "source_line": 9295
+    },
+    {
+      "resource": "integer/BUTTON_A_Y",
+      "observed_values": [
+        "      () 652",
+        "    resource 0x7f0b0004 integer/BUTTON_B_PORTRAIT_X"
+      ],
+      "source_line": 9297
+    },
+    {
+      "resource": "integer/BUTTON_B_PORTRAIT_X",
+      "observed_values": [
+        "      () 560",
+        "    resource 0x7f0b0005 integer/BUTTON_B_PORTRAIT_Y"
+      ],
+      "source_line": 9299
+    },
+    {
+      "resource": "integer/BUTTON_B_PORTRAIT_Y",
+      "observed_values": [
+        "      () 648",
+        "    resource 0x7f0b0006 integer/BUTTON_B_X"
+      ],
+      "source_line": 9301
+    },
+    {
+      "resource": "integer/BUTTON_B_X",
+      "observed_values": [
+        "      () 785",
+        "    resource 0x7f0b0007 integer/BUTTON_B_Y"
+      ],
+      "source_line": 9303
+    },
+    {
+      "resource": "integer/BUTTON_B_Y",
+      "observed_values": [
+        "      () 524",
+        "    resource 0x7f0b0008 integer/BUTTON_START_PORTRAIT_X"
+      ],
+      "source_line": 9305
+    },
+    {
+      "resource": "integer/BUTTON_START_PORTRAIT_X",
+      "observed_values": [
+        "      () 472",
+        "    resource 0x7f0b0009 integer/BUTTON_START_PORTRAIT_Y"
+      ],
+      "source_line": 9307
+    },
+    {
+      "resource": "integer/BUTTON_START_PORTRAIT_Y",
+      "observed_values": [
+        "      () 789",
+        "    resource 0x7f0b000a integer/BUTTON_START_X"
+      ],
+      "source_line": 9309
+    },
+    {
+      "resource": "integer/BUTTON_START_X",
+      "observed_values": [
+        "      () 506",
+        "    resource 0x7f0b000b integer/BUTTON_START_Y"
+      ],
+      "source_line": 9311
+    },
+    {
+      "resource": "integer/BUTTON_START_Y",
+      "observed_values": [
+        "      () 818",
+        "    resource 0x7f0b000c integer/BUTTON_UP_PORTRAIT_X"
+      ],
+      "source_line": 9313
+    },
+    {
+      "resource": "integer/BUTTON_UP_PORTRAIT_X",
+      "observed_values": [
+        "      () 44",
+        "    resource 0x7f0b000d integer/BUTTON_UP_PORTRAIT_Y"
+      ],
+      "source_line": 9315
+    },
+    {
+      "resource": "integer/BUTTON_UP_PORTRAIT_Y",
+      "observed_values": [
+        "      () 448",
+        "    resource 0x7f0b000e integer/BUTTON_UP_X"
+      ],
+      "source_line": 9317
+    },
+    {
+      "resource": "integer/BUTTON_UP_X",
+      "observed_values": [
+        "      () 222",
+        "    resource 0x7f0b000f integer/BUTTON_UP_Y"
+      ],
+      "source_line": 9319
+    },
+    {
+      "resource": "integer/BUTTON_UP_Y",
+      "observed_values": [
+        "      () 629",
+        "    resource 0x7f0b0010 integer/BUTTON_X_PORTRAIT_X"
+      ],
+      "source_line": 9321
+    },
+    {
+      "resource": "integer/BUTTON_X_PORTRAIT_X",
+      "observed_values": [
+        "      () 795",
+        "    resource 0x7f0b0011 integer/BUTTON_X_PORTRAIT_Y"
+      ],
+      "source_line": 9323
+    },
+    {
+      "resource": "integer/BUTTON_X_PORTRAIT_Y",
+      "observed_values": [
+        "      () 519",
+        "    resource 0x7f0b0012 integer/BUTTON_X_X"
+      ],
+      "source_line": 9325
+    },
+    {
+      "resource": "integer/BUTTON_X_X",
+      "observed_values": [
+        "      () 896",
+        "    resource 0x7f0b0013 integer/BUTTON_X_Y"
+      ],
+      "source_line": 9327
+    },
+    {
+      "resource": "integer/BUTTON_X_Y",
+      "observed_values": [
+        "      () 388",
+        "    resource 0x7f0b0014 integer/BUTTON_Y_PORTRAIT_X"
+      ],
+      "source_line": 9329
+    },
+    {
+      "resource": "integer/BUTTON_Y_PORTRAIT_X",
+      "observed_values": [
+        "      () 594",
+        "    resource 0x7f0b0015 integer/BUTTON_Y_PORTRAIT_Y"
+      ],
+      "source_line": 9331
+    },
+    {
+      "resource": "integer/BUTTON_Y_PORTRAIT_Y",
+      "observed_values": [
+        "      () 463",
+        "    resource 0x7f0b0016 integer/BUTTON_Y_X"
+      ],
+      "source_line": 9333
+    },
+    {
+      "resource": "integer/BUTTON_Y_X",
+      "observed_values": [
+        "      () 784",
+        "    resource 0x7f0b0017 integer/BUTTON_Y_Y"
+      ],
+      "source_line": 9335
+    },
+    {
+      "resource": "integer/BUTTON_Y_Y",
+      "observed_values": [
+        "      () 297",
+        "    resource 0x7f0b0018 integer/BUTTON_Z_PORTRAIT_X"
+      ],
+      "source_line": 9337
+    },
+    {
+      "resource": "integer/BUTTON_Z_PORTRAIT_X",
+      "observed_values": [
+        "      () 357",
+        "    resource 0x7f0b0019 integer/BUTTON_Z_PORTRAIT_Y"
+      ],
+      "source_line": 9339
+    },
+    {
+      "resource": "integer/BUTTON_Z_PORTRAIT_Y",
+      "observed_values": [
+        "      () 560",
+        "    resource 0x7f0b001a integer/BUTTON_Z_X"
+      ],
+      "source_line": 9341
+    },
+    {
+      "resource": "integer/BUTTON_Z_X",
+      "observed_values": [
+        "      () 131",
+        "    resource 0x7f0b001b integer/BUTTON_Z_Y"
+      ],
+      "source_line": 9343
+    },
+    {
+      "resource": "integer/BUTTON_Z_Y",
+      "observed_values": [
+        "      () 431",
+        "    resource 0x7f0b001c integer/CLASSIC_BUTTON_A_PORTRAIT_X"
+      ],
+      "source_line": 9345
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_A_PORTRAIT_X",
+      "observed_values": [
+        "      () 820",
+        "    resource 0x7f0b001d integer/CLASSIC_BUTTON_A_PORTRAIT_Y"
+      ],
+      "source_line": 9347
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_A_PORTRAIT_Y",
+      "observed_values": [
+        "      () 481",
+        "    resource 0x7f0b001e integer/CLASSIC_BUTTON_A_X"
+      ],
+      "source_line": 9349
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_A_X",
+      "observed_values": [
+        "      () 860",
+        "    resource 0x7f0b001f integer/CLASSIC_BUTTON_A_Y"
+      ],
+      "source_line": 9351
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_A_Y",
+      "observed_values": [
+        "      () 688",
+        "    resource 0x7f0b0020 integer/CLASSIC_BUTTON_B_PORTRAIT_X"
+      ],
+      "source_line": 9353
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_B_PORTRAIT_X",
+      "observed_values": [
+        "      () 763",
+        "    resource 0x7f0b0021 integer/CLASSIC_BUTTON_B_PORTRAIT_Y"
+      ],
+      "source_line": 9355
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_B_PORTRAIT_Y",
+      "observed_values": [
+        "      () 562",
+        "    resource 0x7f0b0022 integer/CLASSIC_BUTTON_B_X"
+      ],
+      "source_line": 9357
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_B_X",
+      "observed_values": [
+        "      () 787",
+        "    resource 0x7f0b0023 integer/CLASSIC_BUTTON_B_Y"
+      ],
+      "source_line": 9359
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_B_Y",
+      "observed_values": [
+        "      () 806",
+        "    resource 0x7f0b0024 integer/CLASSIC_BUTTON_HOME_PORTRAIT_X"
+      ],
+      "source_line": 9361
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_HOME_PORTRAIT_X",
+      "observed_values": [
+        "      () 250",
+        "    resource 0x7f0b0025 integer/CLASSIC_BUTTON_HOME_PORTRAIT_Y"
+      ],
+      "source_line": 9363
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_HOME_PORTRAIT_Y",
+      "observed_values": [
+        "      () 420",
+        "    resource 0x7f0b0026 integer/CLASSIC_BUTTON_HOME_X"
+      ],
+      "source_line": 9365
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_HOME_X",
+      "observed_values": [
+        "      () 500",
+        "    resource 0x7f0b0027 integer/CLASSIC_BUTTON_HOME_Y"
+      ],
+      "source_line": 9367
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_HOME_Y",
+      "observed_values": [
+        "      () 834",
+        "    resource 0x7f0b0028 integer/CLASSIC_BUTTON_MINUS_PORTRAIT_X"
+      ],
+      "source_line": 9369
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_MINUS_PORTRAIT_X",
+      "observed_values": [
+        "      () 100",
+        "    resource 0x7f0b0029 integer/CLASSIC_BUTTON_MINUS_PORTRAIT_Y"
+      ],
+      "source_line": 9371
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_MINUS_PORTRAIT_Y",
+      "observed_values": [
+        "      () 420",
+        "    resource 0x7f0b002a integer/CLASSIC_BUTTON_MINUS_X"
+      ],
+      "source_line": 9373
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_MINUS_X",
+      "observed_values": [
+        "      () 420",
+        "    resource 0x7f0b002b integer/CLASSIC_BUTTON_MINUS_Y"
+      ],
+      "source_line": 9375
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_MINUS_Y",
+      "observed_values": [
+        "      () 870",
+        "    resource 0x7f0b002c integer/CLASSIC_BUTTON_PLUS_PORTRAIT_X"
+      ],
+      "source_line": 9377
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_PLUS_PORTRAIT_X",
+      "observed_values": [
+        "      () 400",
+        "    resource 0x7f0b002d integer/CLASSIC_BUTTON_PLUS_PORTRAIT_Y"
+      ],
+      "source_line": 9379
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_PLUS_PORTRAIT_Y",
+      "observed_values": [
+        "      () 420",
+        "    resource 0x7f0b002e integer/CLASSIC_BUTTON_PLUS_X"
+      ],
+      "source_line": 9381
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_PLUS_X",
+      "observed_values": [
+        "      () 580",
+        "    resource 0x7f0b002f integer/CLASSIC_BUTTON_PLUS_Y"
+      ],
+      "source_line": 9383
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_PLUS_Y",
+      "observed_values": [
+        "      () 870",
+        "    resource 0x7f0b0030 integer/CLASSIC_BUTTON_X_PORTRAIT_X"
+      ],
+      "source_line": 9385
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_X_PORTRAIT_X",
+      "observed_values": [
+        "      () 665",
+        "    resource 0x7f0b0031 integer/CLASSIC_BUTTON_X_PORTRAIT_Y"
+      ],
+      "source_line": 9387
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_X_PORTRAIT_Y",
+      "observed_values": [
+        "      () 476",
+        "    resource 0x7f0b0032 integer/CLASSIC_BUTTON_X_X"
+      ],
+      "source_line": 9389
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_X_X",
+      "observed_values": [
+        "      () 932",
+        "    resource 0x7f0b0033 integer/CLASSIC_BUTTON_X_Y"
+      ],
+      "source_line": 9391
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_X_Y",
+      "observed_values": [
+        "      () 523",
+        "    resource 0x7f0b0034 integer/CLASSIC_BUTTON_Y_PORTRAIT_X"
+      ],
+      "source_line": 9393
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_Y_PORTRAIT_X",
+      "observed_values": [
+        "      () 601",
+        "    resource 0x7f0b0035 integer/CLASSIC_BUTTON_Y_PORTRAIT_Y"
+      ],
+      "source_line": 9395
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_Y_PORTRAIT_Y",
+      "observed_values": [
+        "      () 552",
+        "    resource 0x7f0b0036 integer/CLASSIC_BUTTON_Y_X"
+      ],
+      "source_line": 9397
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_Y_X",
+      "observed_values": [
+        "      () 823",
+        "    resource 0x7f0b0037 integer/CLASSIC_BUTTON_Y_Y"
+      ],
+      "source_line": 9399
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_Y_Y",
+      "observed_values": [
+        "      () 522",
+        "    resource 0x7f0b0038 integer/CLASSIC_BUTTON_ZL_PORTRAIT_X"
+      ],
+      "source_line": 9401
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_ZL_PORTRAIT_X",
+      "observed_values": [
+        "      () 301",
+        "    resource 0x7f0b0039 integer/CLASSIC_BUTTON_ZL_PORTRAIT_Y"
+      ],
+      "source_line": 9403
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_ZL_PORTRAIT_Y",
+      "observed_values": [
+        "      () 613",
+        "    resource 0x7f0b003a integer/CLASSIC_BUTTON_ZL_X"
+      ],
+      "source_line": 9405
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_ZL_X",
+      "observed_values": [
+        "      () 19",
+        "    resource 0x7f0b003b integer/CLASSIC_BUTTON_ZL_Y"
+      ],
+      "source_line": 9407
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_ZL_Y",
+      "observed_values": [
+        "      () 223",
+        "    resource 0x7f0b003c integer/CLASSIC_BUTTON_ZR_PORTRAIT_X"
+      ],
+      "source_line": 9409
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_ZR_PORTRAIT_X",
+      "observed_values": [
+        "      () 445",
+        "    resource 0x7f0b003d integer/CLASSIC_BUTTON_ZR_PORTRAIT_Y"
+      ],
+      "source_line": 9411
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_ZR_PORTRAIT_Y",
+      "observed_values": [
+        "      () 734",
+        "    resource 0x7f0b003e integer/CLASSIC_BUTTON_ZR_X"
+      ],
+      "source_line": 9413
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_ZR_X",
+      "observed_values": [
+        "      () 897",
+        "    resource 0x7f0b003f integer/CLASSIC_BUTTON_ZR_Y"
+      ],
+      "source_line": 9415
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_ZR_Y",
+      "observed_values": [
+        "      () 263",
+        "    resource 0x7f0b0040 integer/CLASSIC_DPAD_UP_PORTRAIT_X"
+      ],
+      "source_line": 9417
+    },
+    {
+      "resource": "integer/CLASSIC_DPAD_UP_PORTRAIT_X",
+      "observed_values": [
+        "      () 101",
+        "    resource 0x7f0b0041 integer/CLASSIC_DPAD_UP_PORTRAIT_Y"
+      ],
+      "source_line": 9419
+    },
+    {
+      "resource": "integer/CLASSIC_DPAD_UP_PORTRAIT_Y",
+      "observed_values": [
+        "      () 752",
+        "    resource 0x7f0b0042 integer/CLASSIC_DPAD_UP_X"
+      ],
+      "source_line": 9421
+    },
+    {
+      "resource": "integer/CLASSIC_DPAD_UP_X",
+      "observed_values": [
+        "      () 203",
+        "    resource 0x7f0b0043 integer/CLASSIC_DPAD_UP_Y"
+      ],
+      "source_line": 9423
+    },
+    {
+      "resource": "integer/CLASSIC_DPAD_UP_Y",
+      "observed_values": [
+        "      () 680",
+        "    resource 0x7f0b0044 integer/CLASSIC_STICK_LEFT_PORTRAIT_X"
+      ],
+      "source_line": 9425
+    },
+    {
+      "resource": "integer/CLASSIC_STICK_LEFT_PORTRAIT_X",
+      "observed_values": [
+        "      () 46",
+        "    resource 0x7f0b0045 integer/CLASSIC_STICK_LEFT_PORTRAIT_Y"
+      ],
+      "source_line": 9427
+    },
+    {
+      "resource": "integer/CLASSIC_STICK_LEFT_PORTRAIT_Y",
+      "observed_values": [
+        "      () 533",
+        "    resource 0x7f0b0046 integer/CLASSIC_STICK_LEFT_X"
+      ],
+      "source_line": 9429
+    },
+    {
+      "resource": "integer/CLASSIC_STICK_LEFT_X",
+      "observed_values": [
+        "      () 23",
+        "    resource 0x7f0b0047 integer/CLASSIC_STICK_LEFT_Y"
+      ],
+      "source_line": 9431
+    },
+    {
+      "resource": "integer/CLASSIC_STICK_LEFT_Y",
+      "observed_values": [
+        "      () 622",
+        "    resource 0x7f0b0048 integer/CLASSIC_STICK_RIGHT_PORTRAIT_X"
+      ],
+      "source_line": 9433
+    },
+    {
+      "resource": "integer/CLASSIC_STICK_RIGHT_PORTRAIT_X",
+      "observed_values": [
+        "      () 706",
+        "    resource 0x7f0b0049 integer/CLASSIC_STICK_RIGHT_PORTRAIT_Y"
+      ],
+      "source_line": 9435
+    },
+    {
+      "resource": "integer/CLASSIC_STICK_RIGHT_PORTRAIT_Y",
+      "observed_values": [
+        "      () 671",
+        "    resource 0x7f0b004a integer/CLASSIC_STICK_RIGHT_X"
+      ],
+      "source_line": 9437
+    },
+    {
+      "resource": "integer/CLASSIC_STICK_RIGHT_X",
+      "observed_values": [
+        "      () 636",
+        "    resource 0x7f0b004b integer/CLASSIC_STICK_RIGHT_Y"
+      ],
+      "source_line": 9439
+    },
+    {
+      "resource": "integer/CLASSIC_STICK_RIGHT_Y",
+      "observed_values": [
+        "      () 655",
+        "    resource 0x7f0b004c integer/CLASSIC_TRIGGER_L_PORTRAIT_X"
+      ],
+      "source_line": 9441
+    },
+    {
+      "resource": "integer/NUNCHUK_BUTTON_C_PORTRAIT_X",
+      "observed_values": [
+        "      () 786",
+        "    resource 0x7f0b0055 integer/NUNCHUK_BUTTON_C_PORTRAIT_Y"
+      ],
+      "source_line": 9459
+    },
+    {
+      "resource": "integer/NUNCHUK_BUTTON_C_PORTRAIT_Y",
+      "observed_values": [
+        "      () 455",
+        "    resource 0x7f0b0056 integer/NUNCHUK_BUTTON_C_X"
+      ],
+      "source_line": 9461
+    },
+    {
+      "resource": "integer/NUNCHUK_BUTTON_C_X",
+      "observed_values": [
+        "      () 681",
+        "    resource 0x7f0b0057 integer/NUNCHUK_BUTTON_C_Y"
+      ],
+      "source_line": 9463
+    },
+    {
+      "resource": "integer/NUNCHUK_BUTTON_C_Y",
+      "observed_values": [
+        "      () 765",
+        "    resource 0x7f0b0058 integer/NUNCHUK_BUTTON_Z_PORTRAIT_X"
+      ],
+      "source_line": 9465
+    },
+    {
+      "resource": "integer/NUNCHUK_BUTTON_Z_PORTRAIT_X",
+      "observed_values": [
+        "      () 526",
+        "    resource 0x7f0b0059 integer/NUNCHUK_BUTTON_Z_PORTRAIT_Y"
+      ],
+      "source_line": 9467
+    },
+    {
+      "resource": "integer/NUNCHUK_BUTTON_Z_PORTRAIT_Y",
+      "observed_values": [
+        "      () 483",
+        "    resource 0x7f0b005a integer/NUNCHUK_BUTTON_Z_X"
+      ],
+      "source_line": 9469
+    },
+    {
+      "resource": "integer/NUNCHUK_BUTTON_Z_X",
+      "observed_values": [
+        "      () 850",
+        "    resource 0x7f0b005b integer/NUNCHUK_BUTTON_Z_Y"
+      ],
+      "source_line": 9471
+    },
+    {
+      "resource": "integer/NUNCHUK_BUTTON_Z_Y",
+      "observed_values": [
+        "      () 208",
+        "    resource 0x7f0b005c integer/NUNCHUK_STICK_PORTRAIT_X"
+      ],
+      "source_line": 9473
+    },
+    {
+      "resource": "integer/NUNCHUK_STICK_PORTRAIT_X",
+      "observed_values": [
+        "      () 68",
+        "    resource 0x7f0b005d integer/NUNCHUK_STICK_PORTRAIT_Y"
+      ],
+      "source_line": 9475
+    },
+    {
+      "resource": "integer/NUNCHUK_STICK_PORTRAIT_Y",
+      "observed_values": [
+        "      () 602",
+        "    resource 0x7f0b005e integer/NUNCHUK_STICK_X"
+      ],
+      "source_line": 9477
+    },
+    {
+      "resource": "integer/NUNCHUK_STICK_X",
+      "observed_values": [
+        "      () 51",
+        "    resource 0x7f0b005f integer/NUNCHUK_STICK_Y"
+      ],
+      "source_line": 9479
+    },
+    {
+      "resource": "integer/NUNCHUK_STICK_Y",
+      "observed_values": [
+        "      () 681",
+        "    resource 0x7f0b0060 integer/STICK_C_PORTRAIT_X"
+      ],
+      "source_line": 9481
+    },
+    {
+      "resource": "integer/STICK_C_PORTRAIT_X",
+      "observed_values": [
+        "      () 622",
+        "    resource 0x7f0b0061 integer/STICK_C_PORTRAIT_Y"
+      ],
+      "source_line": 9483
+    },
+    {
+      "resource": "integer/STICK_C_PORTRAIT_Y",
+      "observed_values": [
+        "      () 715",
+        "    resource 0x7f0b0062 integer/STICK_C_X"
+      ],
+      "source_line": 9485
+    },
+    {
+      "resource": "integer/STICK_C_X",
+      "observed_values": [
+        "      () 686",
+        "    resource 0x7f0b0063 integer/STICK_C_Y"
+      ],
+      "source_line": 9487
+    },
+    {
+      "resource": "integer/STICK_C_Y",
+      "observed_values": [
+        "      () 676",
+        "    resource 0x7f0b0064 integer/STICK_MAIN_PORTRAIT_X"
+      ],
+      "source_line": 9489
+    },
+    {
+      "resource": "integer/STICK_MAIN_PORTRAIT_X",
+      "observed_values": [
+        "      () 134",
+        "    resource 0x7f0b0065 integer/STICK_MAIN_PORTRAIT_Y"
+      ],
+      "source_line": 9491
+    },
+    {
+      "resource": "integer/STICK_MAIN_PORTRAIT_Y",
+      "observed_values": [
+        "      () 687",
+        "    resource 0x7f0b0066 integer/STICK_MAIN_X"
+      ],
+      "source_line": 9493
+    },
+    {
+      "resource": "integer/STICK_MAIN_X",
+      "observed_values": [
+        "      () 17",
+        "    resource 0x7f0b0067 integer/STICK_MAIN_Y"
+      ],
+      "source_line": 9495
+    },
+    {
+      "resource": "integer/STICK_MAIN_Y",
+      "observed_values": [
+        "      () 620",
+        "    resource 0x7f0b0068 integer/TRIGGER_L_PORTRAIT_X"
+      ],
+      "source_line": 9497
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_1_PORTRAIT_X",
+      "observed_values": [
+        "      () 707",
+        "    resource 0x7f0b0071 integer/WIIMOTE_BUTTON_1_PORTRAIT_Y"
+      ],
+      "source_line": 9515
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_1_PORTRAIT_Y",
+      "observed_values": [
+        "      () 742",
+        "    resource 0x7f0b0072 integer/WIIMOTE_BUTTON_1_X"
+      ],
+      "source_line": 9517
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_1_X",
+      "observed_values": [
+        "      () 778",
+        "    resource 0x7f0b0073 integer/WIIMOTE_BUTTON_1_Y"
+      ],
+      "source_line": 9519
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_1_Y",
+      "observed_values": [
+        "      () 715",
+        "    resource 0x7f0b0074 integer/WIIMOTE_BUTTON_2_PORTRAIT_X"
+      ],
+      "source_line": 9521
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_2_PORTRAIT_X",
+      "observed_values": [
+        "      () 846",
+        "    resource 0x7f0b0075 integer/WIIMOTE_BUTTON_2_PORTRAIT_Y"
+      ],
+      "source_line": 9523
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_2_PORTRAIT_Y",
+      "observed_values": [
+        "      () 692",
+        "    resource 0x7f0b0076 integer/WIIMOTE_BUTTON_2_X"
+      ],
+      "source_line": 9525
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_2_X",
+      "observed_values": [
+        "      () 778",
+        "    resource 0x7f0b0077 integer/WIIMOTE_BUTTON_2_Y"
+      ],
+      "source_line": 9527
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_2_Y",
+      "observed_values": [
+        "      () 864",
+        "    resource 0x7f0b0078 integer/WIIMOTE_BUTTON_A_PORTRAIT_X"
+      ],
+      "source_line": 9529
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_A_PORTRAIT_X",
+      "observed_values": [
+        "      () 769",
+        "    resource 0x7f0b0079 integer/WIIMOTE_BUTTON_A_PORTRAIT_Y"
+      ],
+      "source_line": 9531
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_A_PORTRAIT_Y",
+      "observed_values": [
+        "      () 584",
+        "    resource 0x7f0b007a integer/WIIMOTE_BUTTON_A_X"
+      ],
+      "source_line": 9533
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_A_X",
+      "observed_values": [
+        "      () 858",
+        "    resource 0x7f0b007b integer/WIIMOTE_BUTTON_A_Y"
+      ],
+      "source_line": 9535
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_A_Y",
+      "observed_values": [
+        "      () 772",
+        "    resource 0x7f0b007c integer/WIIMOTE_BUTTON_B_PORTRAIT_X"
+      ],
+      "source_line": 9537
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_B_PORTRAIT_X",
+      "observed_values": [
+        "      () 553",
+        "    resource 0x7f0b007d integer/WIIMOTE_BUTTON_B_PORTRAIT_Y"
+      ],
+      "source_line": 9539
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_B_PORTRAIT_Y",
+      "observed_values": [
+        "      () 621",
+        "    resource 0x7f0b007e integer/WIIMOTE_BUTTON_B_X"
+      ],
+      "source_line": 9541
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_B_X",
+      "observed_values": [
+        "      () 850",
+        "    resource 0x7f0b007f integer/WIIMOTE_BUTTON_B_Y"
+      ],
+      "source_line": 9543
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_B_Y",
+      "observed_values": [
+        "      () 460",
+        "    resource 0x7f0b0080 integer/WIIMOTE_BUTTON_HOME_PORTRAIT_X"
+      ],
+      "source_line": 9545
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_HOME_PORTRAIT_X",
+      "observed_values": [
+        "      () 250",
+        "    resource 0x7f0b0081 integer/WIIMOTE_BUTTON_HOME_PORTRAIT_Y"
+      ],
+      "source_line": 9547
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_HOME_PORTRAIT_Y",
+      "observed_values": [
+        "      () 420",
+        "    resource 0x7f0b0082 integer/WIIMOTE_BUTTON_HOME_X"
+      ],
+      "source_line": 9549
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_HOME_X",
+      "observed_values": [
+        "      () 514",
+        "    resource 0x7f0b0083 integer/WIIMOTE_BUTTON_HOME_Y"
+      ],
+      "source_line": 9551
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_HOME_Y",
+      "observed_values": [
+        "      () 854",
+        "    resource 0x7f0b0084 integer/WIIMOTE_BUTTON_MINUS_PORTRAIT_X"
+      ],
+      "source_line": 9553
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_MINUS_PORTRAIT_X",
+      "observed_values": [
+        "      () 100",
+        "    resource 0x7f0b0085 integer/WIIMOTE_BUTTON_MINUS_PORTRAIT_Y"
+      ],
+      "source_line": 9555
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_MINUS_PORTRAIT_Y",
+      "observed_values": [
+        "      () 420",
+        "    resource 0x7f0b0086 integer/WIIMOTE_BUTTON_MINUS_X"
+      ],
+      "source_line": 9557
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_MINUS_X",
+      "observed_values": [
+        "      () 787",
+        "    resource 0x7f0b0087 integer/WIIMOTE_BUTTON_MINUS_Y"
+      ],
+      "source_line": 9559
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_MINUS_Y",
+      "observed_values": [
+        "      () 578",
+        "    resource 0x7f0b0088 integer/WIIMOTE_BUTTON_PLUS_PORTRAIT_X"
+      ],
+      "source_line": 9561
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_PLUS_PORTRAIT_X",
+      "observed_values": [
+        "      () 400",
+        "    resource 0x7f0b0089 integer/WIIMOTE_BUTTON_PLUS_PORTRAIT_Y"
+      ],
+      "source_line": 9563
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_PLUS_PORTRAIT_Y",
+      "observed_values": [
+        "      () 420",
+        "    resource 0x7f0b008a integer/WIIMOTE_BUTTON_PLUS_X"
+      ],
+      "source_line": 9565
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_PLUS_X",
+      "observed_values": [
+        "      () 701",
+        "    resource 0x7f0b008b integer/WIIMOTE_BUTTON_PLUS_Y"
+      ],
+      "source_line": 9567
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_PLUS_Y",
+      "observed_values": [
+        "      () 630",
+        "    resource 0x7f0b008c integer/WIIMOTE_H_BUTTON_1_PORTRAIT_X"
+      ],
+      "source_line": 9569
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_1_PORTRAIT_X",
+      "observed_values": [
+        "      () 707",
+        "    resource 0x7f0b008d integer/WIIMOTE_H_BUTTON_1_PORTRAIT_Y"
+      ],
+      "source_line": 9571
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_1_PORTRAIT_Y",
+      "observed_values": [
+        "      () 742",
+        "    resource 0x7f0b008e integer/WIIMOTE_H_BUTTON_1_X"
+      ],
+      "source_line": 9573
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_1_X",
+      "observed_values": [
+        "      () 867",
+        "    resource 0x7f0b008f integer/WIIMOTE_H_BUTTON_1_Y"
+      ],
+      "source_line": 9575
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_1_Y",
+      "observed_values": [
+        "      () 303",
+        "    resource 0x7f0b0090 integer/WIIMOTE_H_BUTTON_2_PORTRAIT_X"
+      ],
+      "source_line": 9577
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_2_PORTRAIT_X",
+      "observed_values": [
+        "      () 846",
+        "    resource 0x7f0b0091 integer/WIIMOTE_H_BUTTON_2_PORTRAIT_Y"
+      ],
+      "source_line": 9579
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_2_PORTRAIT_Y",
+      "observed_values": [
+        "      () 692",
+        "    resource 0x7f0b0092 integer/WIIMOTE_H_BUTTON_2_X"
+      ],
+      "source_line": 9581
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_2_X",
+      "observed_values": [
+        "      () 925",
+        "    resource 0x7f0b0093 integer/WIIMOTE_H_BUTTON_2_Y"
+      ],
+      "source_line": 9583
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_2_Y",
+      "observed_values": [
+        "      () 103",
+        "    resource 0x7f0b0094 integer/WIIMOTE_H_BUTTON_A_PORTRAIT_X"
+      ],
+      "source_line": 9585
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_A_PORTRAIT_X",
+      "observed_values": [
+        "      () 769",
+        "    resource 0x7f0b0095 integer/WIIMOTE_H_BUTTON_A_PORTRAIT_Y"
+      ],
+      "source_line": 9587
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_A_PORTRAIT_Y",
+      "observed_values": [
+        "      () 584",
+        "    resource 0x7f0b0096 integer/WIIMOTE_H_BUTTON_A_X"
+      ],
+      "source_line": 9589
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_A_X",
+      "observed_values": [
+        "      () 890",
+        "    resource 0x7f0b0097 integer/WIIMOTE_H_BUTTON_A_Y"
+      ],
+      "source_line": 9591
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_A_Y",
+      "observed_values": [
+        "      () 734",
+        "    resource 0x7f0b0098 integer/WIIMOTE_H_BUTTON_B_PORTRAIT_X"
+      ],
+      "source_line": 9593
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_B_PORTRAIT_X",
+      "observed_values": [
+        "      () 553",
+        "    resource 0x7f0b0099 integer/WIIMOTE_H_BUTTON_B_PORTRAIT_Y"
+      ],
+      "source_line": 9595
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_B_PORTRAIT_Y",
+      "observed_values": [
+        "      () 621",
+        "    resource 0x7f0b009a integer/WIIMOTE_H_BUTTON_B_X"
+      ],
+      "source_line": 9597
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_B_X",
+      "observed_values": [
+        "      () 731",
+        "    resource 0x7f0b009b integer/WIIMOTE_H_BUTTON_B_Y"
+      ],
+      "source_line": 9599
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_B_Y",
+      "observed_values": [
+        "      () 715",
+        "    resource 0x7f0b009c integer/WIIMOTE_O_UP_PORTRAIT_X"
+      ],
+      "source_line": 9601
+    },
+    {
+      "resource": "integer/abc_config_activityDefaultDur",
+      "observed_values": [
+        "      () 220",
+        "    resource 0x7f0b00a9 integer/abc_config_activityShortDur"
+      ],
+      "source_line": 9627
+    },
+    {
+      "resource": "integer/default_icon_animation_duration",
+      "observed_values": [
+        "      () 10000",
+        "    resource 0x7f0b00af integer/design_snackbar_text_max_lines"
+      ],
+      "source_line": 9637
+    }
+  ]
+}

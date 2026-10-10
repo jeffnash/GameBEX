@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.gamebex.client.data.BiosCheck
 import com.gamebex.client.data.Emu
 import com.gamebex.client.data.PlayStates
+import com.gamebex.client.data.local.AutoPrep
 import com.gamebex.client.data.local.DownloadRecord
 import com.gamebex.client.data.local.GameEntity
 import com.gamebex.client.data.local.LibraryDb
@@ -74,7 +75,7 @@ import kotlinx.serialization.json.Json
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * The Home view model. Folds `observeAll`, download jobs, saves, site
+ * The Home view model. Folds `observeAll()`, download jobs, saves, site
  * search and device status into one [HomeScreenModel], and turns
  * [HomeIntent]s into service calls plus one-shot [HomeEffect]s. File IO,
  * save lookup and readiness run on [Dispatchers.IO]; model rebuilds are
@@ -82,7 +83,7 @@ import java.util.concurrent.ConcurrentHashMap
  * shown.
  *
  * Rebuild cost: saves and readiness are cached per game
- * until `saves.invalidate` / `Entered` / a DB row change, and download
+ * until `saves.invalidate()` / `Entered` / a DB row change, and download
  * byte progress never triggers a rebuild at all — it patches the job
  * cards in place, so a running download re-stats no files, re-probes no
  * readiness and touches no StatFs. The pipeline itself is guarded: an
@@ -99,13 +100,13 @@ class HomeStore internal constructor(
     private val rescan: suspend (refreshIfStale: Boolean) -> Unit,
     private val scope: CoroutineScope? = null,
     private val io: CoroutineDispatcher = Dispatchers.IO,
- /** Test seam: counts the library's title normalizations. */
+    /** Test seam: counts the library's title normalizations. */
     private val searchKeys: SearchKeysCache = SearchKeysCache(),
     private val beginInstall: (Emu) -> Unit = {},
     private val openRetroArch: () -> String? = { "RetroArch isn't available to open." },
 ) : ViewModel() {
 
- /** Production wiring over the services. */
+    /** Production wiring over the services. */
     constructor(
         appContext: Context,
         saves: SaveIndex,
@@ -127,7 +128,7 @@ class HomeStore internal constructor(
         },
     )
 
- /** Test seam: VM tests run everything on the virtual-time scheduler. */
+    /** Test seam: VM tests run everything on the virtual-time scheduler. */
     private val launchTarget: CoroutineScope
         get() = scope ?: viewModelScope
 
@@ -145,7 +146,7 @@ class HomeStore internal constructor(
 
     private val queryFlow = MutableStateFlow("")
 
- /** Search-field binding; updated synchronously in onIntent. */
+    /** Search-field binding; updated synchronously in onIntent. */
     val query: StateFlow<String>
         get() = queryFlow
 
@@ -153,26 +154,28 @@ class HomeStore internal constructor(
     private val statusFlow = MutableStateFlow<LaunchStatus?>(null)
     private val launchJob = LocalLaunchJob({ launchTarget }, launcher) { status ->
         statusFlow.value = status
- // A press and byte ticks must not wait for the library rebuild debounce.
+        // A press and byte ticks must not wait for the library rebuild debounce.
         _model.update { it.copy(status = status) }
     }
     private val tickFlow = MutableStateFlow(0)
 
- /** Query the site state belongs to, so stale results never leak. */
+    /** Query the site state belongs to, so stale results never leak. */
     private val sitePair: MutableStateFlow<Pair<String, SiteQuery>> =
         MutableStateFlow("" to SiteQuery.None)
     private val sizes = MutableStateFlow<Map<String, SizeInfo?>>(emptyMap())
     private var sizeFetch: Job? = null
     private var lastSurpriseId: Long? = null
     private var knownJobIds: Set<Long> = emptySet()
+    /** Consecutive patchPrep ticks each Preparing game spent off the bus. */
+    private val stalePrepSeen = mutableMapOf<Long, Int>()
 
- /** bumped on every roll and mode reset; see [HomeScreenModel.selectionToken]. */
+    /** Bumped on every roll and mode reset; see [HomeScreenModel.selectionToken]. */
     private val selectionTick = java.util.concurrent.atomic.AtomicLong(0)
 
- /** Mode of the last rebuilt model; a change is a selection reset. */
+    /** Mode of the last rebuilt model; a change is a selection reset. */
     private var lastMode: HomeMode? = null
 
- /** Inputs of the last completed rebuild, for the progress patch path. */
+    /** Inputs of the last completed rebuild, for the progress patch path. */
     private var lastData: DataInput? = null
 
     private data class DataInput(
@@ -194,7 +197,7 @@ class HomeStore internal constructor(
         val site: SiteInput,
         val surpriseId: Long?,
         val status: LaunchStatus?,
- /** Monotonic re-entry marker; part of the input so Entered always rebuilds. */
+        /** Monotonic re-entry marker; part of the input so Entered always rebuilds. */
         val tick: Int,
         val warnings: Int,
     )
@@ -204,10 +207,10 @@ class HomeStore internal constructor(
         launchTarget.launch {
             combine(dataFlow(), uiFlow()) { data, ui -> data to ui }
                 .debounce(REBUILD_DEBOUNCE_MS)
- // A long-lived pipeline never ends with a
- // terminal .catch. Per-value recovery (warningsOrLast) keeps
- // one bad value from getting here; anything else restarts
- // collection instead of freezing Home forever.
+                // A long-lived pipeline never ends with a
+                // terminal .catch. Per-value recovery (warningsOrLast) keeps
+                // one bad value from getting here; anything else restarts
+                // collection instead of freezing Home forever.
                 .retryWhen { e, _ ->
                     if (e is CancellationException) throw e
                     logW(TAG, "model pipeline failed; restarting", e)
@@ -225,7 +228,7 @@ class HomeStore internal constructor(
                 }
         }
         launchTarget.launch {
- // One bad patch must not end progress updates.
+            // One bad patch must not end progress updates.
             downloads.jobs.collect { jobs ->
                 try {
                     patchProgress(jobs)
@@ -237,9 +240,9 @@ class HomeStore internal constructor(
             }
         }
         launchTarget.launch {
- // Live prep bytes patch Preparing cards in place.
- // The 5s tick also flips a quiet prep to "Still working…"
- // without waiting for its next byte report.
+            // Live prep bytes patch Preparing cards in place.
+            // The 5s tick also flips a quiet prep to "Still working…"
+            // without waiting for its next byte report.
             combine(PrepProgressBus.byGame, prepTick()) { states, _ -> states }
                 .collect { states ->
                     try {
@@ -270,11 +273,11 @@ class HomeStore internal constructor(
         DataInput(games, records, jobs, armed, online)
     }
 
- /**
- * Job shape without the per-tick byte counter: 4–8 progress updates a
- * second must never rebuild the model. Structural changes — ids, status,
- * totals, errors — still rebuild.
- */
+    /**
+     * Job shape without the per-tick byte counter: 4–8 progress updates a
+     * second must never rebuild the model. Structural changes — ids, status,
+     * totals, errors — still rebuild.
+     */
     private fun Map<Long, DownloadEngine.DlSnapshot>.progressless(): Map<Long, DownloadEngine.DlSnapshot> =
         mapValues { (_, snap) -> snap.copy(read = 0L) }
 
@@ -289,14 +292,14 @@ class HomeStore internal constructor(
         UiInput(site, surprise, status, tickAndWarnings.first, tickAndWarnings.second)
     }
 
- /** Last good system-warning count. */
+    /** Last good system-warning count. */
     private var lastWarnings = 0
 
- /**
- * `systemWarnings` is device IO and can fail. One
- * failure must never end the model pipeline — it keeps the last good
- * count and the flow goes on emitting.
- */
+    /**
+     * `systemWarnings()` is device IO and can fail. One
+     * failure must never end the model pipeline — it keeps the last good
+     * count and the flow goes on emitting.
+     */
     private suspend fun warningsOrLast(): Int = try {
         device.systemWarnings().also { lastWarnings = it }
     } catch (e: CancellationException) {
@@ -308,8 +311,8 @@ class HomeStore internal constructor(
 
     private suspend fun rebuild(data: DataInput, ui: UiInput) = withContext(io) {
         val jobs = downloads.jobs.value
- // One ETA/progress observation per job per rebuild;
- // the snapshots handed to grouping carry the monotonic read.
+        // One ETA/progress observation per job per rebuild;
+        // the snapshots handed to grouping carry the monotonic read.
         val patches = HashMap<Long, DownloadEta.Patch>(jobs.size)
         val clampedJobs = HashMap<Long, DownloadEngine.DlSnapshot>(jobs.size)
         for ((id, snap) in jobs) {
@@ -325,7 +328,7 @@ class HomeStore internal constructor(
             (knownJobIds - current).forEach { eta.remove(it) }
             knownJobIds = current
         }
- // StatFs once per folder per rebuild, never per card.
+        // StatFs once per folder per rebuild, never per card.
         val freeCache = HashMap<String?, Long?>()
         val result = HomeGrouping.build(
             games = data.games,
@@ -345,12 +348,12 @@ class HomeStore internal constructor(
             now = System.currentTimeMillis(),
             cards = factory,
             etaSec = { snap -> patches[snap.id]?.etaSec },
- // CHECK_SYSTEMS invite reads the live warning count.
+            // CHECK_SYSTEMS invite reads the live warning count.
             systemWarnings = ui.warnings,
- // Normalized titles, cached per game-list version.
+            // Normalized titles, cached per game-list version.
             searchKeys = searchKeys.keysFor(data.games),
         )
- // A mode change resets the selection to defaultKey.
+        // A mode change resets the selection to defaultKey.
         if (result.mode != lastMode) {
             selectionTick.incrementAndGet()
             lastMode = result.mode
@@ -366,12 +369,12 @@ class HomeStore internal constructor(
         _model.update { next.copy(status = statusFlow.value) }
     }
 
- /**
- * Download byte ticks patch the job cards in
- * place — no saves lookup, no readiness probe, no StatFs, no grouping.
- * Structure changes belong to the debounced rebuild; [HomeCardFactory]
- * rebuilds the strings so the percent and ETA text stay live.
- */
+    /**
+     * Download byte ticks patch the job cards in
+     * place — no saves lookup, no readiness probe, no StatFs, no grouping.
+     * Structure changes belong to the debounced rebuild; [HomeCardFactory]
+     * rebuilds the strings so the percent and ETA text stay live.
+     */
     private suspend fun patchProgress(jobs: Map<Long, DownloadEngine.DlSnapshot>) {
         val data = lastData ?: return
         if (jobs.keys != data.jobs.keys) return
@@ -382,7 +385,7 @@ class HomeStore internal constructor(
             for (card in oldCards) {
                 val id = card.downloadId ?: continue
                 val snap = jobs[id] ?: continue
- // Never step progress backwards.
+                // Never step progress backwards.
                 val p = eta.patch(id, snap.read, snap.total, snap.status)
                 patched[card.key] = factory.jobCard(
                     snapshot = snap.copy(read = p.read),
@@ -400,31 +403,48 @@ class HomeStore internal constructor(
             cur.copy(sections = cur.sections.map { section ->
                 if (section.group != HomeGroup.DOWNLOADING) return@map section
                 section.copy(cards = section.cards.map { card ->
- // position is assigned by HomeGrouping at assembly (TV channel = position + 1).
+                    // position is assigned by HomeGrouping at assembly (TV channel = position + 1).
                     patched[card.key]?.copy(position = card.position) ?: card
                 })
             })
         }
     }
 
- /**
- * Live prep snapshots patch Preparing cards in place, same
- * as the download byte-tick patch. Only cards whose game is on the
- * bus and still Preparing are touched; a finished or failed prep is
- * re-derived by the debounced rebuild (FAILED -> NeedsFix w/ Retry).
- */
+    /**
+     * Live prep snapshots patch Preparing cards in place, same
+     * as the download byte-tick patch. Cards whose game is on the bus
+     * get byte progress; cards still Preparing with no live run for
+     * [STALE_PREP_TICKS] ticks (never started, or died with the process)
+     * flip to NeedsFix so the stall is visible with a working button. A
+     * finished or failed prep is re-derived by the debounced rebuild
+     * (FAILED -> NeedsFix w/ Retry).
+     */
     private suspend fun patchPrep(states: Map<Long, PrepProgress>) {
-        if (states.isEmpty()) return
-        val targets = _model.value.cards.filter { card ->
-            card.state is CardState.Preparing && card.gameId != null && states.containsKey(card.gameId)
+        val preparing = _model.value.cards.filter { card ->
+            card.state is CardState.Preparing && card.gameId != null
         }
-        if (targets.isEmpty()) return
+        if (preparing.isEmpty()) {
+            stalePrepSeen.clear()
+            return
+        }
         val nowMs = System.currentTimeMillis()
+        // Auto-prep can work off the bus for a while first (BIOS fetch, listing a
+        // compressed archive); only a game nothing is working on counts as quiet.
+        val autoActive = AutoPrep.active.value
+        val quiet = preparing.mapNotNull { it.gameId }.filter { it !in states && it !in autoActive }.toSet()
+        val newlyStale = stalePrepTick(quiet, stalePrepSeen)
         val patched = withContext(io) {
-            targets.associate { card ->
-                card.key to factory.prepPatch(card, states.getValue(card.gameId!!), nowMs)
+            buildMap {
+                for (card in preparing) {
+                    val snap = states[card.gameId]
+                    if (snap != null) put(card.key, factory.prepPatch(card, snap, nowMs))
+                    else if (card.gameId in newlyStale) {
+                        put(card.key, factory.prepStale(card, HomeCopy.prepStalled, nowMs))
+                    }
+                }
             }
         }
+        if (patched.isEmpty()) return
         _model.update { cur ->
             cur.copy(sections = cur.sections.map { section ->
                 section.copy(cards = section.cards.map { card ->
@@ -444,11 +464,11 @@ class HomeStore internal constructor(
         systemWarnings = ui.warnings,
     )
 
- /**
- * Site results are merged with the sizes that have landed so far.
- * The pair is keyed on the trimmed query, so compare trimmed ("sonic "
- * stayed SEARCHING forever).
- */
+    /**
+     * Site results are merged with the sizes that have landed so far.
+     * The pair is keyed on the trimmed query, so compare trimmed ("sonic "
+     * stayed SEARCHING forever).
+     */
     private fun siteQueryFor(query: String, site: SiteInput): SiteQuery {
         if (site.pair.first != query.trim()) return SiteQuery.Searching
         val result = site.pair.second
@@ -460,12 +480,12 @@ class HomeStore internal constructor(
 
     private data class SearchInput(val query: String, val online: Boolean, val plugin: String?)
 
- /**
- * Local results on every keystroke, site search debounced 400 ms. A
- * change to `online` or `pluginName` while the query is non-blank
- * re-runs the search; identical inputs are collapsed so trailing spaces
- * never cost a request.
- */
+    /**
+     * Local results on every keystroke, site search debounced 400 ms. A
+     * change to `online` or `pluginName` while the query is non-blank
+     * re-runs the search; identical inputs are collapsed so trailing spaces
+     * never cost a request.
+     */
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     private fun startSiteSearch() {
         launchTarget.launch {
@@ -479,8 +499,8 @@ class HomeStore internal constructor(
     }
 
     private suspend fun runSiteSearch(q: String) {
- // A new query owns the size lookups; the old ones must stop
- // hitting the site even when the new result has nothing to size.
+        // A new query owns the size lookups; the old ones must stop
+        // hitting the site even when the new result has nothing to size.
         sizeFetch?.cancel()
         if (q.isEmpty()) {
             sizes.value = emptyMap()
@@ -494,8 +514,8 @@ class HomeStore internal constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
- // A failure must reach grouping as SiteQuery.Failed,
- // never as empty results and never as an uncaught exception.
+            // A failure must reach grouping as SiteQuery.Failed,
+            // never as empty results and never as an uncaught exception.
             logW(TAG, "site search failed", e)
             SiteResult.Failed(UserErrors.forCatalog(e, site.pluginName.value))
         }
@@ -510,7 +530,7 @@ class HomeStore internal constructor(
         }
     }
 
- /** Sizes for the first 6 results, at most 2 in flight. */
+    /** Sizes for the first 6 results, at most 2 in flight. */
     private fun fetchSizes(q: String, entries: List<RomEntry>) {
         sizeFetch?.cancel()
         sizeFetch = launchTarget.launch {
@@ -570,7 +590,7 @@ class HomeStore internal constructor(
         }
     }
 
- /** A does nothing while a launch is in progress. */
+    /** A does nothing while a launch is in progress. */
     private fun launchBusy(): Boolean = statusFlow.value?.busy == true
 
     private fun dispatch(action: HomeAction, card: HomeCard) {
@@ -620,7 +640,7 @@ class HomeStore internal constructor(
         }
     }
 
- /** DownloadAgain + the NeedsChoice rule; toast on Started/Failed. */
+    /** DownloadAgain + the NeedsChoice rule; toast on Started/Failed. */
     private suspend fun downloadAgain(gameId: Long, card: HomeCard) {
         val start = try {
             downloads.downloadAgain(gameId)
@@ -642,7 +662,7 @@ class HomeStore internal constructor(
         }
     }
 
- /** DownloadFromSite: 1 file → Started + toast, else the entry page. */
+    /** DownloadFromSite: 1 file → Started + toast, else the entry page. */
     private suspend fun downloadFromSite(entry: RomEntry, card: HomeCard) {
         val start = try {
             downloads.downloadFromSite(entry)
@@ -671,7 +691,7 @@ class HomeStore internal constructor(
         return RomEntry(ref = ref, title = g.title, platformId = g.folder, coverUrl = g.coverUrl)
     }
 
- /** SURPRISE / Roll again; nothing qualifies → HOME + toast. */
+    /** SURPRISE / Roll again; nothing qualifies → HOME + toast. */
     private fun rollSurprise() {
         launchTarget.launch {
             try {
@@ -688,8 +708,8 @@ class HomeStore internal constructor(
                     _effects.send(HomeEffect.Toast(HomeCopy.surpriseNothing))
                 } else {
                     lastSurpriseId = pick.id
- // Roll again sends the cursor and the TV
- // to the new pick, even when the mode stays SURPRISE.
+                    // Roll again sends the cursor and the TV
+                    // to the new pick, even when the mode stays SURPRISE.
                     selectionTick.incrementAndGet()
                     surpriseId.value = pick.id
                 }
@@ -705,14 +725,20 @@ class HomeStore internal constructor(
         private const val TAG = "GameBexHomeStore"
         private const val REBUILD_DEBOUNCE_MS = 100L
 
- /** backoff before restarting a failed pipeline. */
+        /** Backoff before restarting a failed pipeline. */
         private const val PIPELINE_RESTART_MS = 500L
- /** Re-evaluate live preps this often for "Still working…". */
+        /** Re-evaluate live preps this often for "Still working…". */
         private const val PREP_TICK_MS = 5_000L
+        /**
+         * Consecutive off-bus ticks before a Preparing card flips
+         * to NeedsFix (15s — a fresh kick reaches begin() in milliseconds,
+         * so only a dead or never-started prep trips it).
+         */
+        internal const val STALE_PREP_TICKS = 3
         private const val SITE_DEBOUNCE_MS = 400L
         private const val SIZE_LOOKUPS = 6
 
- /** Toast when a download action throws. */
+        /** Toast when a download action throws. */
         private const val DOWNLOAD_FAILED = "The download couldn't start."
 
         private fun emptyModel() = HomeScreenModel(
@@ -726,7 +752,7 @@ class HomeStore internal constructor(
             sections = emptyList(),
         )
 
- /** Production readiness, with BIOS names when prep says so. */
+        /** Production readiness, with BIOS names when prep says so. */
         private fun productionStatus(ctx: Context, g: GameEntity): PlayStates.Status =
             LocalGamePresenter.present(
                 ctx, g,
@@ -735,12 +761,12 @@ class HomeStore internal constructor(
                 biosMissing = missingBios(ctx, g),
             ).playable.status
 
- /**
- * Missing required BIOS file names for a shown card (NeedsBios facts
- * line). Only probed for rows that prep flagged; the whole probe is
- * inside the guard — a bad volume or prep config must not escape
- * into viewModelScope.
- */
+        /**
+         * Missing required BIOS file names for a shown card (NeedsBios facts
+         * line). Only probed for rows that prep flagged; the whole probe is
+         * inside the guard — a bad volume or prep config must not escape
+         * into viewModelScope.
+         */
         private fun missingBios(ctx: Context, g: GameEntity): List<String> {
             if (g.prepState != "NEEDS_BIOS") return emptyList()
             return runCatching {
@@ -752,6 +778,29 @@ class HomeStore internal constructor(
             }.getOrDefault(emptyList())
         }
     }
+}
+
+/**
+ * One patchPrep tick of the stale-prep detector. [quietIds] are
+ * Preparing games with no live bus entry this tick; [seen] counts their
+ * consecutive quiet ticks (ids that went live or left Preparing are
+ * forgotten). Returns the ids that JUST crossed [threshold] so the caller
+ * patches each card once.
+ */
+internal fun stalePrepTick(
+    quietIds: Set<Long>,
+    seen: MutableMap<Long, Int>,
+    threshold: Int = HomeStore.STALE_PREP_TICKS,
+): Set<Long> {
+    seen.keys.retainAll(quietIds)
+    if (quietIds.isEmpty()) return emptySet()
+    val out = mutableSetOf<Long>()
+    for (id in quietIds) {
+        val n = (seen[id] ?: 0) + 1
+        seen[id] = n
+        if (n == threshold) out += id
+    }
+    return out
 }
 
 /**
@@ -785,7 +834,7 @@ internal class SearchKeysCache(
  * `SaveInfo` per game until [SaveIndex.invalidate]:
  * the save index re-stats every state file per lookup while the model
  * rebuilds several times a second. A failing lookup caches "no saves"
- * like a miss; `invalidate` (Home re-entry, after an emulator exits) is
+ * like a miss; `invalidate()` (Home re-entry, after an emulator exits) is
  * the refresh point.
  */
 internal class CachingSaveIndex(private val inner: SaveIndex) : SaveIndex {
@@ -844,16 +893,16 @@ internal class ReadinessCache(
             throw e
         } catch (e: Exception) {
             logW(TAG, "readiness probe failed", e)
- // The entry stays stale so the next look retries.
+            // The entry stays stale so the next look retries.
             last?.status ?: PlayStates.Status.NeedsManual(UNCHECKED_NOTE)
         }
     }
 
- /**
- * Home re-entry: every entry may be out of date (an emulator, core or
- * BIOS can appear while Home is away), so they are re-checked when
- * next shown — and only then.
- */
+    /**
+     * Home re-entry: every entry may be out of date (an emulator, core or
+     * BIOS can appear while Home is away), so they are re-checked when
+     * next shown — and only then.
+     */
     fun markStale() {
         cache.values.forEach { it.stale = true }
     }
@@ -861,7 +910,7 @@ internal class ReadinessCache(
     private companion object {
         const val TAG = "GameBexHomeStore"
 
- /** Facts line of the fallback card. */
+        /** Facts line of the fallback card. */
         const val UNCHECKED_NOTE = "GameBEX couldn't check this game."
     }
 }

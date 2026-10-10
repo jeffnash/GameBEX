@@ -1,0 +1,71 @@
+{
+  "native_axis_scale": "1.33 from exposed original settings file",
+  "cases": [
+    {
+      "point": [
+        236,
+        535
+      ],
+      "observed_console_left_axes": [
+        127,
+        127
+      ],
+      "ocr": "RX 127 RY 127 X 127 LY 127\nL:(0.000000, 0.000000\nR: (0.000000, 0.000000\nD:(0.000000, 0.000000\n"
+    },
+    {
+      "point": [
+        270,
+        535
+      ],
+      "observed_console_left_axes": [
+        193,
+        127
+      ],
+      "ocr": "RX 127 RY 127 X 193 LY 127\n\u00a3:(0.513726, -0.003922)\n\nR: (0.000000, O. OOOOOO%\n\nD:(0.000000, 0.000000\n"
+    },
+    {
+      "point": [
+        300,
+        535
+      ],
+      "observed_console_left_axes": [
+        251,
+        127
+      ],
+      "ocr": "RX 127 RY 127 X 251 LYy 127\nL:(0.968627, -0.003922)\n\nR: (0.000000, O. OOOOOO%\n\nD:(0.000000, 0.000000\n"
+    },
+    {
+      "point": [
+        330,
+        535
+      ],
+      "observed_console_left_axes": [
+        255,
+        127
+      ],
+      "ocr": "RX 127 RY 127 X 255 Ly 127\nL:(1.000000, -0.003922)\n\nR: (0.000000, O. OOOOOO%\n\nD:(0.000000, 0.000000\n"
+    },
+    {
+      "point": [
+        236,
+        590
+      ],
+      "observed_console_left_axes": [
+        127,
+        234
+      ],
+      "ocr": "RX 127 RY 127 X 127 LY 234\nL:(-0.003922, 0.835294)\n\nR: (0.000000, O. OOOOOO%\n\nD:(0.000000, 0.000000\n"
+    },
+    {
+      "point": [
+        300,
+        600
+      ],
+      "observed_console_left_axes": [
+        216,
+        217
+      ],
+      "ocr": "RX 127 RY 127 LX 216 LY 217\n\u00a3:(0.694118, 0.701961\nR: (0.000000, 0.000000\nD:(0.000000, 0.000000\n"
+    }
+  ]
+}

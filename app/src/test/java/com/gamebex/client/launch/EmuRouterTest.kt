@@ -23,6 +23,15 @@ class EmuRouterTest {
         assertEquals(true, EmuRouter.shouldFetchCore(null, "flycast", true))
     }
 
+    @Test fun ppssppAndFlycastNeedTheNamedViewUri() {
+        assertEquals(true, EmuRouter.needsNamedViewUri(Emu.PPSSPP))
+        assertEquals(true, EmuRouter.needsNamedViewUri(Emu.FLYCAST))
+        assertEquals(false, EmuRouter.needsNamedViewUri(Emu.DOLPHIN))
+        assertEquals(false, EmuRouter.needsNamedViewUri(Emu.MELONDS))
+        assertEquals(false, EmuRouter.needsNamedViewUri(Emu.AZAHAR))
+        assertEquals(false, EmuRouter.needsNamedViewUri(Emu.RETROARCH))
+    }
+
     @Test fun noRetroArchMeansNoFetch() {
         assertEquals(false, EmuRouter.shouldFetchCore(null, "flycast", false))
         assertEquals(false, EmuRouter.shouldFetchCore(emptySet(), "flycast", false))
@@ -66,5 +75,19 @@ class EmuRouterTest {
         assertEquals(false, EmuRouter.canStartFresh("ps2", null))
         assertEquals(false, EmuRouter.canStartFresh("psvita", null))
         assertEquals(false, EmuRouter.canStartFresh("no-such-folder", null))
+    }
+
+    // GC/Wii default to the Dolphin app, but the RetroArch alternate boots
+    // the dolphin core through RA, so fresh works with that override only.
+    @Test fun startFreshOnRetroArchAlternate() {
+        assertEquals(false, EmuRouter.canStartFresh("gc", null))
+        assertEquals(false, EmuRouter.canStartFresh("gc", Emu.DOLPHIN.pkg))
+        assertEquals(true, EmuRouter.canStartFresh("gc", Emu.RETROARCH.pkg))
+        assertEquals(true, EmuRouter.canStartFresh("wii", Emu.RETROARCH.pkg))
+        assertEquals(false, EmuRouter.canStartFresh("psp", null))
+        assertEquals(false, EmuRouter.canStartFresh("psp", Emu.PPSSPP.pkg))
+        assertEquals(true, EmuRouter.canStartFresh("psp", Emu.RETROARCH.pkg))
+        // A Standalone platform without an RA alternate never offers it.
+        assertEquals(false, EmuRouter.canStartFresh("ps2", Emu.RETROARCH.pkg))
     }
 }

@@ -1,0 +1,62 @@
+{
+  "effective_config_driver": "gl",
+  "opacity": 0.7,
+  "highlight_multiplier": 2.0,
+  "held_global_multiplier": 1.4,
+  "samples": [
+    {
+      "control": "up",
+      "point": [
+        221,
+        488
+      ],
+      "native_rest_rgb": [
+        68,
+        68,
+        68
+      ],
+      "native_held_rgb": [
+        136,
+        136,
+        136
+      ],
+      "guest_rest_rgb": [
+        68,
+        68,
+        68
+      ],
+      "guest_old_held_rgb": [
+        97,
+        97,
+        97
+      ]
+    },
+    {
+      "control": "b",
+      "point": [
+        1404,
+        653
+      ],
+      "native_rest_rgb": [
+        41,
+        41,
+        41
+      ],
+      "native_held_rgb": [
+        82,
+        82,
+        82
+      ],
+      "guest_rest_rgb": [
+        40,
+        40,
+        40
+      ],
+      "guest_old_held_rgb": [
+        58,
+        58,
+        58
+      ]
+    }
+  ]
+}

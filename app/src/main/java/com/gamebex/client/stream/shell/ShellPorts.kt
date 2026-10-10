@@ -27,6 +27,18 @@ interface VirtualPad : AutoCloseable {
     override fun close()
 }
 
+/**
+ * A pad that creates no input device (lab only: `debug.gamebex.no_pad=1`).
+ * Standalone emulators hide their touch overlay while any gamepad is
+ * attached, so a live pixel pair needs a padless session; input reports
+ * are accepted and dropped, and the session reports backend "none".
+ */
+object NoPad : VirtualPad {
+    override val backend: String = "none"
+    override fun write(state: PadState): Boolean = true
+    override fun close() = Unit
+}
+
 /** One encoded H.264 access unit. Times are the host's System.nanoTime(). */
 class EncodedFrame(
     val seq: Int,
@@ -81,6 +93,13 @@ interface VideoSource : VideoControl {
 
     fun captureInto(target: CaptureTarget) {}
 
+    /**
+     * Re-pins the crop to the viewport sampled in [viewport]
+     * ("vx,vy,vw,vh,dw,dh") once the game has rotated the display
+     * landscape; a same-size shift re-points capture, anything else is a
+     * no-op. Default no-op: only the real encoder applies it.
+     */
+    fun updateCropViewport(viewport: String) {}
 }
 
 /**
@@ -186,6 +205,9 @@ interface ShellComponents {
 
     /** Null when neither pad backend works. */
     fun openPad(): VirtualPad?
+
+    /** The P2 pad with the session's slot workaround applied. */
+    fun openPad(config: StreamConfig): VirtualPad? = openPad()
 
     fun videoSource(): VideoSource
     fun videoSource(config: StreamConfig): VideoSource = videoSource()

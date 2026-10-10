@@ -19,6 +19,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
+// A low-latency stream keeps the existing Wi-Fi lock mode on supported devices.
+@android.annotation.SuppressLint("DiscouragedApi")
 class StreamClient(
     private val endpoint: StreamEndpoint,
     private val listener: Listener,

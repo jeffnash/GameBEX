@@ -6,6 +6,7 @@ import com.gamebex.client.stream.StreamJson
 import com.gamebex.client.stream.StreamProbe
 import com.gamebex.client.stream.StreamStarted
 import com.gamebex.client.stream.StreamStatus
+import com.gamebex.client.stream.p2.P2SlotMode
 import com.gamebex.client.stream.proto.PadState
 import kotlin.system.exitProcess
 
@@ -18,6 +19,15 @@ import kotlin.system.exitProcess
  * `--probe` prints this phone's StreamProbe and exits. `--pad-test` creates
  * player 2's pad, taps A once a second for `--seconds` (default 20), and
  * removes it. Output is one JSON line per event.
+ *
+ * `--p2-slot-mode <off|placeholder|gate-realpad>` runs the
+ * session with the P2 slot workaround; `--pad-test --pad-name <name>`
+ * taps under another device name (a stand-in host controller).
+ * `--p2slot-test` opens player 2 through the real [P2SlotSession]
+ * (placeholder + gate) and taps `--pad-hold A,B,...` with `--pad-hat`
+ * every `--pad-toggle` seconds (0 = hold) to mimic a real guest.
+ * `--blip-settle-ms` overrides the post-resume input-attach window.
+ * for `--seconds`, for the emulator proof without a guest.
  */
 object StreamShellMain {
     @JvmStatic
@@ -25,7 +35,19 @@ object StreamShellMain {
         val opts = parse(args)
         ShellRuntime.ensureMainLooper()
         val seconds = opts["seconds"]?.toLongOrNull() ?: if (opts.containsKey("pad-test")) 20L else 120L
-        if (opts.containsKey("pad-test")) exitProcess(padTest(seconds))
+        if (opts.containsKey("pad-test")) exitProcess(padTest(seconds, opts["pad-name"].orEmpty()))
+        if (opts.containsKey("p2slot-test")) {
+            exitProcess(
+                p2slotTest(
+                    seconds,
+                    P2SlotMode.fromWire(opts["p2-slot-mode"]),
+                    holdButtons(opts["pad-hold"].orEmpty()),
+                    opts["pad-hat"]?.toIntOrNull() ?: PadState.HAT_CENTER,
+                    opts["pad-toggle"]?.toLongOrNull() ?: 2L,
+                    opts["blip-settle-ms"]?.toLongOrNull() ?: P2SlotSession.Timing().blipSettleMs,
+                ),
+            )
+        }
         val components = ShellWiring.components(ShellRuntime.systemContext())
         if (opts.containsKey("probe")) {
             println(StreamJson.json.encodeToString(StreamProbe.serializer(), components.probe()))
@@ -38,6 +60,7 @@ object StreamShellMain {
             inputPort = opts["input-port"]?.toIntOrNull() ?: StreamCaps.INPUT_PORT,
             level = opts["level"]?.toIntOrNull() ?: 0,
             audio = !opts.containsKey("no-audio"),
+            p2SlotMode = opts["p2-slot-mode"].orEmpty().ifBlank { P2SlotMode.OFF.wire },
         )
         val session = StreamHostSession(config, components, appWatchdog = false)
         val started = session.start()
@@ -53,13 +76,15 @@ object StreamShellMain {
     }
 
     /** Emulator check: the pad appears, presses A, and goes away. */
-    private fun padTest(seconds: Long): Int {
-        val pad = VirtualPads.open()
+    private fun padTest(seconds: Long, padName: String): Int {
+        val name = padName.ifBlank { StreamCaps.PAD_NAME }
+        val uniq = if (padName.isBlank()) StreamCaps.PAD_UNIQ else padName.lowercase().replace(Regex("[^a-z0-9]+"), "-")
+        val pad = VirtualPads.open(name, uniq)
         if (pad == null) {
             println("{\"pad\":null,\"uhid\":${VirtualPads.uhidAvailable()},\"hidTool\":${VirtualPads.hidToolAvailable()}}")
             return 1
         }
-        println("{\"pad\":\"${pad.backend}\"}")
+        println("{\"pad\":\"${pad.backend}\",\"name\":\"$name\"}")
         try {
             for (i in 0 until seconds) {
                 val pressed = i % 2 == 0L
@@ -72,6 +97,62 @@ object StreamShellMain {
             println("{\"pad\":\"closed\"}")
         }
         return 0
+    }
+
+    /** Emulator proof: the real slot session holds a state without a guest. */
+    private fun p2slotTest(seconds: Long, mode: P2SlotMode, buttons: Int, hat: Int, toggleS: Long, blipSettleMs: Long): Int {
+        val session = P2SlotSession.open(
+            mode,
+            timing = P2SlotSession.Timing().copy(blipSettleMs = blipSettleMs),
+        ) ?: run {
+            println("{\"p2slot\":null}")
+            return 1
+        }
+        println("{\"p2slot\":\"${session.backend}\",\"mode\":\"${mode.wire}\",\"toggleS\":$toggleS,\"blipSettleMs\":$blipSettleMs}")
+        try {
+            val held = PadState(buttons = buttons, hat = hat)
+            val end = System.nanoTime() + seconds * 1_000_000_000L
+            var i = 0L
+            while (System.nanoTime() < end) {
+                // RetroArch's Android input is event-driven: a constant hold
+                // is one transition (easily missed during RA startup), so the
+                // proof taps like a real guest unless told to hold (0).
+                val down = toggleS <= 0L || (i / (toggleS * 2L)) % 2L == 0L
+                // The hat stays put (its transition lands after the gate
+                // opens, when RA polls), only the buttons tap.
+                val ok = session.write(if (down) held else PadState(buttons = 0, hat = hat))
+                if (i % 4 == 0L) println("{\"t\":$i,\"gate\":${session.gateOpen},\"down\":$down,\"ok\":$ok}")
+                Thread.sleep(500L)
+                i++
+            }
+        } finally {
+            session.write(PadState.NEUTRAL)
+            session.close()
+            println("{\"p2slot\":\"closed\"}")
+        }
+        return 0
+    }
+
+    private fun holdButtons(csv: String): Int {
+        var bits = 0
+        for (name in csv.split(',').map { it.trim().uppercase() }) {
+            bits = bits or when (name) {
+                "A" -> PadState.A
+                "B" -> PadState.B
+                "X" -> PadState.X
+                "Y" -> PadState.Y
+                "L1" -> PadState.L1
+                "R1" -> PadState.R1
+                "L2" -> PadState.L2
+                "R2" -> PadState.R2
+                "SELECT" -> PadState.SELECT
+                "START" -> PadState.START
+                "L3" -> PadState.L3
+                "R3" -> PadState.R3
+                else -> 0
+            }
+        }
+        return bits
     }
 
     /** "--key value" and bare "--flag" arguments. */

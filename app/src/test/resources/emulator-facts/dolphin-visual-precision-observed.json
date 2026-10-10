@@ -1,0 +1,94 @@
+{
+  "down": [
+    126,
+    545
+  ],
+  "move": [
+    175,
+    545
+  ],
+  "outer_rect": [
+    27,
+    446,
+    198,
+    198
+  ],
+  "native_held_thumb_rect": [
+    102,
+    473,
+    144,
+    144
+  ],
+  "previous_candidate_thumb_rect": [
+    103,
+    473,
+    144,
+    144
+  ],
+  "pixelPct_before_precision_correction": 94.42883441526983,
+  "rows": [
+    {
+      "raw_pixel_displacement": 0,
+      "integer_half_extent": 99,
+      "normalized_single_precision": 0.0,
+      "promoted_double_product": 0.0,
+      "visual_integer_displacement": 0
+    },
+    {
+      "raw_pixel_displacement": 1,
+      "integer_half_extent": 99,
+      "normalized_single_precision": 0.010101010091602802,
+      "promoted_double_product": 0.9999999990686774,
+      "visual_integer_displacement": 0
+    },
+    {
+      "raw_pixel_displacement": -1,
+      "integer_half_extent": 99,
+      "normalized_single_precision": -0.010101010091602802,
+      "promoted_double_product": -0.9999999990686774,
+      "visual_integer_displacement": 0
+    },
+    {
+      "raw_pixel_displacement": 33,
+      "integer_half_extent": 99,
+      "normalized_single_precision": 0.3333333432674408,
+      "promoted_double_product": 33.00000098347664,
+      "visual_integer_displacement": 33
+    },
+    {
+      "raw_pixel_displacement": -33,
+      "integer_half_extent": 99,
+      "normalized_single_precision": -0.3333333432674408,
+      "promoted_double_product": -33.00000098347664,
+      "visual_integer_displacement": -33
+    },
+    {
+      "raw_pixel_displacement": 49,
+      "integer_half_extent": 99,
+      "normalized_single_precision": 0.49494948983192444,
+      "promoted_double_product": 48.99999949336052,
+      "visual_integer_displacement": 48
+    },
+    {
+      "raw_pixel_displacement": -49,
+      "integer_half_extent": 99,
+      "normalized_single_precision": -0.49494948983192444,
+      "promoted_double_product": -48.99999949336052,
+      "visual_integer_displacement": -48
+    },
+    {
+      "raw_pixel_displacement": 98,
+      "integer_half_extent": 99,
+      "normalized_single_precision": 0.9898989796638489,
+      "promoted_double_product": 97.99999898672104,
+      "visual_integer_displacement": 97
+    },
+    {
+      "raw_pixel_displacement": -98,
+      "integer_half_extent": 99,
+      "normalized_single_precision": -0.9898989796638489,
+      "promoted_double_product": -97.99999898672104,
+      "visual_integer_displacement": -97
+    }
+  ]
+}

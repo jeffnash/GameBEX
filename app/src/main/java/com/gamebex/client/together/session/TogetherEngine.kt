@@ -48,16 +48,20 @@ class TogetherEngine(
     private val timing: TogetherTiming = TogetherTiming(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
- /** STREAM host: the shell-uid stream process. */
+    /** STREAM host: the shell-uid stream process. */
     streamHost: StreamHost = NoStreamHost,
- /** STREAM host: player 2's binding. */
     player2: StreamPlayer2 = NoStreamPlayer2,
- /** STREAM host flags: raw in-app value or null when unset. */
+    /** STREAM host flags: raw in-app value, or null when unset. */
     hostFlag: (String) -> String? = { null },
- /** seeds the core's overlay from the RA APK when RA configures none. */
+    /** Seeds the core's overlay from the RA APK when RA configures none. */
     seedOverlayForCore: (String?) -> java.io.File? = { null },
+    hostViewportInfo: () -> com.gamebex.client.together.HostViewportInfo = { com.gamebex.client.together.HostViewportInfo.UNKNOWN },
+    /** For reading installed emulator art. */
+    appContext: () -> android.content.Context? = { null },
+    emuOverlayFiles: () -> com.gamebex.client.launch.EmuFiles = { com.gamebex.client.launch.DirectFiles },
+    hostDensityDpi: () -> Int = { 0 },
 ) : TogetherController {
-    private val hostEngine = HostEngine(transport, emulators, library, discovery, platform, timing, scope, ioDispatcher, streamHost, player2, hostFlag = hostFlag, overlay26bEnabled = { StreamFlags.toggleOn("overlay_26b", hostFlag) }, seedOverlayForCore = seedOverlayForCore)
+    private val hostEngine = HostEngine(transport, emulators, library, discovery, platform, timing, scope, ioDispatcher, streamHost, player2, hostFlag = hostFlag, overlay26bEnabled = { StreamFlags.toggleOn("overlay_26b", hostFlag) }, seedOverlayForCore = seedOverlayForCore, hostViewportInfo = hostViewportInfo, appContext = appContext, emuOverlayFiles = emuOverlayFiles, hostDensityDpi = hostDensityDpi)
     private val guestEngine = GuestEngine(transport, probes, emulators, library, platform, timing, scope, ioDispatcher)
 
     override val nearby: StateFlow<List<NearbyHost>> = discovery.found
@@ -189,11 +193,11 @@ class TogetherEngine(
         }
     }
 
- /**
- * The first idle foreground restores a PPSSPP session that died with the
- * process. That restore force-stops a backgrounded PPSSPP; that's
- * acceptable because the session already ended abnormally.
- */
+    /**
+     * The first idle foreground restores a PPSSPP session that died with the
+     * process. That restore force-stops a backgrounded PPSSPP; that's
+     * acceptable because the session already ended abnormally.
+     */
     override fun onForeground() {
         refreshAddress()
         hostEngine.onForeground()
@@ -220,11 +224,11 @@ class TogetherEngine(
         scope.launch { refreshNameNow() }
     }
 
- /**
- * Saves the name and republishes [myName]. The engines read platform.playerName
- * at their own refresh points (browse, foreground, setup, connect), so a new
- * session uses the new name; one already running keeps the name it started with.
- */
+    /**
+     * Saves the name and republishes [myName]. The engines read platform.playerName()
+     * at their own refresh points (browse, foreground, setup, connect), so a new
+     * session uses the new name; one already running keeps the name it started with.
+     */
     override fun rename(name: String?) {
         scope.launch {
             runCatching { withContext(ioDispatcher) { platform.setCustomName(name) } }

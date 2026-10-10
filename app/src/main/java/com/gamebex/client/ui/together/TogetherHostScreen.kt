@@ -379,7 +379,7 @@ fun TogetherHostScreen(
             } },
             right = {
                 if (v?.step == HostStep.WAITING && v?.qrText != null) TogetherStack {
-                    QrCode(v?.qrText.orEmpty(), g.x(300), Modifier.stackY(48))
+                    QrCode(v?.qrText.orEmpty(), Modifier.stackY(48), g.x(300))
                     Text(TogetherCopy.qrCaption, color = ConsoleColors.TextSecondary, fontSize = g.t(16), lineHeight = g.t(20), modifier = Modifier.stackY(364))
                     Text(v?.myAddress?.let(TogetherCopy::thisPhone) ?: TogetherCopy.noWifiShort, color = ConsoleColors.TextPrimary, fontSize = g.t(22), fontWeight = FontWeight.Bold, modifier = Modifier.stackY(396))
                 } else if (v?.step == HostStep.JOINED || v?.step == HostStep.LAUNCHING || v?.step == HostStep.IN_GAME) {
@@ -389,7 +389,7 @@ fun TogetherHostScreen(
                 }
             },
         )
-        
+
     }
 }
 

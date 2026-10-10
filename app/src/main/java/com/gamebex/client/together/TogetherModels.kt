@@ -6,11 +6,77 @@ import kotlinx.serialization.Serializable
 
 /**
  * Link protocol version, sent in [LinkMsg.Hello]. Bump on any incompatible change.
- * 3 adds [LinkMsg.StreamOverlay] (26b: the guest renders the host's RetroArch
- * overlay). Older apps drop the unknown "t" discriminator in LinkJson.decode
- * instead of failing the link; every new field carries a default.
+ * 3 adds [LinkMsg.StreamOverlay] (the guest renders the host's RetroArch
+ * overlay). It grew additively after that (settings, chunked parts,
+ * [LinkMsg.StreamOverlayRequest]) without a bump: every new field carries a
+ * default and older apps drop the unknown "t" discriminator in
+ * LinkJson.decode instead of failing the link.
+ * 4 raises the link JSON frame to 256 KB (Frames.MAX_JSON) so whole overlay
+ * images fit one part; older apps reject bigger frames, hence the bump.
  */
-const val TOGETHER_PROTO: Int = 3
+const val TOGETHER_PROTO: Int = 4
+
+/**
+ * The host emulator's overlay viewport: origin + size in host-display
+ * pixels. Doubles as a cutout rect for [defaultCutoutViewport].
+ */
+data class HostViewport(val x: Int, val y: Int, val w: Int, val h: Int) {
+    val isEmpty: Boolean get() = w <= 0 || h <= 0
+}
+
+/**
+ * The window a default-cutout-mode app (RetroArch, Dolphin, NetherSX2,
+ * ...) gets on a [displayW]x[displayH] display with [cutouts] bounding
+ * rects (display coords): the system letterboxes it off any display edge
+ * a cutout touches. Floating hole-punches letterbox nothing. Pure.
+ */
+fun defaultCutoutViewport(
+    displayW: Int,
+    displayH: Int,
+    cutouts: List<HostViewport>,
+): HostViewport {
+    var x = 0
+    var y = 0
+    var w = displayW
+    var h = displayH
+    cutouts.forEach { r ->
+        if (r.x <= 0 && r.w > 0) {
+            val nx = (r.x + r.w).coerceIn(0, displayW)
+            if (nx > x) {
+                w -= nx - x
+                x = nx
+            }
+        } else if (r.x + r.w >= displayW && r.w > 0) {
+            w = minOf(w, r.x - x)
+        }
+        if (r.y <= 0 && r.h > 0) {
+            val ny = (r.y + r.h).coerceIn(0, displayH)
+            if (ny > y) {
+                h -= ny - y
+                y = ny
+            }
+        } else if (r.y + r.h >= displayH && r.h > 0) {
+            h = minOf(h, r.y - y)
+        }
+    }
+    if (w <= 0 || h <= 0) return HostViewport(0, 0, displayW, displayH)
+    return HostViewport(x, y, w, h)
+}
+
+/**
+ * The host display plus the overlay viewport inside it (the default
+ * cutout-mode window a RetroArch-class emulator gets). Empty viewport =
+ * unknown; the guest maps its full canvas then.
+ */
+data class HostViewportInfo(
+    val viewport: HostViewport,
+    val displayW: Int,
+    val displayH: Int,
+) {
+    companion object {
+        val UNKNOWN: HostViewportInfo = HostViewportInfo(HostViewport(0, 0, 0, 0), 0, 0)
+    }
+}
 
 object TogetherPorts {
     /** GameBEX link (TCP). [LinkTransport.listen] falls back to an ephemeral port. */
@@ -164,13 +230,74 @@ sealed interface LinkMsg {
     data class OverlayImage(val name: String, val base64: String = "")
 
     /**
-     * Host → guest, STREAM only, right after [StreamReady] when the guest-facing
-     * flag `overlay_26b` is on (default off): the host's active RetroArch
-     * overlay cfg plus its images, so the guest renders the host's own pad
-     * (26b). Fits one link JSON frame (see HostOverlayBundle caps); [truncated]
-     * means images were dropped and the guest draws vector fallback art for
-     * them. A guest that can't use it ([OverlayLayout.usableForPlay] false)
-     * renders the 26a layout for the profile instead.
+     * The effective RetroArch overlay settings the host renders with
+     * (`input_overlay_*` from the files it loads), plus the host screen.
+     * Native setting fields keep their Android defaults; optional rendering
+     * metadata keeps absent-field behavior and is ignored by older guests.
+     */
+    @Serializable
+    data class OverlaySettingsMsg(
+        val opacity: Float = 0.7f,
+        val autoScale: Boolean = true,
+        /** `input_overlay_show_inputs`: 0 none, 1 touched, 2 physical. */
+        val showInputs: Int = 1,
+        val scaleLandscape: Float = 1f,
+        val aspectAdjustLandscape: Float = 0f,
+        val xSeparationLandscape: Float = 0f,
+        val ySeparationLandscape: Float = 0f,
+        val xOffsetLandscape: Float = 0f,
+        val yOffsetLandscape: Float = 0f,
+        val scalePortrait: Float = 1f,
+        val aspectAdjustPortrait: Float = 0f,
+        val xSeparationPortrait: Float = 0f,
+        val ySeparationPortrait: Float = 0f,
+        val xOffsetPortrait: Float = 0f,
+        val yOffsetPortrait: Float = 0f,
+        /**
+         * The host emulator's overlay viewport in pixels: origin + size on
+         * the host display. RetroArch-class emulators use the default
+         * cutout mode, so in landscape the system letterboxes them off the
+         * cutout side (70px on the lab phones) — overlay coords are
+         * fractions of the VIEWPORT, not the display. Old hosts send 0,0
+         * + display size (viewport == display).
+         */
+        val screenX: Int = 0,
+        val screenY: Int = 0,
+        val screenW: Int = 0,
+        val screenH: Int = 0,
+        /** Host display in pixels (the viewport sits inside it). */
+        val displayW: Int = 0,
+        val displayH: Int = 0,
+        /**
+         * The rect the host's encoder crops to (host-display px), or all 0
+         * when the shell streams full-frame. The guest offsets its video
+         * surface by this instead of centering, so the cropped game picture
+         * lands where the emulator drew it (the viewport-centered crop sits
+         * off-center on cutout phones). Additive: old hosts send 0.
+         */
+        val cropX: Int = 0,
+        val cropY: Int = 0,
+        val cropW: Int = 0,
+        val cropH: Int = 0,
+        /** Absent metadata preserves the existing packed-color alpha behavior. */
+        val floatingAlpha: Boolean = false,
+        val dpadDiagonalSensitivity: Float = 80f,
+        val abxyDiagonalSensitivity: Float = 50f,
+    )
+
+    /**
+     * Host → guest, STREAM only, right after [StreamReady] when the
+     * guest-facing flag `overlay_26b` is on: the host's active RetroArch
+     * overlay cfg, its effective settings, and its images at FULL size, so
+     * the guest renders the host's own pad pixel-perfect.
+     *
+     * Images ship in [partCount] parts ([partIndex] 0-based); part 0 carries
+     * the cfg + settings + first images, follow-ups the rest. Every part
+     * fits one link JSON frame. [truncated] means unreadable images were
+     * skipped at the source (never size-capped): the guest re-requests them
+     * ([StreamOverlayRequest]) and meanwhile marks the session
+     * OVERLAY_DEGRADED. A guest that can't use it (no play page at all)
+     * falls back to its own RetroArch stock overlay.
      */
     @Serializable @SerialName("stream_overlay")
     data class StreamOverlay(
@@ -178,12 +305,144 @@ sealed interface LinkMsg {
         val round: Int,
         /** Overlay page name (e.g. "landscape"); "" = unnamed. */
         val name: String = "",
-        /** The overlay .cfg text (UTF-8), possibly trimmed to its first page. */
+        /** The overlay .cfg text (UTF-8), all pages (part 0 only). */
         val cfg: String = "",
         /** Images referenced by the cfg, relative path as written → base64 bytes. */
         val images: List<OverlayImage> = emptyList(),
-        /** True when cfg/images were capped; missing images render as fallback art. */
+        /** True when source images were unreadable/skipped (re-requested). */
         val truncated: Boolean = false,
+        /** Effective host overlay settings + screen (part 0 only). */
+        val settings: OverlaySettingsMsg = OverlaySettingsMsg(),
+        val partIndex: Int = 0,
+        val partCount: Int = 1,
+    ) : LinkMsg
+
+    /**
+     * Guest → host, STREAM only: re-send [missing] image refs (paths as
+     * written in the cfg). The host answers with a top-up [StreamOverlay]
+     * ([partIndex] -1, merged by ref) or nothing when they're unreadable.
+     */
+    @Serializable @SerialName("stream_overlay_request")
+    data class StreamOverlayRequest(
+        val sessionId: String,
+        val round: Int,
+        val missing: List<String> = emptyList(),
+        /** True when [missing] names [StreamEmuOverlay] control ids, not cfg refs. */
+        val emu: Boolean = false,
+    ) : LinkMsg
+
+    /** One visual cell of a dpad (Nether/ARMSX2 arms): art + own rect, all host px. */
+    @Serializable
+    data class EmuCell(
+        val art: String = "",
+        val pressedArt: String = "",
+        val x: Int = 0,
+        val y: Int = 0,
+        val w: Int = 0,
+        val h: Int = 0,
+    )
+
+    /** One control of a non-RetroArch emulator's own touch overlay. */
+    @Serializable
+    data class EmuControl(
+        /** The emulator's control id (e.g. Dolphin "A", ARMSX2 "CROSS"). */
+        val id: String,
+        /** 0 button, 1 dpad, 2 stick. */
+        val kind: Int = 0,
+        /** Unpressed art, base64 PNG at exact host pixels ([w]x[h]). */
+        val art: String = "",
+        /** Pressed art (buttons/sticks); "" shows [art] when pressed. */
+        val pressedArt: String = "",
+        /** Dpad two-directions art; "" shows [pressedArt]. */
+        val pressedArt2: String = "",
+        /** Stick movable knob art at rest size; "" = no knob. */
+        val knobArt: String = "",
+        /** Stick pressed knob art; "" shows [knobArt]. */
+        val knobPressedArt: String = "",
+        /** Knob size in host px (square, centered at rest). */
+        val knobSize: Int = 0,
+        /** Draw rect in host-screen pixels (same-model phones: 1:1 on guest). */
+        val x: Int = 0,
+        val y: Int = 0,
+        val w: Int = 0,
+        val h: Int = 0,
+        /** The emulator's alpha for this control, 0-255 like Drawable alpha. */
+        val alpha: Int = 255,
+        /** True when a tap latches until the next tap (Dolphin latching). */
+        val latching: Boolean = false,
+        /** Stick origin capture (Dolphin JoystickRelCenter, ARMSX2 floating). */
+        val recenter: Boolean = false,
+        /** ARMSX2 turbo: toggle period in 60Hz frames, 0 = momentary. */
+        val turboFrames: Int = 0,
+        /** Nether: pressed art is [art] grown by this many host px each side. */
+        val pressedGrowPx: Int = 0,
+        /** ARMSX2 dpad key spacing 0..0.35 (dead-center + arm gap). */
+        val dpadGap: Float = 0f,
+        /** Dpad arm visuals (Nether 4 dirs, ARMSX2 4 arms); empty = single art. */
+        val cells: List<EmuCell> = emptyList(),
+        /** Nether axis: art is inset by this many host px per side (view padding). */
+        val padPx: Int = 0,
+        /** Nether: sliding onto this button pins it (TouchGliding). */
+        val glide: Boolean = false,
+        /** True for hit-only controls with no art by design (Flycast diagonals). */
+        val noArt: Boolean = false,
+        /** What a press drives on the wire. */
+        val output: com.gamebex.client.stream.guest.OverlayOutput =
+            com.gamebex.client.stream.guest.OverlayOutput.Ignored,
+        val stickTravelPx: Float = 0f,
+        val stickyDpad: Boolean = false,
+        val dpadDiagonals: Boolean = true,
+        /** Optional fractional art rectangles; older payloads use the integer diagnostics. */
+        val renderRect: List<Float> = emptyList(),
+        val knobRect: List<Float> = emptyList(),
+        val renderGray: Float = 1f,
+        val pressedRenderGray: Float = 1f,
+        val knobRenderGray: Float = 1f,
+        val textureInset: Int = 0,
+    )
+
+    /**
+     * Host → guest, STREAM only, right after [StreamReady] when the
+     * guest-facing flag `overlay_26b` is on and the host runs a non-RA
+     * emulator (Dolphin app, NetherSX2, ARMSX2, Flycast): that emulator's
+     * own touch controls — art rasterized at exact host pixels plus exact
+     * rects — so the guest renders them 1:1. Chunked like
+     * [StreamOverlay]; part 0 alone locates every control (rects first,
+     * art follows). Missing art degrades like [StreamOverlay].
+     */
+    @Serializable @SerialName("stream_emu_overlay")
+    data class StreamEmuOverlay(
+        val sessionId: String,
+        val round: Int,
+        /** touchBackendForEmuPkg name: "dolphin", "nethersx2", "armsx2", "flycast", "melonds", "ppsspp". */
+        val backend: String = "",
+        val controls: List<EmuControl> = emptyList(),
+        val partIndex: Int = 0,
+        val partCount: Int = 1,
+        val truncated: Boolean = false,
+        /**
+         * The host emulator's overlay viewport in pixels: origin + size on
+         * the host display (default cutout mode letterboxes landscape apps
+         * off the cutout side; control rects are viewport-px). Old hosts
+         * send 0,0 + display size.
+         */
+        val screenX: Int = 0,
+        val screenY: Int = 0,
+        val screenW: Int = 0,
+        val screenH: Int = 0,
+        /** Host display in pixels (the viewport sits inside it). */
+        val displayW: Int = 0,
+        val displayH: Int = 0,
+        /**
+         * The rect the host's encoder crops to (host-display px), or all 0
+         * when the shell streams full-frame. Mirrors
+         * [OverlaySettingsMsg.cropX]: the guest offsets its video surface
+         * by this instead of centering.
+         */
+        val cropX: Int = 0,
+        val cropY: Int = 0,
+        val cropW: Int = 0,
+        val cropH: Int = 0,
     ) : LinkMsg
 
     @Serializable @SerialName("stream_resumed")
@@ -308,5 +567,8 @@ fun touchBackendForEmuPkg(emuPkg: String?): String = when (emuPkg) {
     com.gamebex.client.data.Emu.DOLPHIN.pkg -> "dolphin"
     com.gamebex.client.data.Emu.NETHER.pkg -> "nethersx2"
     com.gamebex.client.data.Emu.ARMSX2.pkg -> "armsx2"
+    com.gamebex.client.data.Emu.FLYCAST.pkg -> "flycast"
+    com.gamebex.client.data.Emu.MELONDS.pkg -> "melonds"
+    com.gamebex.client.data.Emu.PPSSPP.pkg -> "ppsspp"
     else -> ""
 }

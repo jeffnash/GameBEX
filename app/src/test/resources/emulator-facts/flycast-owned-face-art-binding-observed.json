@@ -1,0 +1,40 @@
+{
+  "owned_bindings": [
+    {
+      "owned_id": "4",
+      "semantic": "Y",
+      "position": "upper face cell; preserve existing geometry/output",
+      "atlas_rect": [
+        320,
+        0,
+        64,
+        64
+      ]
+    },
+    {
+      "owned_id": "5",
+      "semantic": "X",
+      "position": "left face cell; preserve existing geometry/output",
+      "atlas_rect": [
+        256,
+        0,
+        64,
+        64
+      ]
+    }
+  ],
+  "synthetic_colors": {
+    "cell_at_256": [
+      240,
+      210,
+      50,
+      255
+    ],
+    "cell_at_320": [
+      30,
+      200,
+      60,
+      255
+    ]
+  }
+}

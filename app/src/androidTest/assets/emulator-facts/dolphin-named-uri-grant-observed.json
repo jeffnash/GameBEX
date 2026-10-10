@@ -1,0 +1,6 @@
+{
+  "uri": "content://com.gamebex.client.roms/game/26/Pong-2P.dol",
+  "native_read_attempt": "13:18:14.035 Running named URI;13:18:14.176 Tried to open without permission",
+  "provider_denial": "Permission Denial: reading com.gamebex.client.launch.RomProvider named URI from pid31337 uid10500 requires the provider be exported, or grantUriPermission()",
+  "provider_remains_private": true
+}

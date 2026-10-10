@@ -38,6 +38,8 @@ import rikka.shizuku.Shizuku
  * remove=true on [stop], which makes Shizuku call destroy() so the process
  * exits and player 2's pad disappears.
  */
+// The singleton stores applicationContext and never retains an Activity.
+@android.annotation.SuppressLint("StaticFieldLeak")
 class StreamShellClient private constructor(ctx: Context) : StreamHost {
     private val app = ctx.applicationContext
     private val main = Handler(Looper.getMainLooper())
@@ -110,6 +112,10 @@ class StreamShellClient private constructor(ctx: Context) : StreamHost {
             streaming = started.ok
             appCapture = started.ok
             if (appCapture) {
+                // Settle the BAL overlay now: the consent proxy starts after
+                // the emulator fires (stable stack), when GameBEX has no
+                // visible activity of its own.
+                StreamAppCapture.armBalOverlay(app)
                 StreamAppCapture.onEnded = { captureScope.launch { stopCapturedSession(epoch, svc) } }
                 val listener = object : IStreamCapture.Stub() {
                     override fun onSurface(surface: Surface?, width: Int, height: Int) {

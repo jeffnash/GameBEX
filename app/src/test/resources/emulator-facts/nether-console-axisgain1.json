@@ -1,0 +1,34 @@
+{
+  "cases": [
+    {
+      "point": [
+        270,
+        535
+      ],
+      "observed_console_left_axes": [
+        177,
+        127
+      ]
+    },
+    {
+      "point": [
+        300,
+        535
+      ],
+      "observed_console_left_axes": [
+        221,
+        127
+      ]
+    },
+    {
+      "point": [
+        300,
+        600
+      ],
+      "observed_console_left_axes": [
+        194,
+        195
+      ]
+    }
+  ]
+}

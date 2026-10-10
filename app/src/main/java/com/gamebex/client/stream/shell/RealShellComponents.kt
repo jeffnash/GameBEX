@@ -7,6 +7,7 @@ import com.gamebex.client.stream.StreamCaps
 import com.gamebex.client.stream.StreamConfig
 import com.gamebex.client.stream.StreamDebug
 import com.gamebex.client.stream.StreamProbe
+import com.gamebex.client.stream.p2.P2SlotMode
 
 /**
  * The shell process's real parts: pad, capture, encoder and media
@@ -37,7 +38,35 @@ class RealShellComponents(@Suppress("unused") private val context: Context?) : S
         avcEncoder = runCatching { AvcEncoders.rank(AvcEncoders.list(), StreamCaps.LEVELS.last()).isNotEmpty() }.getOrDefault(false),
     )
 
-    override fun openPad(): VirtualPad? = VirtualPads.open()
+    override fun openPad(): VirtualPad? =
+        if (StreamDebug.flag("no_pad")) {
+            android.util.Log.i("GameBEXStream", "pad: none (debug.gamebex.no_pad=1; input dropped)")
+            NoPad
+        } else {
+            VirtualPads.open()
+        }
+
+    override fun openPad(config: StreamConfig): VirtualPad? {
+        if (StreamDebug.flag("no_pad")) {
+            android.util.Log.i("GameBEXStream", "pad: none (debug.gamebex.no_pad=1; input dropped)")
+            return NoPad
+        }
+        // The adb prop wins on debug builds (lab override); unknown values stay off.
+        val mode = P2SlotMode.fromWire(
+            shellString("p2_slot_mode", config.p2SlotMode, P2SlotMode.entries.map { it.wire }.toSet()),
+        )
+        if (mode == P2SlotMode.OFF) return VirtualPads.open()
+        android.util.Log.i("GameBEXStream", "pad: P2 slot workaround ${mode.wire}")
+        return P2SlotSession.open(
+            mode,
+            timing = P2SlotSession.Timing(
+                raUpTimeoutMs = shellInt("p2_slot_ra_up_ms", 60_000, 0..300_000).toLong(),
+                registerWaitMs = shellInt("p2_slot_register_ms", 750, 0..10_000).toLong(),
+                realPadTimeoutMs = shellInt("p2_slot_pad_wait_ms", 30_000, 0..300_000).toLong(),
+                blipSettleMs = shellInt("p2_slot_blip_settle_ms", 3_000, 0..60_000).toLong(),
+            ),
+        )
+    }
 
     override fun videoSource(): VideoSource = AvcScreenSource()
     override fun videoSource(config: StreamConfig): VideoSource = AvcScreenSource(config = config)

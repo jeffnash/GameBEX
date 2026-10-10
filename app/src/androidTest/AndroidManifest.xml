@@ -1,0 +1,34 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <service
+            android:name="com.gamebex.client.launch.OwnedDocumentReceiverService"
+            android:exported="true" />
+        <activity
+            android:name="com.gamebex.client.launch.OwnedFlycastTargetActivity"
+            android:launchMode="singleTask"
+            android:enabled="true"
+            android:exported="true" />
+        <activity-alias
+            android:name="com.gamebex.client.test.OwnedFileLauncher"
+            android:targetActivity="com.gamebex.client.launch.OwnedFlycastTargetActivity"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.chd" />
+            </intent-filter>
+        </activity-alias>
+        <activity
+            android:name="com.gamebex.client.launch.OwnedPrivateTargetActivity"
+            android:exported="false" />
+        <activity
+            android:name="com.gamebex.client.launch.OwnedDisabledTargetActivity"
+            android:enabled="false"
+            android:exported="true" />
+    </application>
+</manifest>

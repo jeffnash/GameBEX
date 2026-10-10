@@ -1,0 +1,109 @@
+{
+  "source_texels_rgba": [
+    [
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      255,
+      255,
+      255,
+      255
+    ]
+  ],
+  "gray_byte": 128,
+  "opacity_byte": 161,
+  "background_rgb": [
+    0,
+    0,
+    0
+  ],
+  "samples": [
+    {
+      "opaque_weight": 0,
+      "displayed_rgb": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "opaque_weight": 0.25,
+      "displayed_rgb": [
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "opaque_weight": 0.5,
+      "displayed_rgb": [
+        20,
+        20,
+        20
+      ]
+    },
+    {
+      "opaque_weight": 0.75,
+      "displayed_rgb": [
+        45,
+        45,
+        45
+      ]
+    },
+    {
+      "opaque_weight": 1,
+      "displayed_rgb": [
+        81,
+        81,
+        81
+      ]
+    }
+  ],
+  "noninteger_density_dpi": 264.555,
+  "margin_case": {
+    "horizontal_texels_rgba": [
+      [
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        255,
+        255,
+        255,
+        255
+      ],
+      [
+        255,
+        255,
+        255,
+        255
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "source_interval_left": 1,
+    "source_interval_extent": 2,
+    "normalized_destination_position": 0.05,
+    "source_texel_coordinate": 0.6,
+    "opaque_weight": 0.6,
+    "displayed_rgb": [
+      29,
+      29,
+      29
+    ],
+    "wrong_interior_clamp_rgb": [
+      81,
+      81,
+      81
+    ]
+  }
+}

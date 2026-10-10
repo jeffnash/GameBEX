@@ -50,12 +50,24 @@ class FramesTest {
     }
 
     @Test fun readRejectsOversizedJson() {
-        val length = 65_538
+        // length counts the kind byte: payload is MAX_JSON + 1.
+        val length = Frames.MAX_JSON + 2
         val frame = ByteArray(4 + length)
-        frame[1] = 1
-        frame[3] = 2
+        frame[0] = ((length shr 24) and 0xff).toByte()
+        frame[1] = ((length shr 16) and 0xff).toByte()
+        frame[2] = ((length shr 8) and 0xff).toByte()
+        frame[3] = (length and 0xff).toByte()
         frame[4] = Frames.KIND_JSON.toByte()
         assertBadFrame(frame)
+    }
+
+    @Test fun jsonRoundTripsNearTheCeiling() {
+        // Whole overlay images ride one part (arcade buttons ~217 KB base64).
+        val text = "x".repeat(220_000)
+        val out = ByteArrayOutputStream()
+        Frames.writeJson(out, text)
+        val frame = Frames.read(ByteArrayInputStream(out.toByteArray())) as Frame.Json
+        assertEquals(text, frame.text)
     }
 
     @Test fun cleanEofAtFrameBoundaryReturnsNull() {

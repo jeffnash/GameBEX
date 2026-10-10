@@ -108,7 +108,7 @@ class StreamFlagsTest {
     @Test fun everyImprovementHasItsFlagInTheRightGroup() {
         fun keys(group: StreamFlagGroup) = StreamFlags.ALL.filter { it.group == group }.map { it.key }.toSet()
         assertEquals(
-            setOf("audio_lead_frames", "keyframes_on_request", "overlay_26b"),
+            setOf("audio_lead_frames", "keyframes_on_request", "overlay_26b", "p2_slot_workaround"),
             keys(StreamFlagGroup.DEFAULT_ON),
         )
         assertEquals(

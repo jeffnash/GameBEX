@@ -62,8 +62,12 @@ object RetroArchStates {
      * unknown. Pure.
      */
     fun coreFolderFor(game: GameEntity): String? {
-        val route = PlatformRegistry.byFolder[game.folder]?.route as? Route.RetroCore ?: return null
-        return coreFolderOf(game.coreOverride ?: route.core)
+        val platform = PlatformRegistry.byFolder[game.folder] ?: return null
+        (platform.route as? Route.RetroCore)?.let { return coreFolderOf(game.coreOverride ?: it.core) }
+        if (game.emulatorOverride == Emu.RETROARCH.pkg) {
+            platform.altRetroCore?.let { return coreFolderOf(game.coreOverride ?: it) }
+        }
+        return null
     }
 
     /**
@@ -94,7 +98,13 @@ object RetroArchStates {
      * keep their saves elsewhere. [emulatorOverride] is the entity's.
      */
     fun runsOnRetroArch(folder: String, emulatorOverride: String?): Boolean {
-        if (PlatformRegistry.byFolder[folder]?.route !is Route.RetroCore) return false
+        val platform = PlatformRegistry.byFolder[folder] ?: return false
+        // A RetroArch alternate on a Standalone platform (GC/Wii/PSP) keeps
+        // its saves in RA states, like a core route.
+        if (platform.route is Route.Standalone) {
+            return emulatorOverride == Emu.RETROARCH.pkg && platform.altRetroCore != null
+        }
+        if (platform.route !is Route.RetroCore) return false
         return emulatorOverride == null || emulatorOverride == Emu.RETROARCH.pkg
     }
 }

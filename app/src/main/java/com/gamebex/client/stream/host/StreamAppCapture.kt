@@ -48,6 +48,22 @@ object StreamAppCapture {
     /** Called when the host ends sharing from Android's own controls (not when [stop] ends it). */
     @Volatile var onEnded: (() -> Unit)? = null
 
+    private var bal: BalOverlay? = null
+
+    /** Arms the BAL overlay (idempotent); call at stream start, seconds before the consent proxy. */
+    fun armBalOverlay(app: Context) {
+        val overlay = synchronized(lock) {
+            if (bal == null) bal = BalOverlay(SystemBalWindows(app.applicationContext), main::post)
+            bal
+        }
+        overlay?.arm()
+    }
+
+    /** Disarms the BAL overlay (idempotent). */
+    fun disarmBalOverlay() {
+        synchronized(lock) { bal }?.disarm()
+    }
+
     fun supported(): Boolean = CaptureIdentity.supported(Build.VERSION.SDK_INT)
 
     /** The shell's encoder surface, or null when it goes away; re-points a running capture. Any thread. */
@@ -118,6 +134,7 @@ object StreamAppCapture {
                 consent.cancel(pending)
                 if (!started && captureRequestId == pending.id) stopLocked()
             }
+            disarmBalOverlay()
         }
     }
 
@@ -199,6 +216,7 @@ object StreamAppCapture {
     }
 
     private fun stopLocked() {
+        disarmBalOverlay()
         consent.stop()
         captureRequestId = null
         val vd = display

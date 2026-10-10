@@ -36,8 +36,15 @@ fun readinessOf(status: PlayStates.Status): Readiness = when (status) {
  * RetroArch cores read as "RetroArch · core"; unsupported or unknown systems read "None".
  */
 fun emulatorLabel(folder: String?, emulatorOverride: String? = null, coreOverride: String? = null): String {
-    emulatorOverride?.let { pkg -> Emu.entries.firstOrNull { it.pkg == pkg }?.let { return it.label } }
-    return when (val route = folder?.let { PlatformRegistry.byFolder[it]?.route }) {
+    val platform = folder?.let { PlatformRegistry.byFolder[it] }
+    emulatorOverride?.let { pkg ->
+        // A RetroArch alternate on a Standalone platform names its core.
+        if (pkg == Emu.RETROARCH.pkg) {
+            platform?.altRetroCore?.let { return "RetroArch · ${CoreNames.display(coreOverride ?: it)}" }
+        }
+        Emu.entries.firstOrNull { it.pkg == pkg }?.let { return it.label }
+    }
+    return when (val route = platform?.route) {
         is Route.RetroCore -> "RetroArch · ${CoreNames.display(coreOverride ?: route.core)}"
         is Route.Standalone -> route.emu.label
         is Route.GuidedInstall -> "${route.emu.label} (guided)"

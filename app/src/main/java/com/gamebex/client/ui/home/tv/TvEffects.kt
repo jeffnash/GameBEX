@@ -206,7 +206,7 @@ class TvSwapHolder private constructor(
     val burstStep = mutableIntStateOf(0)
 
     /** Outgoing content alpha (draw phase). */
-    val oldAlpha: Float get() = 1f - newAlpha.value
+    val oldAlpha: Float get() = 1f - newAlpha.floatValue
 
     /** True until the crossfade and the burst have both finished. */
     val animating: Boolean get() = fading.value || burstAlpha.value != null
@@ -214,14 +214,14 @@ class TvSwapHolder private constructor(
     /** Advance both effects to [elapsedMs] since the swap. */
     fun advance(elapsedMs: Int) {
         if (fading.value) {
-            newAlpha.value = TvTiming.crossfadeAlpha(elapsedMs)
+            newAlpha.floatValue = TvTiming.crossfadeAlpha(elapsedMs)
             if (elapsedMs >= TvTiming.FADE_MS) {
-                newAlpha.value = 1f
+                newAlpha.floatValue = 1f
                 fading.value = false
             }
         }
         burstAlpha.value = TvTiming.burstAlphaAt(elapsedMs)
-        burstStep.value = TvTiming.burstStepAt(elapsedMs)
+        burstStep.intValue = TvTiming.burstStepAt(elapsedMs)
     }
 }
 
@@ -424,7 +424,7 @@ fun TvStaticBurst(swap: TvSwapHolder, modifier: Modifier = Modifier) {
     val frames = remember { List(TvTiming.BURST_ALPHAS.size) { noiseFrame(it) } }
     Canvas(modifier) {
         val alpha = swap.burstAlpha.value ?: return@Canvas
-        val frame = swap.burstStep.value.coerceIn(0, frames.size - 1)
+        val frame = swap.burstStep.intValue.coerceIn(0, frames.size - 1)
         drawImage(
             frames[frame],
             dstSize = IntSize(size.width.toInt(), size.height.toInt()),

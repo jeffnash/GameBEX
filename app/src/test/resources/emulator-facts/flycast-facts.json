@@ -1,0 +1,315 @@
+{
+  "atlas_cells": [
+    {
+      "rect": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "source_line": 172
+    },
+    {
+      "rect": [
+        64,
+        0,
+        64,
+        64
+      ],
+      "source_line": 174
+    },
+    {
+      "rect": [
+        128,
+        0,
+        64,
+        64
+      ],
+      "source_line": 176
+    },
+    {
+      "rect": [
+        192,
+        0,
+        64,
+        64
+      ],
+      "source_line": 178
+    },
+    {
+      "rect": [
+        256,
+        0,
+        64,
+        64
+      ],
+      "source_line": 180
+    },
+    {
+      "rect": [
+        320,
+        0,
+        64,
+        64
+      ],
+      "source_line": 182
+    },
+    {
+      "rect": [
+        384,
+        0,
+        64,
+        64
+      ],
+      "source_line": 184
+    },
+    {
+      "rect": [
+        448,
+        0,
+        64,
+        64
+      ],
+      "source_line": 186
+    },
+    {
+      "rect": [
+        0,
+        64,
+        64,
+        64
+      ],
+      "source_line": 189
+    },
+    {
+      "rect": [
+        64,
+        64,
+        90,
+        64
+      ],
+      "source_line": 191
+    },
+    {
+      "rect": [
+        154,
+        64,
+        90,
+        64
+      ],
+      "source_line": 193
+    },
+    {
+      "rect": [
+        244,
+        64,
+        128,
+        128
+      ],
+      "source_line": 195
+    },
+    {
+      "rect": [
+        372,
+        64,
+        64,
+        64
+      ],
+      "source_line": 197
+    },
+    {
+      "rect": [
+        436,
+        64,
+        64,
+        64
+      ],
+      "source_line": 199
+    },
+    {
+      "rect": [
+        0,
+        128,
+        64,
+        64
+      ],
+      "source_line": 202
+    },
+    {
+      "rect": [
+        64,
+        128,
+        64,
+        64
+      ],
+      "source_line": 204
+    },
+    {
+      "rect": [
+        0,
+        192,
+        64,
+        64
+      ],
+      "source_line": 207
+    },
+    {
+      "rect": [
+        64,
+        192,
+        64,
+        64
+      ],
+      "source_line": 209
+    },
+    {
+      "rect": [
+        128,
+        128,
+        64,
+        64
+      ],
+      "source_line": 213
+    },
+    {
+      "rect": [
+        384,
+        128,
+        64,
+        64
+      ],
+      "source_line": 215
+    },
+    {
+      "rect": [
+        448,
+        128,
+        64,
+        64
+      ],
+      "source_line": 217
+    }
+  ],
+  "groups": [
+    {
+      "config_group": "dpad",
+      "default_offset_and_size": [
+        32.0,
+        -24.0,
+        192.0,
+        192.0
+      ],
+      "source_line": 501
+    },
+    {
+      "config_group": "buttons",
+      "default_offset_and_size": [
+        -24.0,
+        -24.0,
+        192.0,
+        192.0
+      ],
+      "source_line": 502
+    },
+    {
+      "config_group": "start",
+      "default_offset_and_size": [
+        0.0,
+        -24.0,
+        64.0,
+        64.0
+      ],
+      "source_line": 503
+    },
+    {
+      "config_group": "LT",
+      "default_offset_and_size": [
+        -134.0,
+        -240.0,
+        90.0,
+        64.0
+      ],
+      "source_line": 504
+    },
+    {
+      "config_group": "RT",
+      "default_offset_and_size": [
+        -32.0,
+        -240.0,
+        90.0,
+        64.0
+      ],
+      "source_line": 505
+    },
+    {
+      "config_group": "analog",
+      "default_offset_and_size": [
+        40.0,
+        -320.0,
+        128.0,
+        128.0
+      ],
+      "source_line": 506
+    },
+    {
+      "config_group": "fforward",
+      "default_offset_and_size": [
+        -24.0,
+        24.0,
+        64.0,
+        64.0
+      ],
+      "source_line": 507
+    },
+    {
+      "config_group": "btn4",
+      "default_offset_and_size": [
+        -24.0,
+        -216.0,
+        64.0,
+        64.0
+      ],
+      "source_line": 509
+    },
+    {
+      "config_group": "btn5",
+      "default_offset_and_size": [
+        -152.0,
+        -216.0,
+        64.0,
+        64.0
+      ],
+      "source_line": 510
+    },
+    {
+      "config_group": "service",
+      "default_offset_and_size": [
+        -24.0,
+        96.0,
+        64.0,
+        64.0
+      ],
+      "source_line": 511
+    },
+    {
+      "config_group": "inscard",
+      "default_offset_and_size": [
+        40.0,
+        -250.0,
+        64.0,
+        64.0
+      ],
+      "source_line": 512
+    }
+  ],
+  "coordinate_reference": [
+    640,
+    480
+  ],
+  "ui_scale_facts": {
+    "reference_height": 750,
+    "reference_dpi": 320,
+    "factor": 1.1,
+    "source_line": 441
+  }
+}

@@ -7,40 +7,14 @@ import java.util.Base64
 import kotlin.math.round
 import kotlin.math.sqrt
 
-/**
- * Stock RetroArch overlay configs: parsing, RetroPad mapping and the
- * host-side bundle reader. Android-free so JVM unit tests cover it all.
- *
- * Format (grounded on libretro/common-overlays stock cfgs, e.g. neo-retropad
- * and psx): `overlays = N`, then per page `overlayN_overlay` (base image),
- * `overlayN_name`, `overlayN_normalized`, `overlayN_full_screen`,
- * `overlayN_range_mod`, `overlayN_descs = K` and
- * `overlayN_descJ = "name,x,y,shape,w,h"` with optional
- * `overlayN_descJ_overlay` (per-desc image) and
- * `overlayN_descJ_range_mod`. Coordinates are full-screen fractions when
- * normalized; x,y is the CENTER and w,h are HALF-extents (a desc covers
- * x±w, y±h — confirmed by neo-retropad's dpad_area covering its d-pad
- * descs). Names may combine inputs with `|` (`up|left`); areas
- * (`dpad_area`, `abxy_area`), `overlay_next` and menu/hotkey names are not
- * player-2 gamepad controls. The guest viewer is landscape and stock cfgs
- * put landscape first, so page 0 is the play page.
- *
- * RetroPad→wire mapping is the 26a table ("Wire naming", as laid out
- * in TouchLayout PSX_DIGITAL/GENERIC and StreamRaConfig's player-2 binds):
- * RetroPad b/a/y/x sit where Android A/B/X/Y sit, so b→[PadState.A],
- * a→[PadState.B], y→[PadState.X], x→[PadState.Y].
- */
 
-/** Guest flag key (captain owns StreamFlags storage; both sides read it default-off). */
+
+
 const val OVERLAY_26B_FLAG: String = "overlay_26b"
 
 enum class OverlayShape { RECT, RADIAL }
 
-/**
- * One overlay descriptor. [x]/[y] is the normalized center (0..1 of the
- * full screen); [w]/[h] are normalized HALF-extents. [image] is the
- * `descJ_overlay` path exactly as written (relative to the overlay cfg).
- */
+
 data class OverlayDesc(
     val input: String,
     val x: Float,
@@ -50,7 +24,31 @@ data class OverlayDesc(
     val h: Float,
     val image: String? = null,
     val overlayIndex: Int = 0,
-)
+
+    val rangeMod: Float = 1f,
+
+    val alphaMod: Float = 1f,
+    val reachUp: Float = 1f,
+    val reachDown: Float = 1f,
+    val reachLeft: Float = 1f,
+    val reachRight: Float = 1f,
+    val movable: Boolean = false,
+    val exclusive: Boolean = false,
+    val rangeModExclusive: Boolean = false,
+    val analogSaturatePct: Float = 1f,
+
+    val nextTarget: String = "",
+    val upInput: String? = null,
+    val downInput: String? = null,
+    val leftInput: String? = null,
+    val rightInput: String? = null,
+) {
+    val directionalArea: Boolean get() = input == "dpad_area" || input == "abxy_area"
+
+    val hitDisabled: Boolean get() =
+        !x.isFinite() || !y.isFinite() || !w.isFinite() || !h.isFinite() || w <= 0f || h <= 0f ||
+            reachLeft + reachRight <= 0f || reachUp + reachDown <= 0f
+}
 
 data class OverlayPage(
     val index: Int,
@@ -59,67 +57,131 @@ data class OverlayPage(
     val normalized: Boolean = false,
     val fullScreen: Boolean = false,
     val descs: List<OverlayDesc> = emptyList(),
+
+    val alphaMod: Float = 1f,
+
+    val rangeMod: Float = 1f,
+
+    val aspectRatio: Float = 1.7777778f,
+
+    val rectX: Float = 0f,
+    val rectY: Float = 0f,
+    val rectW: Float = 1f,
+    val rectH: Float = 1f,
+    val blockXSeparation: Boolean = false,
+    val blockYSeparation: Boolean = false,
+
+    val autoXSeparation: Boolean = true,
+    val autoYSeparation: Boolean = false,
 )
 
 data class OverlayLayout(val name: String = "", val pages: List<OverlayPage> = emptyList()) {
- /** The landscape play page: stock cfgs put it first. */
-    fun playPage(): OverlayPage? = pages.firstOrNull()
+
+    fun playPage(): OverlayPage? = pages.firstOrNull { it.name.contains("landscape", true) } ?: pages.firstOrNull()
 
     fun mapped(): MappedOverlay = mapOverlayLayout(this)
 }
 
-/** What one descriptor drives on the wire. */
+internal class OverlayStateAccumulator {
+    private var buttons = 0
+    private var lx = 0
+    private var ly = 0
+    private var rx = 0
+    private var ry = 0
+    private var lt = 0
+    private var rt = 0
+    private val dirs = BooleanArray(4)
+    fun add(output: OverlayOutput, ax: Int = 0, ay: Int = 0) {
+        when (output) {
+            is OverlayOutput.Buttons -> buttons = buttons or output.bits
+            is OverlayOutput.Hat -> {
+                dirs[0] = dirs[0] || output.up; dirs[1] = dirs[1] || output.down
+                dirs[2] = dirs[2] || output.left; dirs[3] = dirs[3] || output.right
+            }
+            is OverlayOutput.Trigger -> if (output.left) lt = 255 else rt = 255
+            is OverlayOutput.Triggers -> { if (output.left) lt = 255; if (output.right) rt = 255 }
+            is OverlayOutput.Stick -> if (output.right) { rx += ax; ry += ay } else { lx += ax; ly += ay }
+            is OverlayOutput.StickDir -> if (output.right) { rx += output.dx * 127; ry += output.dy * 127 } else { lx += output.dx * 127; ly += output.dy * 127 }
+            else -> Unit
+        }
+    }
+    fun state(): PadState = PadState(buttons, lx, ly, rx, ry, lt, rt, PadState.hatFrom(dirs[0], dirs[1], dirs[2], dirs[3])).sanitized()
+    fun includes(output: OverlayOutput): Boolean = when (output) {
+        is OverlayOutput.Buttons -> output.bits != 0 && buttons and output.bits == output.bits
+        is OverlayOutput.Hat -> (output.up || output.down || output.left || output.right) &&
+            (!output.up || dirs[0]) && (!output.down || dirs[1]) && (!output.left || dirs[2]) && (!output.right || dirs[3])
+        is OverlayOutput.Trigger -> if (output.left) lt > 0 else rt > 0
+        is OverlayOutput.Triggers -> (output.left || output.right) && (!output.left || lt > 0) && (!output.right || rt > 0)
+        is OverlayOutput.StickDir -> (output.dx != 0 || output.dy != 0) &&
+            (output.dx == 0 || (if (output.right) rx else lx) * output.dx > 0) &&
+            (output.dy == 0 || (if (output.right) ry else ly) * output.dy > 0)
+        else -> false
+    }
+}
+
+
+@kotlinx.serialization.Serializable
 sealed interface OverlayOutput {
- /** One or more [PadState] button bits. */
+
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("buttons")
     data class Buttons(val bits: Int) : OverlayOutput
 
- /** D-pad directions; holders combine into one hat via [PadState.hatFrom]. */
+
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("hat")
     data class Hat(val up: Boolean, val down: Boolean, val left: Boolean, val right: Boolean) : OverlayOutput
 
- /** A full trigger: the L2/R2 bit plus its axis at 255 while held. */
+
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("trigger")
     data class Trigger(val left: Boolean) : OverlayOutput
 
- /** An analog stick pair; [right] selects rx/ry, otherwise lx/ly. */
+
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("stick")
     data class Stick(val right: Boolean) : OverlayOutput
 
- /**
- * One digital direction of an analog stick (overlay `l/r_x/y_±`
- * names: the N64 C-buttons). Holders push the axis to ±127;
- * opposites cancel, diagonals add.
- */
+
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("stick_dir")
     data class StickDir(val right: Boolean, val dx: Int, val dy: Int) : OverlayOutput
 
- /** Both triggers at once (`l2|r2` combos); each side acts like [Trigger]. */
+
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("triggers")
     data class Triggers(val left: Boolean, val right: Boolean) : OverlayOutput
 
- /** Known non-gamepad input (menu/areas/navigation): skipped, never a fallback trip. */
+
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("ignored")
     data object Ignored : OverlayOutput
 
- /** Anything else: the layout falls back to 26a rather than miss a control. */
+
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("unknown")
     data object Unknown : OverlayOutput
+
+
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("menu_toggle")
+    data object MenuToggle : OverlayOutput
+
+
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("overlay_next")
+    data object OverlayNext : OverlayOutput
+
+
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("macro")
+    data class Macro(val index: Int) : OverlayOutput
 }
 
 data class MappedDesc(val desc: OverlayDesc, val output: OverlayOutput)
 
-/**
- * The play page partitioned for rendering. [unknown] holds the distinct
- * unmapped input names (sorted) for tests and logs.
- */
+
 data class MappedOverlay(
     val page: OverlayPage?,
     val gamepad: List<MappedDesc>,
     val unknown: List<String>,
+
+    val all: List<MappedDesc> = emptyList(),
 ) {
- /**
- * True when the guest renders this overlay: a normalized play page with
- * at least one gamepad control and nothing unmapped. Otherwise the
- * guest falls back to the 26a layout for the profile — never silently
- * missing controls.
- */
-    val usableForPlay: Boolean get() = page?.normalized == true && gamepad.isNotEmpty() && unknown.isEmpty()
+
+    val usableForPlay: Boolean get() = page != null && (gamepad.isNotEmpty() || unknown.isNotEmpty())
 }
 
-/** Single RetroPad name → output. Multi-input (`a|b`) names use [overlayOutputFor]. */
+
 fun overlayOutputForPart(part: String): OverlayOutput = when (part) {
     "a" -> OverlayOutput.Buttons(PadState.B)
     "b" -> OverlayOutput.Buttons(PadState.A)
@@ -147,15 +209,13 @@ fun overlayOutputForPart(part: String): OverlayOutput = when (part) {
     "r_x_minus" -> OverlayOutput.StickDir(right = true, dx = -1, dy = 0)
     "r_y_plus" -> OverlayOutput.StickDir(right = true, dx = 0, dy = 1)
     "r_y_minus" -> OverlayOutput.StickDir(right = true, dx = 0, dy = -1)
+    "menu_toggle" -> OverlayOutput.MenuToggle
+    "overlay_next" -> OverlayOutput.OverlayNext
     in IGNORED_OVERLAY_INPUTS -> OverlayOutput.Ignored
-    else -> if (part.endsWith("_area") || part.startsWith("overlay_")) OverlayOutput.Ignored else OverlayOutput.Unknown
+    else -> OverlayOutput.Ignored
 }
 
-/**
- * Full descriptor name → output. `|` combinations merge only within one
- * kind (buttons OR, hat dirs OR, same stick); mixed or half-unknown names
- * are [OverlayOutput.Unknown].
- */
+
 fun overlayOutputFor(input: String): OverlayOutput {
     val parts = input.split('|').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
     if (parts.isEmpty()) return OverlayOutput.Unknown
@@ -210,11 +270,11 @@ fun overlayOutputFor(input: String): OverlayOutput {
     return OverlayOutput.Unknown
 }
 
-/** Stock non-gamepad descriptor names: overlay navigation, menu, hotkeys, areas. */
+
 private val IGNORED_OVERLAY_INPUTS: Set<String> = setOf(
     "nul", "null", "none", "empty", "void",
     "dpad_area", "abxy_area",
-    "menu", "menu_toggle", "menu_cancel", "menu_search", "menu_info", "menu_default",
+    "menu", "menu_cancel", "menu_search", "menu_info", "menu_default",
     "quit", "close_content", "reset",
     "load_state", "save_state", "state_slot_increase", "state_slot_decrease", "state_slot_plus", "state_slot_minus",
     "fullscreen_toggle", "screenshot", "mute", "volume_up", "volume_down",
@@ -233,106 +293,134 @@ private val IGNORED_OVERLAY_INPUTS: Set<String> = setOf(
 
 fun mapOverlayLayout(layout: OverlayLayout): MappedOverlay {
     val page = layout.playPage()
-    if (page == null) return MappedOverlay(null, emptyList(), emptyList())
+    if (page == null) return MappedOverlay(null, emptyList(), emptyList(), emptyList())
     val gamepad = mutableListOf<MappedDesc>()
     val unknown = sortedSetOf<String>()
-    page.descs.forEach { desc ->
-        when (val output = overlayOutputFor(desc.input)) {
-            is OverlayOutput.Ignored -> Unit
+    val all = page.descs.map { desc ->
+        val output = overlayOutputFor(desc.input)
+        when (output) {
+            is OverlayOutput.Ignored -> if (desc.directionalArea) gamepad += MappedDesc(desc, output)
             is OverlayOutput.Unknown -> unknown += desc.input
             else -> gamepad += MappedDesc(desc, output)
         }
+        MappedDesc(desc, output)
     }
-    return MappedOverlay(page, gamepad, unknown.toList())
+    return MappedOverlay(page, gamepad, unknown.toList(), all)
 }
 
-/** Tolerant: comments, blanks and unknown keys are skipped. */
-object OverlayCfg {
-    private const val MAX_PAGES: Int = 32
-    private const val MAX_DESCS: Int = 128
-    private val COUNT = Regex("""^overlay(\d+)_descs$""")
-    private val TUPLE = Regex("""^overlay(\d+)_desc(\d+)$""")
-    private val KEY = Regex("[A-Za-z0-9_]+")
 
-    fun parse(text: String, name: String = ""): OverlayLayout {
-        val values = LinkedHashMap<String, String>()
+object OverlayCfg {
+
+
+
+
+
+
+
+    fun parse(text: String, name: String = "", pageImagePx: Map<Int, Pair<Int, Int>> = emptyMap()): OverlayLayout {
+        if (text.length > HostOverlayBundle.MAX_CFG_CHARS) return OverlayLayout(name)
+        val values = linkedMapOf<String, String>()
         text.lineSequence().forEach { line ->
-            val t = line.trim()
-            if (t.isEmpty() || t.startsWith("#")) return@forEach
-            val eq = t.indexOf('=')
-            if (eq < 0) return@forEach
-            val key = t.substring(0, eq).trim()
-            if (!key.matches(KEY)) return@forEach
-            values[key] = unquoteCfgValue(t.substring(eq + 1).trim())
+            val (key, value) = cfgEntry(line) ?: return@forEach
+            if (value == "NaN" || value == "Infinity" || value == "-Infinity") return@forEach
+            values[key] = value
         }
- // Stock cfgs always say `overlays = N`; derive it when absent.
-        val declared = values["overlays"]?.toIntOrNull()?.coerceIn(0, MAX_PAGES)
-        val pageCount = declared ?: run {
-            val highest = (values.keys.mapNotNull { COUNT.matchEntire(it)?.groupValues?.get(1)?.toIntOrNull() } +
-                values.keys.mapNotNull { TUPLE.matchEntire(it)?.groupValues?.get(1)?.toIntOrNull() }).maxOrNull()
-            if (highest == null) 0 else (highest + 1).coerceIn(0, MAX_PAGES)
-        }
-        val pages = (0 until pageCount).map { i ->
-            val count = values["overlay${i}_descs"]?.toIntOrNull()?.coerceIn(0, MAX_DESCS) ?: 0
-            val pageRange = values["overlay${i}_range_mod"]?.toFloatOrNull()?.coerceIn(0.1f, 8f) ?: 1f
-            val descs = (0 until count).mapNotNull { j ->
-                parseDesc(values, i, j, pageRange)
-            }
-            OverlayPage(
-                index = i,
-                name = values["overlay${i}_name"] ?: "",
-                image = values["overlay${i}_overlay"]?.takeIf { it.isNotEmpty() },
-                normalized = values["overlay${i}_normalized"] == "true",
-                fullScreen = values["overlay${i}_full_screen"] == "true",
-                descs = descs,
-            )
-        }
-        return OverlayLayout(name = name, pages = pages)
+        val declared = values["overlays"]?.toIntOrNull()
+        val largest = values.keys.mapNotNull { Regex("overlay(\\d+).*?").matchEntire(it)?.groupValues?.get(1)?.toIntOrNull() }
+            .filter { it in 0..31 }.maxOrNull()
+        val count = (declared ?: largest?.plus(1) ?: 0).coerceIn(0, 32)
+        return OverlayLayout(name, (0 until count).map { parsePage(values, it, pageImagePx[it]) })
     }
 
-    private fun parseDesc(values: Map<String, String>, i: Int, j: Int, pageRange: Float): OverlayDesc? {
-        val tuple = values["overlay${i}_desc$j"] ?: return null
-        val parts = tuple.split(',').map { it.trim() }
-        if (parts.size < 6) return null
-        val input = parts[0].lowercase()
-        if (input.isEmpty()) return null
-        val x = parts[1].toFloatOrNull() ?: return null
-        val y = parts[2].toFloatOrNull() ?: return null
-        val shape = when (parts[3].lowercase()) {
-            "rect" -> OverlayShape.RECT
-            "radial" -> OverlayShape.RADIAL
-            else -> return null
+    private fun parsePage(values: Map<String, String>, i: Int, basePx: Pair<Int, Int>?): OverlayPage {
+        val prefix = "overlay$i"
+        fun number(suffix: String, fallback: Float) = values["${prefix}_$suffix"]?.toFloatOrNull()?.takeIf { it.isFinite() } ?: fallback
+        fun flag(suffix: String, fallback: Boolean) = values["${prefix}_$suffix"]?.toBooleanStrictOrNull() ?: fallback
+        val name = values["${prefix}_name"].orEmpty()
+        val image = values["${prefix}_overlay"]?.takeIf { it.isNotEmpty() }
+        val normalized = flag("normalized", false)
+        val alpha = number("alpha_mod", 1f)
+        val range = number("range_mod", 1f)
+        val bx = flag("block_x_separation", false)
+        val by = flag("block_y_separation", false)
+        val rect = values["${prefix}_rect"]?.split(Regex("[,\\s]+"))?.mapNotNull { it.toFloatOrNull()?.takeIf(Float::isFinite) }
+            ?.takeIf { it.size == 4 && it[2] > 0 && it[3] > 0 } ?: listOf(0f, 0f, 1f, 1f)
+        val declared = values["${prefix}_descs"]?.toIntOrNull()
+        val maxDesc = values.keys.mapNotNull { Regex("${prefix}_desc(\\d+)(?:_.*)?").matchEntire(it)?.groupValues?.get(1)?.toIntOrNull() }
+            .filter { it in 0..127 }.maxOrNull()
+        val count = (declared ?: maxDesc?.plus(1) ?: 0).coerceIn(0, 128)
+        return OverlayPage(i, name, image, normalized, flag("full_screen", false),
+            (0 until count).mapNotNull { parseDesc(values, i, it, normalized, alpha, range, basePx) }, alpha, range,
+            number("aspect_ratio", if (name.contains("portrait", true)) 9f / 16f else 16f / 9f),
+            rect[0], rect[1], rect[2], rect[3], bx, by,
+            flag("auto_x_separation", !bx && image == null), flag("auto_y_separation", false))
+    }
+
+    private fun parseDesc(
+        values: Map<String, String>,
+        i: Int,
+        j: Int,
+        pageNormalized: Boolean,
+        pageAlpha: Float,
+        pageRange: Float,
+        basePx: Pair<Int, Int>?,
+    ): OverlayDesc? {
+        val prefix = "overlay${i}_desc$j"
+        val parts = values[prefix]?.split(Regex("[,\\s]+"))?.filter { it.isNotEmpty() } ?: return null
+        if (parts.size != 6) return null
+        val nums = listOf(parts[1], parts[2], parts[4], parts[5]).map { it.toFloatOrNull()?.takeIf(Float::isFinite) ?: return null }
+        if (nums[2] < 0f || nums[3] < 0f) return null
+        val shape = when (parts[3].lowercase()) { "rect" -> OverlayShape.RECT; "radial" -> OverlayShape.RADIAL; else -> return null }
+        fun number(suffix: String, fallback: Float) = values["${prefix}_$suffix"]?.toFloatOrNull()?.takeIf { it.isFinite() && it >= 0f } ?: fallback
+        fun flag(suffix: String, fallback: Boolean) = values["${prefix}_$suffix"]?.toBooleanStrictOrNull() ?: fallback
+        val normalized = flag("normalized", pageNormalized)
+        val dimensions = if (!normalized) basePx?.takeIf { it.first > 0 && it.second > 0 } ?: return null else 1 to 1
+        val rx = number("reach_x", 1f)
+        val ry = number("reach_y", 1f)
+        return OverlayDesc(parts[0].lowercase(), nums[0] / dimensions.first, nums[1] / dimensions.second, shape,
+            nums[2] / dimensions.first, nums[3] / dimensions.second, values["${prefix}_overlay"]?.takeIf { it.isNotEmpty() }, i,
+            number("range_mod", pageRange), number("alpha_mod", pageAlpha),
+            number("reach_up", ry), number("reach_down", ry), number("reach_left", rx), number("reach_right", rx),
+            flag("movable", false), flag("exclusive", false), flag("range_mod_exclusive", false),
+            number("saturate_pct", 1f), values["${prefix}_next_target"].orEmpty(),
+            values["${prefix}_up"], values["${prefix}_down"], values["${prefix}_left"], values["${prefix}_right"])
+    }
+
+    internal fun cfgEntry(line: String): Pair<String, String>? {
+        var quoted = false
+        var escaped = false
+        val value = StringBuilder()
+        for (c in line) {
+            if (c == '#' && !quoted) break
+            value.append(c)
+            if (escaped) escaped = false
+            else if (c == '\\' && quoted) escaped = true
+            else if (c == '"') quoted = !quoted
         }
-        val w = parts[4].toFloatOrNull() ?: return null
-        val h = parts[5].toFloatOrNull() ?: return null
-        if (!x.isFinite() || !y.isFinite() || !w.isFinite() || !h.isFinite()) return null
-        if (w <= 0f || h <= 0f || w > 1f || h > 1f) return null
-        val descRange = values["overlay${i}_desc${j}_range_mod"]?.toFloatOrNull()?.coerceIn(0.1f, 8f) ?: 1f
-        val scale = pageRange * descRange
-        return OverlayDesc(
-            input = input,
-            x = x.coerceIn(0f, 1f),
-            y = y.coerceIn(0f, 1f),
-            shape = shape,
-            w = (w * scale).coerceIn(0.001f, 1f),
-            h = (h * scale).coerceIn(0.001f, 1f),
-            image = values["overlay${i}_desc${j}_overlay"]?.takeIf { it.isNotEmpty() },
-            overlayIndex = i,
-        )
+        if (quoted) return null
+        val text = value.toString().trim()
+        if ('=' !in text) return null
+        val key = text.substringBefore('=').trim().takeIf { it.isNotEmpty() } ?: return null
+        return key to unquoteCfgValue(text.substringAfter('=').trim())
     }
 
     internal fun unquoteCfgValue(raw: String): String {
         val t = raw.trim()
-        if (t.length >= 2 && t.startsWith("\"") && t.endsWith("\"")) return t.substring(1, t.length - 1)
+        if (t.length >= 2 && t.startsWith("\"") && t.endsWith("\"")) {
+            val out = StringBuilder()
+            var escaped = false
+            t.substring(1, t.length - 1).forEach { c ->
+                if (escaped) { if (c != '\\' && c != '"') out.append('\\'); out.append(c); escaped = false }
+                else if (c == '\\') escaped = true else out.append(c)
+            }
+            if (escaped) out.append('\\')
+            return out.toString()
+        }
         return t
     }
 }
 
-/**
- * Stick deflection for one overlay stick sample. The same curve as
- * TouchHitTester: linear past the dead zone, saturated at travel, rounded
- * to wire units. [travelPx] is the desc's smaller half-extent in pixels.
- */
+
 fun overlayStickOutput(dxPx: Float, dyPx: Float, travelPx: Float, deadFraction: Float): IntArray {
     val dist = sqrt(dxPx * dxPx + dyPx * dyPx)
     val dead = deadFraction.coerceIn(0f, 0.9f) * travelPx
@@ -341,60 +429,36 @@ fun overlayStickOutput(dxPx: Float, dyPx: Float, travelPx: Float, deadFraction: 
     return intArrayOf(round(dxPx / dist * mag * 127f).toInt(), round(dyPx / dist * mag * 127f).toInt())
 }
 
-/**
- * Host side: finds the active RetroArch overlay cfg and images on shared
- * storage and packs them into one [LinkMsg.StreamOverlay].
- *
- * Resolution mirrors RetroArch: the per-core override
- * `<configDir>/config/<core>/<core>.cfg` wins over `<configDir>/retroarch.cfg`;
- * the active `input_overlay` path there names the overlay cfg, and image
- * refs inside it resolve against the overlay cfg's own directory. RA's own
- * cfg is cross-app unreadable on some phones (see RetroArchTuner), so
- * anything missing reads as "no overlay", never an error.
- */
+
 object HostOverlayBundle {
- /** The overlay cfg text is trimmed past this; the play page always fits. */
-    const val MAX_CFG_CHARS: Int = 12_000
 
- /** Stock overlays name up to ~20 images; the byte budget binds first. */
-    const val MAX_IMAGES: Int = 24
+    const val MAX_CFG_CHARS: Int = 32_000
 
- /** A single image bigger than this is dropped (vector fallback art instead). */
-    const val MAX_IMAGE_BYTES: Int = 32_768
 
- /**
- * Total base64 budget. 48_000 chars of images + 12_000 of cfg + names
- * stays under one link JSON frame (Frames.MAX_JSON = 65_536).
- */
-    const val MAX_IMAGE_BASE64_TOTAL: Int = 48_000
+    const val MAX_IMAGES: Int = 128
 
-    private val OVERLAY_KEY = Regex("""^input_overlay\s*=\s*(.*)$""")
 
- /** The last uncommented `input_overlay` value wins; null when unset or empty. */
+    const val MAX_IMAGE_BYTES: Int = 192_000
+
+
+    const val MAX_IMAGE_BASE64_PER_PART: Int = 56_000
+
     fun overlayPathFromCfgText(text: String): String? {
         var found: String? = null
         text.lineSequence().forEach { line ->
-            val t = line.trim()
-            if (t.isEmpty() || t.startsWith("#")) return@forEach
-            val m = OVERLAY_KEY.find(t) ?: return@forEach
-            found = OverlayCfg.unquoteCfgValue(m.groupValues[1])
+            val (key, value) = OverlayCfg.cfgEntry(line) ?: return@forEach
+            if (key == "input_overlay") found = value
         }
         return found?.takeIf { it.isNotEmpty() }
     }
 
- /** Bundled-asset references (`:...`) live inside RetroArch: unreadable, skip them. */
+
     fun isReadableOverlayPath(path: String): Boolean = !path.startsWith(":")
 
- /** Graphics-variant suffixes on core ids (`mupen64plus_next_gles3`). */
+
     private val CORE_VARIANT_SUFFIX = Regex("_(gles[0-9]+|vulkan|gl)$")
 
- /**
- * The core override cfg for [coreName] (a TogetherSupport.coreFor id):
- * exact `<id>/<id>.cfg` first, then the directory whose name matches
- * ignoring separators and case (RetroArch names override dirs after the
- * core's display name, e.g. `Mupen64Plus-Next` for `mupen64plus_next`),
- * then both again with the graphics-variant suffix stripped.
- */
+
     fun findCoreOverride(configDir: File, coreName: String?): File? {
         if (coreName.isNullOrEmpty()) return null
         findCoreOverrideInner(configDir, coreName)?.let { return it }
@@ -417,139 +481,258 @@ object HostOverlayBundle {
         return File(match, "${match.name}.cfg").takeIf { runCatching { it.isFile }.getOrDefault(false) }
     }
 
- /**
- * Reads and packs the active overlay, or null when there is nothing
- * worth sending (no overlay configured, files unreadable, or the play
- * page has no descriptors). Runs on the caller's thread; the engine
- * calls it on IO.
- */
-    fun read(configDir: File, coreName: String?, sessionId: String, round: Int): LinkMsg.StreamOverlay? {
+
+    fun activeOverlayFile(configDir: File, coreName: String?, streamCfgText: String?): File? {
         val overrideText = findCoreOverride(configDir, coreName)?.let { runCatching { it.readText() }.getOrNull() }
         val mainText = runCatching { File(configDir, "retroarch.cfg").readText() }.getOrNull()
         val overlayPath = overlayPathFromCfgText(overrideText ?: "")
+            ?: overlayPathFromCfgText(streamCfgText ?: "")
             ?: overlayPathFromCfgText(mainText ?: "")
             ?: return null
         if (!isReadableOverlayPath(overlayPath)) return null
-        return packFile(resolveHostPath(configDir, overlayPath), sessionId, round)
+        return resolveHostPath(configDir, overlayPath)
     }
 
- /**
- * Packs one overlay cfg file (plus the images its play page names,
- * resolved beside the cfg). The seeder path calls this directly —
- * a seeded overlay is named by the stream session config, not by
- * RetroArch's own cfgs, so [read] above can't find it.
- */
-    fun packFile(cfgFile: File, sessionId: String, round: Int): LinkMsg.StreamOverlay? {
+
+    fun effectiveSettings(configDir: File, coreName: String?, streamCfgText: String?): RaOverlaySettings {
+        return effectiveSettings(configDir, coreName, streamCfgText, null)
+    }
+
+    internal fun effectiveSettings(configDir: File, coreName: String?, streamCfgText: String?, mainCfgText: String?): RaOverlaySettings {
+        val overrideText = findCoreOverride(configDir, coreName)?.let { runCatching { it.readText() }.getOrNull() }
+        val mainText = mainCfgText ?: runCatching { File(configDir, "retroarch.cfg").readText() }.getOrNull()
+        return RaOverlaySettings.parse(mainText ?: "", streamCfgText ?: "", overrideText ?: "")
+    }
+
+
+    fun read(
+        configDir: File,
+        coreName: String?,
+        sessionId: String,
+        round: Int,
+        streamCfgText: String? = null,
+        screenW: Int = 0,
+        screenH: Int = 0,
+    ): List<LinkMsg.StreamOverlay>? {
+        val cfgFile = activeOverlayFile(configDir, coreName, streamCfgText) ?: return null
+        val settings = effectiveSettings(configDir, coreName, streamCfgText)
+        return packFile(cfgFile, sessionId, round, settings, screenW, screenH)
+    }
+
+
+    fun packFile(
+        cfgFile: File,
+        sessionId: String,
+        round: Int,
+        settings: RaOverlaySettings = RaOverlaySettings(),
+        screenW: Int = 0,
+        screenH: Int = 0,
+        screenX: Int = 0,
+        screenY: Int = 0,
+        displayW: Int = 0,
+        displayH: Int = 0,
+        cropX: Int = 0,
+        cropY: Int = 0,
+        cropW: Int = 0,
+        cropH: Int = 0,
+    ): List<LinkMsg.StreamOverlay>? {
         val cfgText = runCatching { cfgFile.readText() }.getOrNull()?.takeIf { it.isNotBlank() } ?: return null
-        val layout = OverlayCfg.parse(cfgText)
+        val layout = OverlayCfg.parse(portableCfgText(cfgText))
         val page = layout.playPage()
         if (page == null || page.descs.isEmpty()) return null
- // Gamepad art packs first: when the byte budget binds, the
- // dropped refs are menu/fast-forward toys (vector fallback),
- // never A/B (the n64 B sits last in its cfg).
-        val gamepadFirst = page.descs.sortedBy { desc ->
+
+
+        val gamepadFirst = layout.pages.flatMap { it.descs }.sortedBy { desc ->
             when (overlayOutputFor(desc.input)) {
                 is OverlayOutput.Ignored, is OverlayOutput.Unknown -> 1
                 else -> 0
             }
         }
         val refs = linkedSetOf<String>()
-        page.image?.let(refs::add)
+        layout.pages.mapNotNullTo(refs) { it.image }
         gamepadFirst.mapNotNullTo(refs) { it.image }
         val baseDir = cfgFile.parentFile ?: cfgFile.absoluteFile.parentFile ?: File(".")
         val images = mutableListOf<Pair<String, ByteArray>>()
-        var dropped = false
+        var skipped = false
         for (ref in refs) {
             if (images.size >= MAX_IMAGES) {
-                dropped = true
+                skipped = true
                 break
             }
- // Never follow `..` or asset refs out of the overlay's own tree.
+
             if (ref.contains("..") || !isReadableOverlayPath(ref)) {
-                dropped = true
+                skipped = true
                 continue
             }
             val raw = runCatching { resolveHostPath(baseDir, ref).readBytes() }.getOrNull()
             if (raw == null || raw.isEmpty() || raw.size > MAX_IMAGE_BYTES) {
-                dropped = true
+                skipped = true
                 continue
             }
-            images += ref to shrinkPng(raw)
+            images += ref to raw
         }
-        return build(sessionId, round, page.name, cfgText, images, imagesDropped = dropped)
+        return build(sessionId, round, page.name, cfgText, images, settings, screenW, screenH, screenX, screenY, displayW, displayH, cropX = cropX, cropY = cropY, cropW = cropW, cropH = cropH, imagesSkipped = skipped)
     }
 
- /**
- * Halves a PNG's dimensions (quarter bytes, transparency kept) so a
- * full stock overlay fits the link frame. On any failure — including
- * JVM unit tests, where Bitmap is a stub — returns the input.
- */
-    internal fun shrinkPng(raw: ByteArray): ByteArray = runCatching {
-        val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        android.graphics.BitmapFactory.decodeByteArray(raw, 0, raw.size, opts)
-        if (opts.outWidth < 48 || opts.outHeight < 48) return raw
-        opts.inJustDecodeBounds = false
-        opts.inSampleSize = 2
-        val bmp = android.graphics.BitmapFactory.decodeByteArray(raw, 0, raw.size, opts) ?: return raw
-        val out = java.io.ByteArrayOutputStream()
-        if (!bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)) return raw
-        val shrunk = out.toByteArray()
-        if (shrunk.isEmpty() || shrunk.size >= raw.size) raw else shrunk
-    }.getOrNull() ?: raw
+
+    fun packRefs(
+        cfgFile: File,
+        sessionId: String,
+        round: Int,
+        refs: List<String>,
+    ): LinkMsg.StreamOverlay? {
+        if (refs.isEmpty()) return null
+        val baseDir = cfgFile.parentFile ?: cfgFile.absoluteFile.parentFile ?: File(".")
+        val images = mutableListOf<Pair<String, ByteArray>>()
+        refs.distinct().take(MAX_IMAGES).forEach { ref ->
+            if (ref.contains("..") || !isReadableOverlayPath(ref)) return@forEach
+            val raw = runCatching { resolveHostPath(baseDir, ref).readBytes() }.getOrNull()
+            if (raw == null || raw.isEmpty() || raw.size > MAX_IMAGE_BYTES) return@forEach
+            images += ref to raw
+        }
+        if (images.isEmpty()) return null
+        val packed = images.map { (ref, bytes) ->
+            LinkMsg.OverlayImage(ref, Base64.getEncoder().encodeToString(bytes))
+        }
+        return LinkMsg.StreamOverlay(
+            sessionId = sessionId, round = round, images = packed,
+            partIndex = -1, partCount = -1,
+        )
+    }
 
     private fun resolveHostPath(base: File, ref: String): File {
         val file = File(ref)
         return if (file.isAbsolute) file else File(base, ref)
     }
 
- /**
- * Packs already-read overlay data into the message, enforcing the frame
- * caps. Pure: tests drive this (and [read] above against temp dirs).
- */
+
     fun build(
         sessionId: String,
         round: Int,
         name: String,
         cfgText: String,
         images: List<Pair<String, ByteArray>>,
-        imagesDropped: Boolean = false,
-    ): LinkMsg.StreamOverlay {
+        settings: RaOverlaySettings = RaOverlaySettings(),
+        screenW: Int = 0,
+        screenH: Int = 0,
+        screenX: Int = 0,
+        screenY: Int = 0,
+        displayW: Int = 0,
+        displayH: Int = 0,
+        cropX: Int = 0,
+        cropY: Int = 0,
+        cropW: Int = 0,
+        cropH: Int = 0,
+        imagesSkipped: Boolean = false,
+    ): List<LinkMsg.StreamOverlay> {
         val cfgCapped = cfgText.length > MAX_CFG_CHARS
-        val cfg = if (cfgCapped) cfgText.take(MAX_CFG_CHARS) else cfgText
-        val packed = mutableListOf<LinkMsg.OverlayImage>()
-        var used = 0
-        var dropped = imagesDropped
+        val cfg = portableCfgText(cfgText)
+        val msg = settings.toMessage(screenW, screenH, screenX, screenY, displayW, displayH, cropX, cropY, cropW, cropH)
+
+        val batches = mutableListOf<MutableList<LinkMsg.OverlayImage>>(mutableListOf())
+        var used = cfg.length
+        var skipped = imagesSkipped
         for ((ref, bytes) in images) {
-            if (packed.size >= MAX_IMAGES) {
-                dropped = true
+            if (batches.sumOf { it.size } >= MAX_IMAGES) {
+                skipped = true
                 break
             }
             if (bytes.isEmpty() || bytes.size > MAX_IMAGE_BYTES) {
-                dropped = true
+                skipped = true
                 continue
             }
             val b64 = Base64.getEncoder().encodeToString(bytes)
-            if (used + b64.length > MAX_IMAGE_BASE64_TOTAL) {
-                dropped = true
-                continue
+            if (used + b64.length > MAX_IMAGE_BASE64_PER_PART && batches.last().isNotEmpty()) {
+                batches.add(mutableListOf())
+                used = 0
             }
             used += b64.length
-            packed += LinkMsg.OverlayImage(ref, b64)
+            batches.last().add(LinkMsg.OverlayImage(ref, b64))
         }
-        return LinkMsg.StreamOverlay(
-            sessionId = sessionId,
-            round = round,
-            name = name,
-            cfg = cfg,
-            images = packed,
-            truncated = cfgCapped || dropped,
-        )
+        val count = batches.size
+        return batches.mapIndexed { index, batch ->
+            LinkMsg.StreamOverlay(
+                sessionId = sessionId,
+                round = round,
+                name = name,
+                cfg = if (index == 0) cfg else "",
+                images = batch,
+                truncated = cfgCapped || skipped,
+                settings = if (index == 0) msg else LinkMsg.OverlaySettingsMsg(),
+                partIndex = index,
+                partCount = count,
+            )
+        }
+    }
+
+    private fun portableCfgText(text: String): String {
+        if (text.length <= MAX_CFG_CHARS) return text
+        // A partial unquoted tuple could otherwise become valid but incorrect geometry.
+        val prefix = text.take(MAX_CFG_CHARS)
+        return prefix.take(prefix.lastIndexOf('\n') + 1)
     }
 }
- /**
- * Packs the active overlay cfg, its effective settings and every image
- * all pages name. Null when there is nothing worth sending. Blocking
- * file IO; the engine calls it on IO. [streamCfgText] is the session
- * config RetroArch loads (`CONFIGFILE`); [screenW]/[screenH] is the host
- * screen in pixels.
- */
+
+fun RaOverlaySettings.toMessage(
+    screenW: Int,
+    screenH: Int,
+    screenX: Int = 0,
+    screenY: Int = 0,
+    displayW: Int = 0,
+    displayH: Int = 0,
+    cropX: Int = 0,
+    cropY: Int = 0,
+    cropW: Int = 0,
+    cropH: Int = 0,
+): LinkMsg.OverlaySettingsMsg =
+    LinkMsg.OverlaySettingsMsg(
+        opacity = opacity,
+        autoScale = autoScale,
+        showInputs = showInputs,
+        scaleLandscape = scaleLandscape,
+        aspectAdjustLandscape = aspectAdjustLandscape,
+        xSeparationLandscape = xSeparationLandscape,
+        ySeparationLandscape = ySeparationLandscape,
+        xOffsetLandscape = xOffsetLandscape,
+        yOffsetLandscape = yOffsetLandscape,
+        scalePortrait = scalePortrait,
+        aspectAdjustPortrait = aspectAdjustPortrait,
+        xSeparationPortrait = xSeparationPortrait,
+        ySeparationPortrait = ySeparationPortrait,
+        xOffsetPortrait = xOffsetPortrait,
+        yOffsetPortrait = yOffsetPortrait,
+        screenX = screenX,
+        screenY = screenY,
+        screenW = screenW,
+        screenH = screenH,
+        displayW = displayW,
+        displayH = displayH,
+        cropX = cropX,
+        cropY = cropY,
+        cropW = cropW,
+        cropH = cropH,
+        floatingAlpha = floatingAlpha,
+        dpadDiagonalSensitivity = dpadDiagonalSensitivity,
+        abxyDiagonalSensitivity = abxyDiagonalSensitivity,
+    )
+
+fun LinkMsg.OverlaySettingsMsg.toSettings(): RaOverlaySettings = RaOverlaySettings(
+    opacity = opacity,
+    autoScale = autoScale,
+    showInputs = showInputs,
+    scaleLandscape = scaleLandscape,
+    aspectAdjustLandscape = aspectAdjustLandscape,
+    xSeparationLandscape = xSeparationLandscape,
+    ySeparationLandscape = ySeparationLandscape,
+    xOffsetLandscape = xOffsetLandscape,
+    yOffsetLandscape = yOffsetLandscape,
+    scalePortrait = scalePortrait,
+    aspectAdjustPortrait = aspectAdjustPortrait,
+    xSeparationPortrait = xSeparationPortrait,
+    ySeparationPortrait = ySeparationPortrait,
+    xOffsetPortrait = xOffsetPortrait,
+    yOffsetPortrait = yOffsetPortrait,
+    floatingAlpha = floatingAlpha,
+    dpadDiagonalSensitivity = dpadDiagonalSensitivity,
+    abxyDiagonalSensitivity = abxyDiagonalSensitivity,
+)

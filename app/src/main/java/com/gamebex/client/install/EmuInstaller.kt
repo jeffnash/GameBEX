@@ -264,7 +264,7 @@ class EmuInstaller(private val appContext: Context) {
         val pm = appContext.packageManager
         val info = pm.getPackageArchiveInfo(
             file.absolutePath,
-            PackageManager.GET_SIGNING_CERTIFICATES,
+            if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES,
         ) ?: return ValidationProblem("Downloaded file is not a valid APK.")
         if (info.packageName != pkg) {
             return ValidationProblem("APK is for ${info.packageName}, expected $pkg. Refusing.")

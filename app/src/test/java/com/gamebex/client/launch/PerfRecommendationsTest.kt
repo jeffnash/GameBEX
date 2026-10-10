@@ -47,8 +47,13 @@ class PerfRecommendationsTest {
 
     @Test fun platformPlansRouteFirstThenAlternates() {
         val gc = PerfRecommendations.forPlatform(PlatformRegistry.byFolder.getValue("gc"), DeviceTier.LOW)
-        assertEquals(listOf(Emu.RETROARCH, Emu.DOLPHIN), gc.map { it.emu })
-        assertEquals("dolphin", gc.first().core)
+        assertEquals(listOf(Emu.DOLPHIN, Emu.RETROARCH), gc.map { it.emu })
+        assertNull(gc.first().core)
+        assertEquals("dolphin", gc.last().core)
+        val psp = PerfRecommendations.forPlatform(PlatformRegistry.byFolder.getValue("psp"), DeviceTier.LOW)
+        assertEquals(listOf(Emu.PPSSPP, Emu.RETROARCH), psp.map { it.emu })
+        assertNull(psp.first().core)
+        assertEquals("ppsspp", psp.last().core)
         val ps2 = PerfRecommendations.forPlatform(PlatformRegistry.byFolder.getValue("ps2"), DeviceTier.LOW)
         assertEquals(listOf(Emu.NETHER, Emu.ARMSX2), ps2.map { it.emu })
         // Blocked systems get nothing.

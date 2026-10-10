@@ -1,5 +1,6 @@
 package com.gamebex.client.ui.console
 
+import androidx.compose.runtime.mutableFloatStateOf
 import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -171,7 +172,7 @@ fun ConsoleGeometryRoot(
         val imeShowing = imeBottomDp > 0.dp ||
             androidx.core.view.ViewCompat.getRootWindowInsets(view)
                 ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
-        var anchoredH by remember { mutableStateOf(maxHeight.value) }
+        var anchoredH by remember { mutableFloatStateOf(maxHeight.value) }
         val heightDp = when {
             imeBottomDp > 0.dp -> maxHeight.value + imeBottomDp.value
             imeShowing -> maxOf(maxHeight.value, anchoredH)

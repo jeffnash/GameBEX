@@ -1,0 +1,198 @@
+{
+  "art": [
+    {
+      "resource": "drawable/keypad",
+      "dimensions": [
+        512,
+        512
+      ],
+      "alpha_nonzero_bounds": [
+        16,
+        20,
+        493,
+        492
+      ],
+      "sha256": "c71642f31c5fc790e76ba4ab15f25c35bd581688c4f70de56c6cb464ffce5c43"
+    },
+    {
+      "resource": "drawable/buttons",
+      "dimensions": [
+        512,
+        512
+      ],
+      "alpha_nonzero_bounds": [
+        18,
+        15,
+        497,
+        495
+      ],
+      "sha256": "8c41aa57c4231ccca5468a92b3ca94c5e63ab9ce1a413646f6a7cee9357f2f29"
+    },
+    {
+      "resource": "drawable/button_l",
+      "dimensions": [
+        128,
+        128
+      ],
+      "alpha_nonzero_bounds": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "sha256": "7b4200fc3ddca3c5d468d1548bce6ecc0a2b8dea9e5b2c97035182543af8037d"
+    },
+    {
+      "resource": "drawable/button_r",
+      "dimensions": [
+        128,
+        128
+      ],
+      "alpha_nonzero_bounds": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "sha256": "66c93d8eb30b78c0611d26dbc22bba5ba675e5cd04f4e2759d14c95f092930b3"
+    },
+    {
+      "resource": "drawable/button_start",
+      "dimensions": [
+        64,
+        64
+      ],
+      "alpha_nonzero_bounds": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "sha256": "a06fc0066971cef52d8776bc2d28ad6c7fe6ef66688230c13a8ec79607e3261b"
+    },
+    {
+      "resource": "drawable/button_select",
+      "dimensions": [
+        64,
+        64
+      ],
+      "alpha_nonzero_bounds": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "sha256": "9f375172e12173fffb8d8c98eb981e03dbc0bb059f939ab9f68de381e43b797d"
+    }
+  ],
+  "keypad_row_measurements": [
+    {
+      "y": 20,
+      "opaque_x_interval": [
+        177,
+        331
+      ]
+    },
+    {
+      "y": 80,
+      "opaque_x_interval": [
+        172,
+        336
+      ]
+    },
+    {
+      "y": 150,
+      "opaque_x_interval": [
+        172,
+        336
+      ]
+    },
+    {
+      "y": 176,
+      "opaque_x_interval": [
+        21,
+        488
+      ]
+    },
+    {
+      "y": 256,
+      "opaque_x_interval": [
+        16,
+        493
+      ]
+    },
+    {
+      "y": 338,
+      "opaque_x_interval": [
+        21,
+        488
+      ]
+    },
+    {
+      "y": 400,
+      "opaque_x_interval": [
+        172,
+        336
+      ]
+    },
+    {
+      "y": 491,
+      "opaque_x_interval": [
+        177,
+        331
+      ]
+    }
+  ],
+  "measured_direction_crops_xywh": [
+    [
+      172,
+      0,
+      164,
+      256
+    ],
+    [
+      172,
+      256,
+      164,
+      256
+    ],
+    [
+      0,
+      176,
+      256,
+      163
+    ],
+    [
+      256,
+      176,
+      256,
+      163
+    ]
+  ],
+  "measured_face_crops_xywh": [
+    [
+      128,
+      0,
+      256,
+      256
+    ],
+    [
+      0,
+      128,
+      256,
+      256
+    ],
+    [
+      256,
+      128,
+      256,
+      256
+    ],
+    [
+      128,
+      256,
+      256,
+      256
+    ]
+  ]
+}

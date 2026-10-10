@@ -185,7 +185,7 @@ fun DiscoverScreen(
     val selectedChip = systemChipIndex(chips, sel)
     var chipFocus by remember { mutableIntStateOf(selectedChip) }
     LaunchedEffect(selectedChip) { chipFocus = selectedChip }
-    var noticeChoice by remember(hasDisabledOrBad) { mutableStateOf(0) }
+    var noticeChoice by remember(hasDisabledOrBad) { mutableIntStateOf(0) }
     fun selectSource(id: String) {
         scope.launch { runCatching { app.sources.select(id) } }
         selectorOpen = false

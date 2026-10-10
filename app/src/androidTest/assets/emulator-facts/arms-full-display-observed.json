@@ -1,0 +1,272 @@
+{
+  "display": [
+    1604,
+    720
+  ],
+  "gamebex_viewport": [
+    70,
+    0,
+    1534,
+    720
+  ],
+  "density_dpi": 280,
+  "resource_associations": {
+    "up": "pad_dpad_up",
+    "up_pressed": "pad_dpad_up_pressed",
+    "down": "pad_dpad_up",
+    "down_pressed": "pad_dpad_up_pressed",
+    "left": "pad_dpad_left",
+    "left_pressed": "pad_dpad_left_pressed",
+    "right": "pad_dpad_right",
+    "right_pressed": "pad_dpad_right_pressed"
+  },
+  "controls": [
+    {
+      "id": "DPAD",
+      "rect": [
+        29,
+        265,
+        263,
+        263
+      ]
+    },
+    {
+      "id": "TRIANGLE",
+      "rect": [
+        1329,
+        273,
+        102,
+        102
+      ]
+    },
+    {
+      "id": "SQUARE",
+      "rect": [
+        1232,
+        345,
+        102,
+        102
+      ]
+    },
+    {
+      "id": "CIRCLE",
+      "rect": [
+        1425,
+        345,
+        102,
+        102
+      ]
+    },
+    {
+      "id": "CROSS",
+      "rect": [
+        1329,
+        417,
+        102,
+        102
+      ]
+    },
+    {
+      "id": "L2",
+      "rect": [
+        79,
+        23,
+        98,
+        98
+      ]
+    },
+    {
+      "id": "L1",
+      "rect": [
+        79,
+        117,
+        98,
+        98
+      ]
+    },
+    {
+      "id": "R2",
+      "rect": [
+        1427,
+        23,
+        98,
+        98
+      ]
+    },
+    {
+      "id": "R1",
+      "rect": [
+        1427,
+        117,
+        98,
+        98
+      ]
+    },
+    {
+      "id": "SELECT",
+      "rect": [
+        680,
+        620,
+        84,
+        84
+      ]
+    },
+    {
+      "id": "START",
+      "rect": [
+        840,
+        620,
+        84,
+        84
+      ]
+    },
+    {
+      "id": "L_STICK",
+      "rect": [
+        335,
+        462,
+        228,
+        228
+      ]
+    },
+    {
+      "id": "R_STICK",
+      "rect": [
+        1041,
+        462,
+        228,
+        228
+      ]
+    },
+    {
+      "id": "L3",
+      "rect": [
+        252,
+        633,
+        74,
+        74
+      ]
+    },
+    {
+      "id": "R3",
+      "rect": [
+        1279,
+        633,
+        74,
+        74
+      ]
+    },
+    {
+      "id": "PAUSE",
+      "rect": [
+        1289,
+        -2,
+        84,
+        84
+      ]
+    }
+  ],
+  "observations": [
+    {
+      "control": "L2",
+      "measurement_roi": [
+        40,
+        0,
+        190,
+        125
+      ],
+      "visible_nonblack_bbox": [
+        87,
+        35,
+        82,
+        74
+      ]
+    },
+    {
+      "control": "L1",
+      "measurement_roi": [
+        40,
+        125,
+        190,
+        100
+      ],
+      "visible_nonblack_bbox": [
+        86,
+        146,
+        84,
+        44
+      ]
+    },
+    {
+      "control": "DPAD",
+      "measurement_roi": [
+        0,
+        240,
+        300,
+        300
+      ],
+      "visible_nonblack_bbox": [
+        41,
+        268,
+        237,
+        250
+      ]
+    }
+  ],
+  "resource_ids_observed": {
+    "pad_dpad_left": "0x7f07012a",
+    "pad_dpad_left_pressed": "0x7f07012b",
+    "pad_dpad_right": "0x7f07012c",
+    "pad_dpad_right_pressed": "0x7f07012d",
+    "pad_dpad_up": "0x7f07012e",
+    "pad_dpad_up_pressed": "0x7f07012f"
+  },
+  "directional_layout": {
+    "widget": [
+      29,
+      265,
+      263,
+      263
+    ],
+    "density": 1.75,
+    "spacing": 0,
+    "cells": [
+      {
+        "direction": "up",
+        "rect": [
+          104,
+          258,
+          114,
+          132
+        ]
+      },
+      {
+        "direction": "down",
+        "rect": [
+          104,
+          396,
+          114,
+          132
+        ]
+      },
+      {
+        "direction": "left",
+        "rect": [
+          29,
+          342,
+          132,
+          110
+        ]
+      },
+      {
+        "direction": "right",
+        "rect": [
+          160,
+          342,
+          132,
+          110
+        ]
+      }
+    ]
+  }
+}

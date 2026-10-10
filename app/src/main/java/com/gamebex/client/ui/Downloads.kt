@@ -138,6 +138,8 @@ class DownloadsViewModel(
     val storage: StateFlow<DownloadStorage?> = _storage
 
     /** Download destination root + free space (IO; screen refreshes it). */
+// Report currently usable bytes without assuming other applications caches can be reclaimed.
+@android.annotation.SuppressLint("UsableSpace")
     fun refreshStorage(context: Context) {
         val app = context.applicationContext
         viewModelScope.launch(Dispatchers.IO) {

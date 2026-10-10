@@ -1,0 +1,1266 @@
+{
+  "source_sha256": "d48b922fde83c3a0489d60ce42595fa23b0b661e697d636eba1787ef84ea9d46",
+  "header": [
+    1095521345,
+    1,
+    0,
+    83
+  ],
+  "resource_records": [
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_SOLIDWHITE",
+      "dimensions": [
+        16,
+        16
+      ],
+      "uv": [
+        0.6240234375,
+        0.7168675065040588,
+        0.6533203125,
+        0.7530120015144348
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_CROSS",
+      "dimensions": [
+        37,
+        37
+      ],
+      "uv": [
+        0.1611328125,
+        0.8084337711334229,
+        0.2314453125,
+        0.8951807022094727
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_CIRCLE",
+      "dimensions": [
+        39,
+        39
+      ],
+      "uv": [
+        0.6728515625,
+        0.7602409720420837,
+        0.7470703125,
+        0.851807177066803
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_SQUARE",
+      "dimensions": [
+        35,
+        35
+      ],
+      "uv": [
+        0.5439453125,
+        0.8445783257484436,
+        0.6103515625,
+        0.926505982875824
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_TRIANGLE",
+      "dimensions": [
+        41,
+        35
+      ],
+      "uv": [
+        0.0009765625,
+        0.8060241341590881,
+        0.0791015625,
+        0.8879517912864685
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_SELECT",
+      "dimensions": [
+        83,
+        16
+      ],
+      "uv": [
+        0.2763671875,
+        0.44939759373664856,
+        0.4365234375,
+        0.4855421781539917
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_START",
+      "dimensions": [
+        69,
+        16
+      ],
+      "uv": [
+        0.1533203125,
+        0.9000000357627869,
+        0.2861328125,
+        0.9361445307731628
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_ARROW",
+      "dimensions": [
+        15,
+        30
+      ],
+      "uv": [
+        0.9658203125,
+        0.22530120611190796,
+        0.9931640625,
+        0.2951807379722595
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_DIR",
+      "dimensions": [
+        59,
+        42
+      ],
+      "uv": [
+        0.0009765625,
+        0.6036145091056824,
+        0.1142578125,
+        0.7024096250534058
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_ROUND",
+      "dimensions": [
+        54,
+        53
+      ],
+      "uv": [
+        0.1435546875,
+        0.3096385598182678,
+        0.2470703125,
+        0.43493977189064026
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_RECT",
+      "dimensions": [
+        79,
+        30
+      ],
+      "uv": [
+        0.4990234375,
+        0.6421687006950378,
+        0.6513671875,
+        0.7120481729507446
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_STICK",
+      "dimensions": [
+        87,
+        85
+      ],
+      "uv": [
+        0.7080078125,
+        0.0012048193020746112,
+        0.8759765625,
+        0.20361445844173431
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_STICK_BG",
+      "dimensions": [
+        123,
+        121
+      ],
+      "uv": [
+        0.2548828125,
+        0.0012048193020746112,
+        0.4931640625,
+        0.2903614342212677
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_SHOULDER",
+      "dimensions": [
+        115,
+        35
+      ],
+      "uv": [
+        0.2763671875,
+        0.5096386075019836,
+        0.4990234375,
+        0.591566264629364
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_DIR_LINE",
+      "dimensions": [
+        74,
+        54
+      ],
+      "uv": [
+        0.5029296875,
+        0.5096386075019836,
+        0.6455078125,
+        0.6373493671417236
+      ],
+      "alpha_nonzero_bounds": [
+        3,
+        2,
+        68,
+        50
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_ROUND_LINE",
+      "dimensions": [
+        67,
+        66
+      ],
+      "uv": [
+        0.8232421875,
+        0.38433733582496643,
+        0.9521484375,
+        0.5409638285636902
+      ],
+      "alpha_nonzero_bounds": [
+        3,
+        4,
+        62,
+        62
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_RECT_LINE",
+      "dimensions": [
+        98,
+        39
+      ],
+      "uv": [
+        0.6494140625,
+        0.5457831621170044,
+        0.8388671875,
+        0.6373493671417236
+      ],
+      "alpha_nonzero_bounds": [
+        6,
+        0,
+        92,
+        37
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_SHOULDER_LINE",
+      "dimensions": [
+        142,
+        45
+      ],
+      "uv": [
+        0.4677734375,
+        0.3987951874732971,
+        0.7431640625,
+        0.5048192739486694
+      ],
+      "alpha_nonzero_bounds": [
+        9,
+        1,
+        131,
+        42
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_STICK_LINE",
+      "dimensions": [
+        107,
+        105
+      ],
+      "uv": [
+        0.4970703125,
+        0.0012048193020746112,
+        0.7041015625,
+        0.25180724263191223
+      ],
+      "alpha_nonzero_bounds": [
+        7,
+        6,
+        100,
+        97
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_STICK_BG_LINE",
+      "dimensions": [
+        129,
+        127
+      ],
+      "uv": [
+        0.0009765625,
+        0.0012048193020746112,
+        0.2509765625,
+        0.3048192858695984
+      ],
+      "alpha_nonzero_bounds": [
+        3,
+        2,
+        126,
+        123
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_CHECKEDBOX",
+      "dimensions": [
+        35,
+        35
+      ],
+      "uv": [
+        0.6142578125,
+        0.8566265106201172,
+        0.6806640625,
+        0.9385541677474976
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_BG",
+      "dimensions": [
+        108,
+        63
+      ],
+      "uv": [
+        0.2548828125,
+        0.29518070816993713,
+        0.4638671875,
+        0.4445783197879791
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_L",
+      "dimensions": [
+        11,
+        18
+      ],
+      "uv": [
+        0.4677734375,
+        0.3530120551586151,
+        0.4873046875,
+        0.3939759135246277
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_R",
+      "dimensions": [
+        16,
+        18
+      ],
+      "uv": [
+        0.7919921875,
+        0.5024096965789795,
+        0.8212890625,
+        0.5433734655380249
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_DROP_SHADOW",
+      "dimensions": [
+        48,
+        48
+      ],
+      "uv": [
+        0.6552734375,
+        0.6421687006950378,
+        0.7470703125,
+        0.7554216384887695
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_LINES",
+      "dimensions": [
+        37,
+        26
+      ],
+      "uv": [
+        0.8798828125,
+        0.13855421543121338,
+        0.9501953125,
+        0.19879518449306488
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_GRID",
+      "dimensions": [
+        37,
+        25
+      ],
+      "uv": [
+        0.3759765625,
+        0.9096385836601257,
+        0.4462890625,
+        0.9674698710441589
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_LOGO",
+      "dimensions": [
+        166,
+        58
+      ],
+      "uv": [
+        0.4970703125,
+        0.25662651658058167,
+        0.8193359375,
+        0.3939759135246277
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_ICON",
+      "dimensions": [
+        72,
+        72
+      ],
+      "uv": [
+        0.8232421875,
+        0.20843373239040375,
+        0.9619140625,
+        0.379518061876297
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_ICONGOLD",
+      "dimensions": [
+        72,
+        72
+      ],
+      "uv": [
+        0.0009765625,
+        0.3096385598182678,
+        0.1396484375,
+        0.48072290420532227
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_FOLDER",
+      "dimensions": [
+        52,
+        42
+      ],
+      "uv": [
+        0.7509765625,
+        0.6566265225410461,
+        0.8505859375,
+        0.7554216384887695
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_UP_DIRECTORY",
+      "dimensions": [
+        61,
+        48
+      ],
+      "uv": [
+        0.0009765625,
+        0.4855421781539917,
+        0.1181640625,
+        0.5987951755523682
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_GEAR",
+      "dimensions": [
+        32,
+        32
+      ],
+      "uv": [
+        0.1611328125,
+        0.7216867804527283,
+        0.2216796875,
+        0.7963855266571045
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_1",
+      "dimensions": [
+        13,
+        24
+      ],
+      "uv": [
+        0.4404296875,
+        0.44939759373664856,
+        0.4638671875,
+        0.5048192739486694
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_2",
+      "dimensions": [
+        16,
+        24
+      ],
+      "uv": [
+        0.0673828125,
+        0.9120482206344604,
+        0.0966796875,
+        0.9674698710441589
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_3",
+      "dimensions": [
+        16,
+        25
+      ],
+      "uv": [
+        0.4873046875,
+        0.9096385836601257,
+        0.5166015625,
+        0.9674698710441589
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_4",
+      "dimensions": [
+        18,
+        24
+      ],
+      "uv": [
+        0.9404296875,
+        0.6566265225410461,
+        0.9736328125,
+        0.7120481729507446
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_5",
+      "dimensions": [
+        16,
+        24
+      ],
+      "uv": [
+        0.1005859375,
+        0.9120482206344604,
+        0.1298828125,
+        0.9674698710441589
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_6",
+      "dimensions": [
+        17,
+        25
+      ],
+      "uv": [
+        0.9658203125,
+        0.30000001192092896,
+        0.9970703125,
+        0.35783132910728455
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_PSP_DISPLAY",
+      "dimensions": [
+        30,
+        17
+      ],
+      "uv": [
+        0.7080078125,
+        0.20843373239040375,
+        0.7646484375,
+        0.2469879537820816
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_FLAG_JP",
+      "dimensions": [
+        22,
+        14
+      ],
+      "uv": [
+        0.7685546875,
+        0.20843373239040375,
+        0.8095703125,
+        0.23975904285907745
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_FLAG_US",
+      "dimensions": [
+        22,
+        14
+      ],
+      "uv": [
+        0.7470703125,
+        0.5024096965789795,
+        0.7880859375,
+        0.533734917640686
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_FLAG_EU",
+      "dimensions": [
+        22,
+        14
+      ],
+      "uv": [
+        0.6494140625,
+        0.5096386075019836,
+        0.6904296875,
+        0.5409638285636902
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_FLAG_HK",
+      "dimensions": [
+        22,
+        14
+      ],
+      "uv": [
+        0.6943359375,
+        0.5096386075019836,
+        0.7353515625,
+        0.5409638285636902
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_FLAG_AS",
+      "dimensions": [
+        22,
+        14
+      ],
+      "uv": [
+        0.5791015625,
+        0.7168675065040588,
+        0.6201171875,
+        0.7481927275657654
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_FLAG_KO",
+      "dimensions": [
+        22,
+        14
+      ],
+      "uv": [
+        0.9404296875,
+        0.7168675065040588,
+        0.9814453125,
+        0.7481927275657654
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_FULLSCREEN",
+      "dimensions": [
+        33,
+        33
+      ],
+      "uv": [
+        0.0009765625,
+        0.8927711248397827,
+        0.0634765625,
+        0.9698795080184937
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_RESTORE",
+      "dimensions": [
+        33,
+        33
+      ],
+      "uv": [
+        0.3095703125,
+        0.8975903987884521,
+        0.3720703125,
+        0.9746987819671631
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_SDCARD",
+      "dimensions": [
+        47,
+        34
+      ],
+      "uv": [
+        0.5791015625,
+        0.7602409720420837,
+        0.6689453125,
+        0.8397589921951294
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_HOME",
+      "dimensions": [
+        36,
+        37
+      ],
+      "uv": [
+        0.3837890625,
+        0.8180723190307617,
+        0.4521484375,
+        0.9048192501068115
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_A",
+      "dimensions": [
+        21,
+        23
+      ],
+      "uv": [
+        0.9560546875,
+        0.4734939634799957,
+        0.9951171875,
+        0.5265060067176819
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_B",
+      "dimensions": [
+        16,
+        23
+      ],
+      "uv": [
+        0.5205078125,
+        0.9313253164291382,
+        0.5498046875,
+        0.984337329864502
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_C",
+      "dimensions": [
+        18,
+        23
+      ],
+      "uv": [
+        0.4501953125,
+        0.9096385836601257,
+        0.4833984375,
+        0.9626505970954895
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_D",
+      "dimensions": [
+        19,
+        23
+      ],
+      "uv": [
+        0.2236328125,
+        0.6108434200286865,
+        0.2587890625,
+        0.6638553738594055
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_E",
+      "dimensions": [
+        15,
+        23
+      ],
+      "uv": [
+        0.4677734375,
+        0.29518070816993713,
+        0.4951171875,
+        0.3481927812099457
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_F",
+      "dimensions": [
+        13,
+        23
+      ],
+      "uv": [
+        0.4716796875,
+        0.7192771434783936,
+        0.4951171875,
+        0.7722891569137573
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_SQUARE_SHAPE",
+      "dimensions": [
+        50,
+        50
+      ],
+      "uv": [
+        0.3994140625,
+        0.5963855981826782,
+        0.4951171875,
+        0.7144578099250793
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_SQUARE_SHAPE_LINE",
+      "dimensions": [
+        56,
+        56
+      ],
+      "uv": [
+        0.8798828125,
+        0.0012048193020746112,
+        0.9873046875,
+        0.13373494148254395
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_FOLDER_OPEN",
+      "dimensions": [
+        62,
+        42
+      ],
+      "uv": [
+        0.2763671875,
+        0.5963855981826782,
+        0.3955078125,
+        0.6951807141304016
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_WARNING",
+      "dimensions": [
+        53,
+        45
+      ],
+      "uv": [
+        0.1181640625,
+        0.6108434200286865,
+        0.2197265625,
+        0.7168674468994141
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_TRASHCAN",
+      "dimensions": [
+        34,
+        34
+      ],
+      "uv": [
+        0.6845703125,
+        0.8566265106201172,
+        0.7490234375,
+        0.9361445307731628
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_PLUS",
+      "dimensions": [
+        42,
+        42
+      ],
+      "uv": [
+        0.3076171875,
+        0.7000000476837158,
+        0.3876953125,
+        0.7987951636314392
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_ROTATE_LEFT",
+      "dimensions": [
+        33,
+        35
+      ],
+      "uv": [
+        0.7529296875,
+        0.8590361475944519,
+        0.8154296875,
+        0.9409638047218323
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_ROTATE_RIGHT",
+      "dimensions": [
+        33,
+        35
+      ],
+      "uv": [
+        0.8193359375,
+        0.8662651181221008,
+        0.8818359375,
+        0.9481927156448364
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_ARROW_LEFT",
+      "dimensions": [
+        40,
+        40
+      ],
+      "uv": [
+        0.0009765625,
+        0.70722895860672,
+        0.0771484375,
+        0.8012048006057739
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_ARROW_RIGHT",
+      "dimensions": [
+        40,
+        40
+      ],
+      "uv": [
+        0.4990234375,
+        0.7168675065040588,
+        0.5751953125,
+        0.8108433485031128
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_ARROW_UP",
+      "dimensions": [
+        40,
+        40
+      ],
+      "uv": [
+        0.3916015625,
+        0.7192771434783936,
+        0.4677734375,
+        0.8132529854774475
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_ARROW_DOWN",
+      "dimensions": [
+        40,
+        40
+      ],
+      "uv": [
+        0.0810546875,
+        0.7216867804527283,
+        0.1572265625,
+        0.8156626224517822
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_SLIDERS",
+      "dimensions": [
+        38,
+        38
+      ],
+      "uv": [
+        0.8955078125,
+        0.7626506090164185,
+        0.9677734375,
+        0.851807177066803
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_THREE_DOTS",
+      "dimensions": [
+        14,
+        35
+      ],
+      "uv": [
+        0.9658203125,
+        0.13855421543121338,
+        0.9912109375,
+        0.22048193216323853
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_INFO",
+      "dimensions": [
+        43,
+        43
+      ],
+      "uv": [
+        0.8544921875,
+        0.6566265225410461,
+        0.9365234375,
+        0.7578312754631042
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_RETROACHIEVEMENTS_LOGO",
+      "dimensions": [
+        80,
+        45
+      ],
+      "uv": [
+        0.8427734375,
+        0.5457831621170044,
+        0.9970703125,
+        0.6518071889877319
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_CHECKMARK",
+      "dimensions": [
+        42,
+        44
+      ],
+      "uv": [
+        0.2236328125,
+        0.7000000476837158,
+        0.3037109375,
+        0.8036144375801086
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_PLAY",
+      "dimensions": [
+        37,
+        42
+      ],
+      "uv": [
+        0.7470703125,
+        0.3987951874732971,
+        0.8173828125,
+        0.4975903630256653
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_STOP",
+      "dimensions": [
+        37,
+        37
+      ],
+      "uv": [
+        0.2353515625,
+        0.8084337711334229,
+        0.3056640625,
+        0.8951807022094727
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_PAUSE",
+      "dimensions": [
+        35,
+        37
+      ],
+      "uv": [
+        0.0830078125,
+        0.8204819560050964,
+        0.1494140625,
+        0.9072288870811462
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_FASTFORWARD",
+      "dimensions": [
+        35,
+        42
+      ],
+      "uv": [
+        0.8251953125,
+        0.7626506090164185,
+        0.8916015625,
+        0.8614457249641418
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_RECORD",
+      "dimensions": [
+        38,
+        38
+      ],
+      "uv": [
+        0.3076171875,
+        0.8036144971847534,
+        0.3798828125,
+        0.8927710652351379
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_SPEAKER",
+      "dimensions": [
+        19,
+        36
+      ],
+      "uv": [
+        0.9560546875,
+        0.38433733582496643,
+        0.9912109375,
+        0.4686746895313263
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_SPEAKER_MAX",
+      "dimensions": [
+        36,
+        38
+      ],
+      "uv": [
+        0.4716796875,
+        0.815662682056427,
+        0.5400390625,
+        0.9048192501068115
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_SPEAKER_OFF",
+      "dimensions": [
+        38,
+        32
+      ],
+      "uv": [
+        0.8955078125,
+        0.8566265106201172,
+        0.9677734375,
+        0.9313252568244934
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_WINNER_CUP",
+      "dimensions": [
+        37,
+        40
+      ],
+      "uv": [
+        0.7509765625,
+        0.7602409720420837,
+        0.8212890625,
+        0.8542168140411377
+      ]
+    },
+    {
+      "atlas": "ui_atlas",
+      "resource": "I_EMPTY",
+      "dimensions": [
+        67,
+        66
+      ],
+      "uv": [
+        0.1435546875,
+        0.44939759373664856,
+        0.2724609375,
+        0.6060240864753723
+      ]
+    },
+    {
+      "atlas": "ppge_atlas",
+      "resource": "I_CROSS",
+      "dimensions": [
+        37,
+        37
+      ],
+      "uv": [
+        0.040283203125,
+        0.000244140625,
+        0.057861328125,
+        0.017822265625
+      ]
+    },
+    {
+      "atlas": "ppge_atlas",
+      "resource": "I_CIRCLE",
+      "dimensions": [
+        39,
+        39
+      ],
+      "uv": [
+        0.000244140625,
+        0.000244140625,
+        0.018798828125,
+        0.018798828125
+      ]
+    },
+    {
+      "atlas": "ppge_atlas",
+      "resource": "I_SQUARE",
+      "dimensions": [
+        35,
+        35
+      ],
+      "uv": [
+        0.058837890625,
+        0.000244140625,
+        0.075439453125,
+        0.016845703125
+      ]
+    },
+    {
+      "atlas": "ppge_atlas",
+      "resource": "I_TRIANGLE",
+      "dimensions": [
+        41,
+        35
+      ],
+      "uv": [
+        0.019775390625,
+        0.000244140625,
+        0.039306640625,
+        0.016845703125
+      ]
+    }
+  ],
+  "compressed_metadata_base64": "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"
+}

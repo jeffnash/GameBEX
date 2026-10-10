@@ -1,106 +1,252 @@
 package com.gamebex.client.stream.guest
 
+import android.annotation.SuppressLint
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.SystemClock
+import android.util.Log
+import com.gamebex.client.stream.StreamDebug
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.ClipOp
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.input.pointer.motionEventSpy
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.gamebex.client.stream.proto.PadState
 import com.gamebex.client.together.LinkMsg
+import com.gamebex.client.data.Emu
+import com.gamebex.client.launch.DirectFiles
+import com.gamebex.client.together.session.EmuOverlayReader
 import java.util.Base64
-import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * The latest host overlay received on the Together link (26b). The guest
- * engine publishes it; [StreamOverlayPad] renders it when the guest flag
- * `overlay_26b` ([OVERLAY_26B_FLAG]) is on. Same-process only: the viewer
- * runs in the app process that owns the guest engine.
- */
-class StoredOverlay(val round: Int, val layout: OverlayLayout, val images: Map<String, ByteArray>)
+
+class StoredOverlay(
+    val round: Int,
+    val layout: OverlayLayout,
+    val images: Map<String, ByteArray>,
+
+    val settings: RaOverlaySettings = RaOverlaySettings(),
+
+    val hostScreenW: Int = 0,
+    val hostScreenH: Int = 0,
+    val hostScreenX: Int = 0,
+    val hostScreenY: Int = 0,
+
+    val hostDisplayW: Int = 0,
+    val hostDisplayH: Int = 0,
+
+    val hostCropX: Int = 0,
+    val hostCropY: Int = 0,
+    val hostCropW: Int = 0,
+    val hostCropH: Int = 0,
+    val partsReceived: Int = 1,
+    val partCount: Int = 1,
+
+    val truncated: Boolean = false,
+    val cfg: String = "",
+) {
+
+    val complete: Boolean get() = partCount > 0 && partsReceived >= partCount
+
+
+    fun missingRefs(): List<String> {
+        val refs = linkedSetOf<String>()
+        layout.pages.forEach { page ->
+            page.image?.let(refs::add)
+            page.descs.mapNotNullTo(refs) { it.image }
+        }
+        refs.removeAll(images.keys)
+        return refs.toList()
+    }
+}
 
 object StreamOverlayStore {
     private val _flow = MutableStateFlow<StoredOverlay?>(null)
     val flow: StateFlow<StoredOverlay?> = _flow.asStateFlow()
 
+    private val _statusLine = MutableStateFlow<String?>(null)
+
+    val statusLine: StateFlow<String?> = _statusLine.asStateFlow()
+
+
+    var onMissingRefs: ((round: Int, missing: List<String>) -> Unit)? = null
+    private var requestedRound: Int = -1
+    private var dumpedRound: Int = -1
+    private val receivedParts = mutableSetOf<Int>()
+
+
+    var using26aFallback: Boolean = false
+
     fun current(): StoredOverlay? = _flow.value
 
-    /** Stores [message] for [round]; unparseable images are skipped. Pure except the store write. */
+
     fun publish(round: Int, message: LinkMsg.StreamOverlay) {
-        val layout = OverlayCfg.parse(message.cfg, message.name)
-        val images = LinkedHashMap<String, ByteArray>()
+        if (_flow.value?.round?.let { round < it } == true) return
+        if (message.partCount !in 1..128 || message.partIndex < -1 || message.partIndex >= message.partCount ||
+            message.cfg.length > HostOverlayBundle.MAX_CFG_CHARS || message.images.size > HostOverlayBundle.MAX_IMAGES) return
+        val decoded = LinkedHashMap<String, ByteArray>()
         message.images.forEach { image ->
-            if (image.name.isEmpty() || image.base64.isEmpty() || images.containsKey(image.name)) return@forEach
+            if (image.name.isEmpty() || image.base64.isEmpty() || image.base64.length > HostOverlayBundle.MAX_IMAGE_BYTES * 4 / 3 + 4 || decoded.containsKey(image.name)) return@forEach
             runCatching { Base64.getDecoder().decode(image.base64) }
-                .getOrNull()?.takeIf { it.isNotEmpty() }?.let { images[image.name] = it }
+                .getOrNull()?.takeIf { it.isNotEmpty() && it.size <= HostOverlayBundle.MAX_IMAGE_BYTES }?.let { decoded[image.name] = it }
         }
-        _flow.value = StoredOverlay(round, layout, images)
+        val current = _flow.value?.takeIf { it.round == round }
+        decoded.replaceAll { name, bytes -> current?.images?.get(name)?.takeIf { it.contentEquals(bytes) } ?: bytes }
+        if (message.partIndex == 0 && message.cfg.isNotBlank()) {
+            if (current == null || current.cfg != message.cfg) receivedParts.clear()
+            receivedParts.add(0)
+            requestedRound = -1
+            val images = if (current?.cfg == message.cfg) current.images + decoded else decoded
+            _flow.value = StoredOverlay(
+                round = round,
+                layout = parseWithImageSizes(message.cfg, message.name, images),
+                images = images,
+                settings = message.settings.toSettings(),
+                hostScreenW = message.settings.screenW,
+                hostScreenH = message.settings.screenH,
+                hostScreenX = message.settings.screenX,
+                hostScreenY = message.settings.screenY,
+                hostDisplayW = message.settings.displayW,
+                hostDisplayH = message.settings.displayH,
+                hostCropX = message.settings.cropX,
+                hostCropY = message.settings.cropY,
+                hostCropW = message.settings.cropW,
+                hostCropH = message.settings.cropH,
+                partsReceived = receivedParts.size,
+                partCount = message.partCount.coerceAtLeast(1),
+                truncated = message.truncated,
+                cfg = message.cfg,
+            )
+        } else if (current != null && message.partIndex != 0) {
+            val merged = LinkedHashMap(current.images)
+            merged.putAll(decoded)
+            if (message.partIndex > 0) receivedParts.add(message.partIndex)
+            val received = receivedParts.size
+            _flow.value = StoredOverlay(
+                round = round,
+                layout = if (current.cfg.isEmpty()) current.layout else parseWithImageSizes(current.cfg, current.layout.name, merged),
+                images = merged,
+                settings = current.settings,
+                hostScreenW = current.hostScreenW,
+                hostScreenH = current.hostScreenH,
+                hostScreenX = current.hostScreenX,
+                hostScreenY = current.hostScreenY,
+                hostDisplayW = current.hostDisplayW,
+                hostDisplayH = current.hostDisplayH,
+                hostCropX = current.hostCropX,
+                hostCropY = current.hostCropY,
+                hostCropW = current.hostCropW,
+                hostCropH = current.hostCropH,
+                partsReceived = received,
+                partCount = current.partCount,
+                truncated = current.truncated || message.truncated,
+                cfg = current.cfg,
+            )
+        } else {
+            return
+        }
+        refreshStatus(round)
+    }
+
+    private fun parseWithImageSizes(cfg: String, name: String, images: Map<String, ByteArray>): OverlayLayout {
+        val layout = OverlayCfg.parse(cfg, name)
+        val dimensions = layout.pages.mapNotNull { page ->
+            val bytes = images[page.image] ?: return@mapNotNull null
+            val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true; inScaled = false }
+            runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) }
+            if (opts.outWidth > 0 && opts.outHeight > 0) page.index to (opts.outWidth to opts.outHeight) else null
+        }.toMap()
+        return if (dimensions.isEmpty()) layout else OverlayCfg.parse(cfg, name, dimensions)
+    }
+
+    private fun refreshStatus(round: Int) {
+        val stored = _flow.value?.takeIf { it.round == round } ?: run {
+            _statusLine.value = null
+            return
+        }
+        if (!stored.complete) {
+            _statusLine.value = null
+            return
+        }
+        if (dumpedRound != round) {
+            dumpedRound = round
+            OverlayMatchDump.maybeDumpRa(stored)
+        }
+        val missing = stored.missingRefs()
+        if (missing.isEmpty()) {
+            _statusLine.value = null
+            return
+        }
+        if (requestedRound != round) {
+            requestedRound = round
+            runCatching { onMissingRefs?.invoke(round, missing) }
+        }
+        _statusLine.value = "OVERLAY_DEGRADED ${missing.size} image${if (missing.size == 1) "" else "s"} missing"
+        runCatching {
+            android.util.Log.w("GameBEXStream", "overlay degraded, missing: ${missing.take(8).joinToString()}")
+        }
+    }
+
+
+    fun degradedRefs(): List<String> {
+        val stored = _flow.value ?: return emptyList()
+        if (!stored.complete || requestedRound != stored.round) return emptyList()
+        return stored.missingRefs()
     }
 
     fun clear() {
         _flow.value = null
+        _statusLine.value = null
+        requestedRound = -1
+        dumpedRound = -1
+        using26aFallback = false
+        receivedParts.clear()
     }
 }
 
-/**
- * The guest's touch controls when the host shares its RetroArch overlay
- * (26b). When [useHostOverlay] is off, no overlay arrived, or the play page
- * is unusable ([MappedOverlay.usableForPlay] false: not normalized, no
- * gamepad controls, or anything unmapped), this renders the 26a layout for
- * [profile] instead — the explicit fallback, never silently missing
- * controls. [overlay]/[overlayImages] override the store for previews and
- * tests; null follows [StreamOverlayStore].
- *
- * Overlay coordinates are full-screen fractions like RetroArch, so this
- * covers the whole screen (no safe-area padding). Hit testing is its own
- * small tester: one pointer owns one descriptor until lift, sticks keep
- * capture outside their art, and sliding transfers between non-stick
- * descriptors (stock diagonal `up|left` descs make d-pad rolls work).
- */
+
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun StreamOverlayPad(
@@ -117,245 +263,315 @@ internal fun StreamOverlayPad(
     onMenu: () -> Unit = {},
     overlay: OverlayLayout? = null,
     overlayImages: Map<String, ByteArray>? = null,
+    overlaySettings: RaOverlaySettings? = null,
     useHostOverlay: Boolean = false,
     onEffectiveSize: (Int) -> Unit = {},
+
+    videoCrop: VideoCropSignal? = null,
 ) {
     val stored by StreamOverlayStore.flow.collectAsState()
-    val layout = overlay ?: stored?.layout
-    val mapped = remember(layout) { layout?.mapped() }
-    if (!useHostOverlay || mapped == null || !mapped.usableForPlay) {
-        StreamTouchPad(
+
+
+    val emuStored by EmuOverlayStore.flow.collectAsState()
+    if (useHostOverlay && overlay == null && emuStored != null) {
+        StreamOverlayStore.using26aFallback = false
+        LaunchedEffect(prefs.sizePercent) { onEffectiveSize(prefs.validated().sizePercent) }
+        EmuOverlayPad(
+            stored = emuStored!!,
             onTouchKey = onTouchKey,
             onTouchAxes = onTouchAxes,
             onReleaseTouchInput = onReleaseTouchInput,
             modifier = modifier,
             unbufferedInput = unbufferedInput,
-            profile = profile,
             prefs = prefs,
-            viewport = viewport,
             onTouchState = onTouchState,
             menuOpen = menuOpen,
             onMenu = onMenu,
-            onEffectiveSize = onEffectiveSize,
+            videoCrop = videoCrop,
         )
         return
     }
-    // The host's overlay art is full-screen fractions: no size clamp applies.
-    LaunchedEffect(prefs.sizePercent) { onEffectiveSize(prefs.validated().sizePercent) }
-    OverlayPadSurface(
-        mapped = mapped,
-        images = overlayImages ?: stored?.images ?: emptyMap(),
+    val hostLayout = overlay ?: stored?.takeIf { useHostOverlay }?.layout
+    val hostImages = overlayImages ?: stored?.takeIf { useHostOverlay }?.images
+    val hostSettings = overlaySettings ?: stored?.takeIf { useHostOverlay }?.settings
+    val hostMapped = remember(hostLayout) { hostLayout?.mapped() }
+    if (useHostOverlay && hostMapped != null && hostMapped.usableForPlay) {
+        StreamOverlayStore.using26aFallback = false
+
+        LaunchedEffect(prefs.sizePercent) { onEffectiveSize(prefs.validated().sizePercent) }
+        OverlayPadSurface(
+            layout = hostLayout!!,
+            images = hostImages ?: emptyMap(),
+            settings = hostSettings ?: RaOverlaySettings(),
+            degraded = if (overlay != null) emptySet() else StreamOverlayStore.degradedRefs().toSet(),
+            hostScreenW = stored?.takeIf { useHostOverlay && overlay == null }?.hostScreenW ?: 0,
+            hostScreenH = stored?.takeIf { useHostOverlay && overlay == null }?.hostScreenH ?: 0,
+            hostScreenX = stored?.takeIf { useHostOverlay && overlay == null }?.hostScreenX ?: 0,
+            hostScreenY = stored?.takeIf { useHostOverlay && overlay == null }?.hostScreenY ?: 0,
+            hostDisplayW = stored?.takeIf { useHostOverlay && overlay == null }?.hostDisplayW ?: 0,
+            hostDisplayH = stored?.takeIf { useHostOverlay && overlay == null }?.hostDisplayH ?: 0,
+            onTouchKey = onTouchKey,
+            onTouchAxes = onTouchAxes,
+            onReleaseTouchInput = onReleaseTouchInput,
+            modifier = modifier,
+            unbufferedInput = unbufferedInput,
+            prefs = prefs,
+            onTouchState = onTouchState,
+            menuOpen = menuOpen,
+            onMenu = onMenu,
+            videoCrop = videoCrop,
+        )
+        return
+    }
+
+
+    val context = LocalContext.current
+    val view = LocalView.current
+    val metrics = context.resources.displayMetrics
+    val guestW = view.width.takeIf { it > 0 } ?: metrics.widthPixels
+    val guestH = view.height.takeIf { it > 0 } ?: metrics.heightPixels
+    val guestEmu = when (profile?.backend) {
+        TouchBackend.DOLPHIN -> Emu.DOLPHIN
+        TouchBackend.NETHERSX2 -> Emu.NETHER
+        TouchBackend.ARMSX2 -> Emu.ARMSX2
+        TouchBackend.FLYCAST -> Emu.FLYCAST
+        else -> null
+    }
+    var nativeStock by remember(guestEmu, profile, guestW, guestH, useHostOverlay) { mutableStateOf<StoredEmuOverlay?>(null) }
+    LaunchedEffect(guestEmu, profile, guestW, guestH, useHostOverlay) {
+        nativeStock = withContext(Dispatchers.IO) {
+            if (!useHostOverlay || guestEmu == null) null else {
+                val root = context.getExternalFilesDir(null)?.parentFile?.parentFile
+                root?.let {
+                    EmuOverlayReader.read(context, guestEmu.pkg, if (profile?.controllerMode == TouchControllerModes.GC_STANDALONE) "gc" else profile?.folder, null,
+                        screenW = guestW, screenH = guestH, density = metrics.density, dpi = metrics.densityDpi,
+                        files = DirectFiles, androidData = it)
+                }?.let { bundle ->
+                    StoredEmuOverlay(-1, bundle.backend, bundle.controls, EmuOverlayStore.decodeArt(bundle.controls),
+                        bundle.screenW, bundle.screenH, partsReceived = 1, partCount = 1, truncated = false)
+                }
+            }
+        }
+    }
+    if (nativeStock != null) {
+        StreamOverlayStore.using26aFallback = false
+        EmuOverlayPad(nativeStock!!, onTouchKey, onTouchAxes, onReleaseTouchInput, modifier, unbufferedInput, prefs, onTouchState, menuOpen, onMenu)
+        return
+    }
+    val stock = remember(profile?.folder, useHostOverlay) {
+        if (!useHostOverlay) null
+        else runCatching { GuestStockOverlay.load(context.packageManager, profile?.folder) }.getOrNull()
+    }
+    val stockMapped = remember(stock) { stock?.layout?.mapped() }
+    if (stock != null && stockMapped != null && stockMapped.usableForPlay) {
+        StreamOverlayStore.using26aFallback = false
+        LaunchedEffect(prefs.sizePercent) { onEffectiveSize(prefs.validated().sizePercent) }
+        OverlayPadSurface(
+            layout = stock.layout,
+            images = stock.images,
+            settings = RaOverlaySettings(),
+            degraded = emptySet(),
+            hostScreenW = 0,
+            hostScreenH = 0,
+            onTouchKey = onTouchKey,
+            onTouchAxes = onTouchAxes,
+            onReleaseTouchInput = onReleaseTouchInput,
+            modifier = modifier,
+            unbufferedInput = unbufferedInput,
+            prefs = prefs,
+            onTouchState = onTouchState,
+            menuOpen = menuOpen,
+            onMenu = onMenu,
+        )
+        return
+    }
+
+    if (useHostOverlay) {
+        StreamOverlayStore.using26aFallback = true
+        runCatching { android.util.Log.w("GameBEXStream", "overlay degraded: 26a fallback, no host/stock overlay") }
+    }
+    StreamTouchPad(
         onTouchKey = onTouchKey,
         onTouchAxes = onTouchAxes,
         onReleaseTouchInput = onReleaseTouchInput,
         modifier = modifier,
         unbufferedInput = unbufferedInput,
+        profile = profile,
         prefs = prefs,
+        viewport = viewport,
         onTouchState = onTouchState,
         menuOpen = menuOpen,
         onMenu = onMenu,
+        onEffectiveSize = onEffectiveSize,
     )
-}
-
-internal const val TAG_OVERLAY_PAD: String = "stream-overlay-pad"
-internal fun overlayControlTag(index: Int): String = "stream-overlay-control-$index"
-
-internal class ResolvedOverlayDesc(val mapped: MappedDesc, val cx: Float, val cy: Float, val rx: Float, val ry: Float) {
-    fun hit(x: Float, y: Float): Boolean = when (mapped.desc.shape) {
-        OverlayShape.RECT -> abs(x - cx) <= rx && abs(y - cy) <= ry
-        OverlayShape.RADIAL -> {
-            val dx = (x - cx) / rx
-            val dy = (y - cy) / ry
-            dx * dx + dy * dy <= 1f
-        }
+    DisposableEffect(useHostOverlay) {
+        onDispose { StreamOverlayStore.using26aFallback = false }
     }
 }
 
-internal data class OverlayVisual(val pressed: Set<Int> = emptySet(), val knobs: Map<Int, Offset> = emptyMap()) {
+internal const val TAG_OVERLAY_PAD: String = "stream-overlay-pad"
+
+
+internal class ResolvedOverlayDesc(
+    val mapped: MappedDesc,
+    val ra: ResolvedRaDesc,
+    val page: ResolvedRaPage,
+    canvasW: Float,
+    canvasH: Float,
+    private val offX: Float = 0f,
+    private val offY: Float = 0f,
+) {
+    private val canvasW = canvasW
+    private val canvasH = canvasH
+    val cx: Float = offX + (ra.modX + ra.modW / 2f) * canvasW
+    val cy: Float = offY + (ra.modY + ra.modH / 2f) * canvasH
+    val rx: Float = ra.modW * canvasW / 2f
+    val ry: Float = ra.modH * canvasH / 2f
+
+
+
+
+
+    fun hit(xPx: Float, yPx: Float, useRangeMod: Boolean = false): Boolean = canvasW > 0f && canvasH > 0f && raHitTest(ra, page, (xPx - offX) / canvasW, (yPx - offY) / canvasH, useRangeMod)
+
+    fun overlayCoords(xPx: Float, yPx: Float): Pair<Float, Float> = toOverlayCoords(page, (xPx - offX) / canvasW, (yPx - offY) / canvasH)
+}
+
+internal data class OverlayVisual(val pressed: Set<Int> = emptySet(), val knobDxPx: Map<Int, Offset> = emptyMap()) {
     companion object {
         val NEUTRAL: OverlayVisual = OverlayVisual()
     }
 }
 
-/** Pointer→descriptor ownership for one resolved overlay page. Not thread-safe; input thread only. */
+
+internal sealed interface OverlayActionTap {
+    data object Menu : OverlayActionTap
+
+    data class NextPage(val target: String) : OverlayActionTap
+}
+
+
 internal class OverlayPadTester(
     private val descs: List<ResolvedOverlayDesc>,
     private val deadZoneFraction: Float,
     private val invertRightStickY: Boolean,
     private val floatingSticks: Boolean,
+    private val settings: RaOverlaySettings = RaOverlaySettings(),
 ) {
     private class Capture(val index: Int, var cx: Float, var cy: Float, var px: Float, var py: Float)
 
-    private val captures = LinkedHashMap<Long, Capture>()
-    private var menuArmed = false
-    private var menuTap = false
-    var menuRect: TouchRectPx? = null
 
-    fun pollMenuTap(): Boolean {
-        val tap = menuTap
-        menuTap = false
-        return tap
-    }
+
+
+    private val captures = linkedMapOf<Long, MutableList<Capture>>()
+    private val actions = ArrayDeque<OverlayActionTap>()
+
+    fun pollActionTap(): OverlayActionTap? = if (actions.isEmpty()) null else actions.removeFirst()
 
     fun onDown(id: Long, x: Float, y: Float): PadState {
-        val menu = menuRect
-        if (menu != null && x >= menu.left && x <= menu.right && y >= menu.top && y <= menu.bottom) {
-            menuArmed = true
-            captures[id] = Capture(MENU_CAPTURE, x, y, x, y)
-            return state()
-        }
-        val at = descs.indexOfFirst { it.hit(x, y) }
-        if (at < 0) {
-            // Empty picture: unassigned until lift; sliding onto controls does nothing.
-            captures[id] = Capture(EMPTY_CAPTURE, x, y, x, y)
-            return state()
-        }
-        val d = descs[at]
-        val stick = d.mapped.output is OverlayOutput.Stick
-        captures[id] = Capture(at, if (stick && floatingSticks) x else d.cx, if (stick && floatingSticks) y else d.cy, x, y)
+        onCancel(id)
+        captures[id] = mutableListOf()
+        sample(id, x, y)
         return state()
     }
 
     fun onMove(id: Long, x: Float, y: Float): PadState {
-        val cap = captures[id] ?: return state()
-        if (cap.index == MENU_CAPTURE || cap.index == EMPTY_CAPTURE) return state()
-        val d = descs[cap.index]
-        cap.px = x
-        cap.py = y
-        if (d.mapped.output is OverlayOutput.Stick) return state()
-        // Slide transfer between non-stick descriptors; sticks never grab by sliding.
-        val at = descs.indexOfFirst { it.hit(x, y) && it.mapped.output !is OverlayOutput.Stick }
-        if (at >= 0 && at != cap.index) captures[id] = Capture(at, descs[at].cx, descs[at].cy, x, y)
+        if (id in captures) sample(id, x, y)
         return state()
     }
 
-    fun onUp(id: Long, x: Float, y: Float): PadState {
-        val cap = captures.remove(id)
-        if (cap != null && cap.index == MENU_CAPTURE) {
-            val menu = menuRect
-            if (menuArmed && menu != null && x >= menu.left && x <= menu.right && y >= menu.top && y <= menu.bottom) {
-                menuTap = true
-            }
-            menuArmed = false
+    private fun sample(id: Long, x: Float, y: Float) {
+        val previous = captures.getValue(id).associateBy { it.index }
+        val hits = descs.indices.filter { descs[it].hit(x, y, it in previous) }
+        fun priority(index: Int): Int = when {
+            index in previous && descs[index].ra.desc.rangeModExclusive -> 2
+            descs[index].ra.desc.exclusive -> 1
+            else -> 0
         }
-        return state()
+        val highest = hits.maxOfOrNull(::priority)
+        captures[id] = hits.filter { priority(it) == highest }.map { index ->
+            val d = descs[index]
+            previous[index]?.apply { px = x; py = y } ?: run {
+                when (d.mapped.output) {
+                    OverlayOutput.MenuToggle -> actions.add(OverlayActionTap.Menu)
+                    OverlayOutput.OverlayNext -> actions.add(OverlayActionTap.NextPage(d.ra.desc.nextTarget))
+                    else -> Unit
+                }
+                Capture(index, if (floatingSticks) x else d.cx, if (floatingSticks) y else d.cy, x, y)
+            }
+        }.toMutableList()
     }
 
-    fun onCancel(id: Long) {
-        if (captures.remove(id)?.index == MENU_CAPTURE) menuArmed = false
-    }
+    fun onUp(id: Long, x: Float, y: Float): PadState { onCancel(id); return state() }
+    fun onCancel(id: Long) { captures.remove(id) }
+    fun cancelAll() { captures.clear(); actions.clear() }
 
-    fun cancelAll() {
-        captures.clear()
-        menuArmed = false
-        menuTap = false
+    private fun areaOutputs(capture: Capture): List<OverlayOutput> {
+        val d = descs[capture.index]
+        val area = d.ra.desc
+        if (!area.directionalArea || d.rx <= 0f || d.ry <= 0f) return emptyList()
+        val face = area.input == "abxy_area"
+        val sensitivity = (if (face) settings.abxyDiagonalSensitivity else settings.dpadDiagonalSensitivity)
+            .takeIf { it.isFinite() } ?: if (face) 50f else 80f
+        val directions = raAreaDirections((capture.px - d.cx) / d.rx, (capture.py - d.cy) / d.ry, sensitivity)
+        val bindings = listOf(area.upInput ?: if (face) "x" else "up", area.downInput ?: if (face) "b" else "down",
+            area.leftInput ?: if (face) "y" else "left", area.rightInput ?: if (face) "a" else "right")
+        return bindings.mapIndexedNotNull { index, binding -> if (directions[index]) overlayOutputFor(binding) else null }
     }
 
     fun state(): PadState {
-        var buttons = 0
-        var up = false
-        var down = false
-        var left = false
-        var right = false
-        var lx = 0
-        var ly = 0
-        var rx = 0
-        var ry = 0
-        var lt = 0
-        var rt = 0
-        captures.values.forEach { cap ->
-            if (cap.index < 0 || cap.index >= descs.size) return@forEach
-            val d = descs[cap.index]
-            when (val output = d.mapped.output) {
-                is OverlayOutput.Buttons -> buttons = buttons or output.bits
-                is OverlayOutput.Hat -> {
-                    up = up || output.up
-                    down = down || output.down
-                    left = left || output.left
-                    right = right || output.right
+        val out = OverlayStateAccumulator()
+        captures.values.flatten().forEach { capture ->
+            val d = descs[capture.index]
+            val output = d.mapped.output
+            if (d.ra.desc.directionalArea) {
+                areaOutputs(capture).forEach { out.add(it) }
+            } else if (output is OverlayOutput.Stick) {
+                val saturation = d.ra.desc.analogSaturatePct
+                if (saturation > 0f && d.rx > 0f && d.ry > 0f) {
+                    val nx = (capture.px - capture.cx) / (d.rx * saturation)
+                    val ny = (capture.py - capture.cy) / (d.ry * saturation)
+                    val axes = overlayStickOutput(nx, ny, 1f, deadZoneFraction)
+                    out.add(output, axes[0], if (output.right && invertRightStickY) -axes[1] else axes[1])
                 }
-                is OverlayOutput.Trigger ->
-                    if (output.left) {
-                        buttons = buttons or PadState.L2
-                        lt = 255
-                    } else {
-                        buttons = buttons or PadState.R2
-                        rt = 255
-                    }
-                is OverlayOutput.Triggers -> {
-                    if (output.left) {
-                        buttons = buttons or PadState.L2
-                        lt = 255
-                    }
-                    if (output.right) {
-                        buttons = buttons or PadState.R2
-                        rt = 255
-                    }
-                }
-                is OverlayOutput.StickDir -> {
-                    // Holders push to ±127: opposites cancel, diagonals
-                    // add; coerced below.
-                    if (output.right) {
-                        rx += output.dx * 127
-                        ry += output.dy * 127
-                    } else {
-                        lx += output.dx * 127
-                        ly += output.dy * 127
-                    }
-                }
-                is OverlayOutput.Stick -> {
-                    val travel = minOf(d.rx, d.ry)
-                    val sample = overlayStickOutput(cap.px - cap.cx, cap.py - cap.cy, travel, deadZoneFraction)
-                    if (output.right) {
-                        rx = sample[0]
-                        ry = if (invertRightStickY) -sample[1] else sample[1]
-                    } else {
-                        lx = sample[0]
-                        ly = sample[1]
-                    }
-                }
-                OverlayOutput.Ignored, OverlayOutput.Unknown -> Unit
-            }
+            } else out.add(output)
         }
-        return PadState(
-            buttons,
-            lx.coerceIn(-127, 127), ly.coerceIn(-127, 127),
-            rx.coerceIn(-127, 127), ry.coerceIn(-127, 127),
-            lt, rt, PadState.hatFrom(up, down, left, right),
-        )
+        return out.state()
     }
 
-    fun visual(): OverlayVisual {
-        val pressed = mutableSetOf<Int>()
-        val knobs = mutableMapOf<Int, Offset>()
-        captures.values.forEach { cap ->
-            if (cap.index < 0 || cap.index >= descs.size) return@forEach
-            pressed += cap.index
-            val d = descs[cap.index]
-            if (d.mapped.output is OverlayOutput.Stick) {
-                val travel = minOf(d.rx, d.ry)
-                val dx = cap.px - cap.cx
-                val dy = cap.py - cap.cy
-                val dist = kotlin.math.sqrt(dx * dx + dy * dy)
-                val clamp = if (travel > 0f && dist > travel) travel / dist else 1f
-                knobs[cap.index] = Offset(cap.cx + dx * clamp, cap.cy + dy * clamp)
-            }
+    fun visual(canvasW: Float, canvasH: Float): OverlayVisual {
+        val active = captures.values.flatten()
+        val offsets = active.filter { descs[it.index].ra.desc.movable }.associate { capture ->
+            val d = descs[capture.index]
+            val p = d.overlayCoords(capture.px, capture.py)
+            val delta = raMovableDelta(d.ra, d.page, p.first, p.second)
+            capture.index to Offset(delta.first * canvasW, delta.second * canvasH)
         }
-        if (pressed.isEmpty()) return OverlayVisual.NEUTRAL
-        return OverlayVisual(pressed, knobs)
+        val pressed = active.mapTo(mutableSetOf()) { it.index }
+        if (settings.showInputs == RA_SHOW_INPUT_TOUCHED) {
+            val logical = OverlayStateAccumulator()
+            active.forEach { capture -> areaOutputs(capture).forEach { logical.add(it) } }
+            descs.forEachIndexed { index, d -> if (logical.includes(d.mapped.output)) pressed += index }
+        }
+        return OverlayVisual(pressed, offsets)
     }
 
-    private companion object {
-        const val MENU_CAPTURE: Int = -1
-        const val EMPTY_CAPTURE: Int = -2
-    }
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
+@SuppressLint("ModifierParameter")
 private fun OverlayPadSurface(
-    mapped: MappedOverlay,
+    layout: OverlayLayout,
     images: Map<String, ByteArray>,
+    settings: RaOverlaySettings,
+    degraded: Set<String>,
+    hostScreenW: Int,
+    hostScreenH: Int,
+    hostScreenX: Int = 0,
+    hostScreenY: Int = 0,
+    hostDisplayW: Int = 0,
+    hostDisplayH: Int = 0,
     onTouchKey: (Int, Boolean, Long) -> Unit,
     onTouchAxes: (Float, Float, Long) -> Unit,
     onReleaseTouchInput: () -> Unit,
@@ -365,6 +581,8 @@ private fun OverlayPadSurface(
     onTouchState: ((PadState, Long) -> Unit)? = null,
     menuOpen: Boolean = false,
     onMenu: () -> Unit = {},
+
+    videoCrop: VideoCropSignal? = null,
 ) {
     val keyCallback by rememberUpdatedState(onTouchKey)
     val axesCallback by rememberUpdatedState(onTouchAxes)
@@ -396,37 +614,105 @@ private fun OverlayPadSurface(
     }
     if (!active) return
 
-    // Decoded once per message; corrupt entries fall back to vector art.
-    val bitmaps = remember(images) {
+
+
+
+
+    val srcBitmaps = remember(images) {
+        val opts = BitmapFactory.Options().apply { inScaled = false; inPremultiplied = false }
         images.mapNotNull { (name, bytes) ->
             runCatching {
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()?.let { name to it }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+                    ?.takeIf { it.width > 0 && it.height > 0 }?.let { name to it }
             }.getOrNull()
         }.toMap()
     }
+    var pageIndex by remember(layout) { mutableIntStateOf(0) }
+    val pageCount = layout.pages.size
+    val page = layout.pages.getOrNull(pageIndex.coerceIn(0, (pageCount - 1).coerceAtLeast(0)))
 
-    BoxWithConstraints(modifier.fillMaxSize().testTag(TAG_OVERLAY_PAD)) {
+    val posLogged = remember { mutableStateOf(false) }
+    BoxWithConstraints(
+        modifier.fillMaxSize().testTag(TAG_OVERLAY_PAD).onGloballyPositioned { coords ->
+            if (StreamDebug.flag("overlay_boxes") && !posLogged.value) {
+                posLogged.value = true
+                val p = coords.positionInWindow()
+                val w = coords.size.width
+                val h = coords.size.height
+                Log.i("GameBEXStream", "OVERLAY_BOX padpos=${p.x.toInt()},${p.y.toInt()} padsize=${w}x$h")
+            }
+        },
+    ) {
         val density = LocalDensity.current
         val widthPx = with(density) { maxWidth.toPx() }
         val heightPx = with(density) { maxHeight.toPx() }
-        val menuSizePx = with(density) { 48.dp.toPx() }
-        val descs = remember(mapped, widthPx, heightPx) {
-            mapped.gamepad.map { entry ->
-                val d = entry.desc
-                ResolvedOverlayDesc(entry, d.x * widthPx, d.y * heightPx, d.w * widthPx, d.h * heightPx)
+
+
+
+
+        val mapping = remember(widthPx, heightPx, hostScreenW, hostScreenH, hostScreenX, hostScreenY, hostDisplayW, hostDisplayH) {
+            overlayViewportMapping(widthPx, heightPx, hostScreenW, hostScreenH, hostScreenX, hostScreenY, hostDisplayW, hostDisplayH)
+        }
+        val resolvedPage = remember(page, settings, mapping) {
+            page?.let { resolveRaPage(it, settings, mapping.geomW, mapping.geomH) }
+        }
+        val mappedAll = remember(page) {
+            page?.descs?.map { MappedDesc(it, overlayOutputFor(it.input)) } ?: emptyList()
+        }
+        val descs = remember(mappedAll, resolvedPage, mapping) {
+            if (resolvedPage == null) emptyList()
+            else mappedAll.mapIndexed { index, entry ->
+                ResolvedOverlayDesc(entry, resolvedPage.descs[index], resolvedPage, mapping.effW, mapping.effH, mapping.offX, mapping.offY)
             }
         }
-        val menuRect = remember(widthPx, menuSizePx) {
-            TouchRectPx(widthPx / 2f - menuSizePx / 2f, 8f, widthPx / 2f + menuSizePx / 2f, 8f + menuSizePx)
+
+
+
+
+
+        val drawArt = remember(srcBitmaps, descs, mapping, settings) {
+            descs.mapIndexedNotNull { index, d ->
+                val ref = d.mapped.desc.image ?: return@mapIndexedNotNull null
+                val src = srcBitmaps[ref] ?: return@mapIndexedNotNull null
+                val gain = raAlphaFor(d.ra.desc, settings, false)
+                prescaleArt(src, d.ra.mappedRectF(mapping), if (settings.floatingAlpha && gain > 1f) gain else 1f)?.let { index to it }
+            }.toMap()
         }
-        val page = mapped.page
+        val drawHeldArt = remember(srcBitmaps, descs, mapping, settings) {
+            if (!settings.floatingAlpha) emptyMap() else descs.mapIndexedNotNull { index, d ->
+                val gain = raAlphaFor(d.ra.desc, settings, true)
+                if (gain <= 1f && raAlphaFor(d.ra.desc, settings, false) <= 1f) return@mapIndexedNotNull null
+                val src = srcBitmaps[d.mapped.desc.image] ?: return@mapIndexedNotNull null
+                prescaleArt(src, d.ra.mappedRectF(mapping), gain.coerceAtLeast(1f))?.let { index to it }
+            }.toMap()
+        }
+        val drawBase = remember(srcBitmaps, resolvedPage, mapping, page, settings) {
+            val ref = page?.image ?: return@remember null
+            val src = srcBitmaps[ref] ?: return@remember null
+            val rp = resolvedPage ?: return@remember null
+            val gain = settings.opacity.takeIf { it.isFinite() && it >= 0f } ?: 0f
+            prescaleArt(src, rp.mappedRectF(mapping), if (settings.floatingAlpha && gain > 1f) gain else 1f)
+        }
+
+
+
+        if (StreamDebug.flag("overlay_boxes")) {
+            LaunchedEffect(descs, mapping) {
+                Log.i("GameBEXStream", "OVERLAY_BOX canvas=${widthPx.toInt()}x${heightPx.toInt()} page=$pageIndex/${page?.name} n=${descs.size} viewport=${hostScreenX},${hostScreenY},${hostScreenW}x${hostScreenH} display=${hostDisplayW}x${hostDisplayH}")
+                descs.forEachIndexed { i, d ->
+                    val box = d.ra.mappedRect(mapping)
+                    Log.i("GameBEXStream", "OVERLAY_BOX i=$i input=${d.mapped.desc.input} image=${d.mapped.desc.image} left=${box.left} top=${box.top} w=${box.width} h=${box.height}")
+                }
+            }
+        }
         val tester = remember(descs, effectivePrefs) {
             OverlayPadTester(
                 descs,
                 deadZoneFraction = effectivePrefs.deadZonePercent / 100f,
                 invertRightStickY = effectivePrefs.invertRightStickY,
                 floatingSticks = effectivePrefs.stickMode == TouchStickMode.FLOATING,
-            ).also { it.menuRect = menuRect }
+                settings = settings,
+            )
         }
         val legacy = remember {
             LegacyTouchPublisher(
@@ -453,12 +739,31 @@ private fun OverlayPadSurface(
             releaseCallback()
         }
 
+        fun nextPage(target: String, atNs: Long) {
+            if (pageCount == 0) return
+            val next = if (target.isNotEmpty()) {
+                layout.pages.indexOfFirst { it.name == target }.takeIf { it >= 0 }
+                    ?: ((pageIndex + 1) % pageCount)
+            } else {
+                (pageIndex + 1) % pageCount
+            }
+            releaseAll(atNs)
+            pageIndex = next
+        }
+
         fun handleSample(state: PadState, atNs: Long) {
             publish(state, atNs)
-            if (tester.pollMenuTap()) {
-                releaseAll(atNs)
-                menuCallback()
-                return
+            when (val tap = tester.pollActionTap()) {
+                is OverlayActionTap.Menu -> {
+                    releaseAll(atNs)
+                    menuCallback()
+                    return
+                }
+                is OverlayActionTap.NextPage -> {
+                    nextPage(tap.target, atNs)
+                    return
+                }
+                null -> Unit
             }
             val fresh = state.buttons and session.lastButtons.inv()
             if (fresh != 0 && effectivePrefs.haptics == TouchHaptics.LIGHT &&
@@ -468,7 +773,7 @@ private fun OverlayPadSurface(
                 view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
             }
             session.lastButtons = state.buttons
-            val next = tester.visual()
+            val next = tester.visual(mapping.effW, mapping.effH)
             if (next != visual) visual = next
         }
 
@@ -519,16 +824,35 @@ private fun OverlayPadSurface(
                     }
                 },
         )
-        val opacityFactor = effectivePrefs.opacityPercent / 55f
-        val outlineWidth = with(density) { 1.5.dp.toPx() }
         Canvas(Modifier.fillMaxSize()) {
-            drawOverlayPage(page?.image?.let(bitmaps::get), size.width, size.height)
-            descs.forEachIndexed { index, d ->
-                drawOverlayDesc(d, bitmaps[d.mapped.desc.image], index in visual.pressed, visual.knobs[index], opacityFactor, outlineWidth)
+            val rp = resolvedPage ?: return@Canvas
+
+
+            clipRect(mapping.offX, mapping.offY, mapping.offX + mapping.effW, mapping.offY + mapping.effH) {
+
+
+
+
+                val clip = videoCrop?.let { s ->
+                    videoCropPlacement(
+                        s.cropX, s.cropY, s.cropW, s.cropH, s.hostDisplayW, s.hostDisplayH,
+                        size.width.toInt(), size.height.toInt(), s.infoW, s.infoH,
+                    )
+                }
+                if (clip == null) drawOverlayBase(drawBase, rp, mapping, settings)
+                else clipRect(clip.x.toFloat(), clip.y.toFloat(), (clip.x + clip.w).toFloat(), (clip.y + clip.h).toFloat(), ClipOp.Difference) {
+                    drawOverlayBase(drawBase, rp, mapping, settings)
+                }
+                descs.forEachIndexed { index, d ->
+                    val pressed = index in visual.pressed
+                    val art = if (pressed) drawHeldArt[index] ?: drawArt[index] else drawArt[index]
+                    if (pressed || clip == null) drawOverlayDesc(d, art, pressed, visual.knobDxPx[index], settings, degraded, mapping)
+                    else clipRect(clip.x.toFloat(), clip.y.toFloat(), (clip.x + clip.w).toFloat(), (clip.y + clip.h).toFloat(), ClipOp.Difference) {
+                        drawOverlayDesc(d, art, false, visual.knobDxPx[index], settings, degraded, mapping)
+                    }
+                }
             }
-            drawOverlayMenu(menuRect, opacityFactor, outlineWidth)
         }
-        OverlayPadLabels(descs, bitmaps)
     }
 }
 
@@ -540,124 +864,59 @@ private class OverlayPublishSession {
 
 private const val OVERLAY_HAPTIC_MIN_INTERVAL_NS: Long = 80_000_000L
 
-private fun DrawScope.drawOverlayPage(base: ImageBitmap?, widthPx: Float, heightPx: Float) {
-    if (base == null) return
-    drawImage(base, dstOffset = IntOffset.Zero, dstSize = IntSize(widthPx.toInt(), heightPx.toInt()))
-}
 
-private fun DrawScope.drawOverlayDesc(
-    d: ResolvedOverlayDesc,
-    art: ImageBitmap?,
-    pressed: Boolean,
-    knob: Offset?,
-    opacityFactor: Float,
-    outlineWidth: Float,
+private fun DrawScope.drawOverlayBase(
+    base: Pair<ImageBitmap, IntOffset>?,
+    page: ResolvedRaPage,
+    mapping: OverlayViewportMapping,
+    settings: RaOverlaySettings,
 ) {
-    if (art != null) {
-        val left = (d.cx - d.rx).roundToInt()
-        val top = (d.cy - d.ry).roundToInt()
-        val w = (d.rx * 2f).roundToInt().coerceAtLeast(1)
-        val h = (d.ry * 2f).roundToInt().coerceAtLeast(1)
-        drawImage(art, dstOffset = IntOffset(left, top), dstSize = IntSize(w, h))
-        if (pressed) {
-            drawRect(Color.White.copy(alpha = 0.28f), Offset(left.toFloat(), top.toFloat()), Size(w.toFloat(), h.toFloat()))
-        }
-        return
-    }
-    val outline = (if (pressed) 1.00f else 0.55f * opacityFactor).coerceIn(0f, 1f)
-    val fill = (if (pressed) 0.28f else 0.10f * opacityFactor).coerceIn(0f, 1f)
-    val outlineColor = Color.White.copy(alpha = outline)
-    val fillColor = Color(0xFF222222).copy(alpha = fill)
-    when (d.mapped.desc.shape) {
-        OverlayShape.RADIAL -> {
-            drawOval(fillColor, Offset(d.cx - d.rx, d.cy - d.ry), Size(d.rx * 2f, d.ry * 2f))
-            drawOval(outlineColor, Offset(d.cx - d.rx, d.cy - d.ry), Size(d.rx * 2f, d.ry * 2f), style = Stroke(outlineWidth))
-            if (d.mapped.output is OverlayOutput.Stick) {
-                val at = knob ?: Offset(d.cx, d.cy)
-                val knobR = minOf(d.rx, d.ry) * 0.45f
-                drawCircle(Color.White.copy(alpha = (if (pressed) 0.40f else 0.18f) * opacityFactor + 0.12f), knobR, at)
-            }
-        }
-        OverlayShape.RECT -> {
-            val topLeft = Offset(d.cx - d.rx, d.cy - d.ry)
-            val size = Size(d.rx * 2f, d.ry * 2f)
-            drawRoundRect(fillColor, topLeft, size, CornerRadius(outlineWidth * 4f))
-            drawRoundRect(outlineColor, topLeft, size, CornerRadius(outlineWidth * 4f), style = Stroke(outlineWidth))
-        }
-    }
-}
+    if (base == null) return
+    drawImage(
+        base.first,
+        dstOffset = base.second,
+        dstSize = IntSize(base.first.width, base.first.height),
+        alpha = settings.opacity.takeIf { it.isFinite() }?.let { if (settings.floatingAlpha && it > 1f) 1f else it.coerceIn(0f, 1f) } ?: 0f,
 
-private fun DrawScope.drawOverlayMenu(menu: TouchRectPx, opacityFactor: Float, outlineWidth: Float) {
-    val outline = (0.55f * opacityFactor).coerceIn(0f, 1f)
-    drawRoundRect(
-        Color.White.copy(alpha = outline),
-        Offset(menu.left, menu.top),
-        Size(menu.width, menu.height),
-        CornerRadius(outlineWidth * 4f),
-        style = Stroke(outlineWidth),
+
+        filterQuality = FilterQuality.None,
     )
 }
 
-/** Short console-style label for a descriptor input; sticks and art-covered descs stay blank. */
-private fun overlayDescLabel(input: String, hasArt: Boolean): String {
-    if (hasArt) return ""
-    return when (input.substringBefore('|')) {
-        "a" -> "A"
-        "b" -> "B"
-        "x" -> "X"
-        "y" -> "Y"
-        "l" -> "L"
-        "r" -> "R"
-        "l2" -> "L2"
-        "r2" -> "R2"
-        "l3" -> "L3"
-        "r3" -> "R3"
-        "start" -> "Start"
-        "select" -> "Select"
-        "up" -> "▲"
-        "down" -> "▼"
-        "left" -> "◀"
-        "right" -> "▶"
-        else -> ""
-    }
+
+private fun prescaleArt(src: Bitmap, rect: RaFloatRect): Pair<ImageBitmap, IntOffset>? = prescaleArt(src, rect, 1f)
+
+private fun prescaleArt(src: Bitmap, rect: RaFloatRect, alphaGain: Float): Pair<ImageBitmap, IntOffset>? {
+    if (!rect.width.isFinite() || !rect.height.isFinite() || rect.width <= 0f || rect.height <= 0f) return null
+    val left = kotlin.math.floor(rect.left).toInt()
+    val top = kotlin.math.floor(rect.top).toInt()
+    val width = kotlin.math.ceil(rect.right).toInt() - left
+    val height = kotlin.math.ceil(rect.bottom).toInt() - top
+    if (width <= 0 || height <= 0 || width.toLong() * height > 16_000_000) return null
+    val pixels = IntArray(src.width * src.height)
+    src.getPixels(pixels, 0, src.width, 0, 0, src.width, src.height)
+    val scaled = renderStraightFrac(pixels, src.width, src.height, width, height, left, top, rect.left, rect.top, rect.width, rect.height, alphaGain)
+    return Bitmap.createBitmap(scaled, width, height, Bitmap.Config.ARGB_8888).asImageBitmap() to IntOffset(left, top)
 }
 
-@Composable
-private fun OverlayPadLabels(descs: List<ResolvedOverlayDesc>, bitmaps: Map<String, ImageBitmap>) {
-    val density = LocalDensity.current
-    Box(Modifier.fillMaxSize()) {
-        Text(
-            "⋯",
-            color = Color.White.copy(alpha = 0.85f),
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Medium,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = 8.dp),
-        )
-        descs.forEachIndexed { index, d ->
-            val label = overlayDescLabel(d.mapped.desc.input, bitmaps.containsKey(d.mapped.desc.image))
-            if (label.isEmpty()) return@forEachIndexed
-            Box(
-                modifier = Modifier
-                    .offset {
-                        IntOffset(
-                            (d.cx - d.rx).roundToInt(),
-                            (d.cy - with(density) { 9.sp.toPx() }).roundToInt(),
-                        )
-                    }
-                    .size(with(density) { (d.rx * 2f).toDp() }, with(density) { 18.sp.toDp() })
-                    .testTag(overlayControlTag(index)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    label,
-                    color = Color.White.copy(alpha = 0.85f),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                )
-            }
-        }
+
+private fun DrawScope.drawOverlayDesc(
+    d: ResolvedOverlayDesc,
+    art: Pair<ImageBitmap, IntOffset>?,
+    pressed: Boolean,
+    knobOffset: Offset?,
+    settings: RaOverlaySettings,
+    degraded: Set<String>,
+    mapping: OverlayViewportMapping,
+ ) {
+    val alpha = raAlphaFor(d.ra.desc, settings, pressed)
+    if (art != null) {
+        val dx = knobOffset?.x ?: 0f
+        val dy = knobOffset?.y ?: 0f
+        drawImage(art.first, dstOffset = IntOffset(art.second.x + dx.roundToInt(), art.second.y + dy.roundToInt()),
+            alpha = if (settings.floatingAlpha && alpha > 1f) 1f else alpha, filterQuality = FilterQuality.None)
+    } else if (d.ra.desc.image in degraded) {
+        val box = d.ra.mappedRectF(mapping)
+        drawRect(Color.White.copy(alpha = alpha.coerceIn(0f, 1f)), Offset(box.left, box.top), androidx.compose.ui.geometry.Size(box.width, box.height), style = Stroke(2f))
     }
 }

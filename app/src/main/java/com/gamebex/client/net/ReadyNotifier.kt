@@ -95,7 +95,6 @@ object ReadyNotifier {
     }
 
     private fun ensureChannel(ctx: Context) {
-        if (Build.VERSION.SDK_INT < 26) return
         val mgr = ctx.getSystemService(NotificationManager::class.java) ?: return
         if (mgr.getNotificationChannel(CHANNEL_ID) == null) {
             mgr.createNotificationChannel(

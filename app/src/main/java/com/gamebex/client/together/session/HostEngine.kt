@@ -1,17 +1,25 @@
 package com.gamebex.client.together.session
 
+import android.content.Context
 import android.os.Environment
 import android.util.Log
 import com.gamebex.client.data.Emu
 import com.gamebex.client.data.local.GameEntity
+import com.gamebex.client.launch.ControllerRegistry
 import com.gamebex.client.launch.CoreInstallProgress
+import com.gamebex.client.launch.DirectFiles
+import com.gamebex.client.launch.EmuControllerConfig
+import com.gamebex.client.launch.EmuFiles
 import com.gamebex.client.launch.EmuRouter
 import com.gamebex.client.launch.RetroCoreFetcher
+import com.gamebex.client.launch.RetroCoreProbe
 import com.gamebex.client.together.CoreFile
 import com.gamebex.client.together.CoreResult
 import com.gamebex.client.together.Discovery
 import com.gamebex.client.together.HostAd
 import com.gamebex.client.together.HostStep
+import com.gamebex.client.together.HostViewport
+import com.gamebex.client.together.HostViewportInfo
 import com.gamebex.client.together.HostView
 import com.gamebex.client.together.Link
 import com.gamebex.client.together.LinkEvent
@@ -34,10 +42,16 @@ import com.gamebex.client.together.TogetherSupport
 import com.gamebex.client.together.TogetherTiming
 import com.gamebex.client.together.TogetherCaps
 import com.gamebex.client.together.TOGETHER_PROTO
+import com.gamebex.client.stream.shell.CropRect
+import com.gamebex.client.stream.shell.StreamCropOptions
+import com.gamebex.client.stream.shell.shellFlag
+import com.gamebex.client.stream.shell.streamCropRect
 import com.gamebex.client.together.net.JoinLink
 import com.gamebex.client.stream.NoStreamHost
 import com.gamebex.client.stream.NoStreamPlayer2
 import com.gamebex.client.stream.P2Prep
+import com.gamebex.client.stream.p2.P2SlotMode
+import com.gamebex.client.stream.p2.P2SlotWorkaround
 import com.gamebex.client.stream.StreamCaps
 import com.gamebex.client.stream.StreamConfig
 import com.gamebex.client.stream.StreamDebug
@@ -49,6 +63,7 @@ import com.gamebex.client.stream.StreamStarted
 import com.gamebex.client.stream.StreamStatus
 import com.gamebex.client.stream.StreamToken
 import com.gamebex.client.stream.guest.HostOverlayBundle
+import com.gamebex.client.stream.guest.RaOverlaySettings
 import com.gamebex.client.stream.proto.StreamWire
 import java.io.File
 import java.util.Collections
@@ -81,10 +96,34 @@ private const val CORE_INSTALL_CANCELLED = "Core installation cancelled."
 /** STREAM: status polls (2 s apart) with no new guest input before the host is warned the guest went quiet. */
 private const val SILENT_POLLS = 2
 
+/**
+ * STREAM: attach waits until this long after the emulator fired, so its task
+ * stack is settled before the consent proxy starts. A proxy started into a
+ * mid-boot task shuffle (Dolphin's MainActivity→EmulationActivity hop at
+ * ~546ms) dies on a stale START when the grant returns. The fire
+ * itself, the Launch/StreamReady sends and the guest viewer never wait —
+ * only the share prompt shifts a couple of seconds, onto the booted game.
+ */
+internal const val ATTACH_STABLE_MS = 3_000L
+
 /** RetroArch's shared config dir; null when storage is unreachable. */
 private fun defaultOverlayConfigDir(): File? = runCatching {
     @Suppress("DEPRECATION")
     File(Environment.getExternalStorageDirectory(), "RetroArch").takeIf { it.isDirectory }
+}.getOrNull()
+
+/** Shared-storage Android/data root. */
+private fun defaultEmuAndroidData(): File? = runCatching {
+    @Suppress("DEPRECATION")
+    File(Environment.getExternalStorageDirectory(), "Android/data").takeIf { it.isDirectory }
+}.getOrNull()
+
+/** The stream session config GameBEX wrote for RetroArch. */
+private fun defaultStreamCfgText(): String? = runCatching {
+    @Suppress("DEPRECATION")
+    com.gamebex.client.stream.p2.StreamRaConfig
+        .fileUnder(Environment.getExternalStorageDirectory())
+        .takeIf { it.isFile }?.readText()
 }.getOrNull()
 
 /** The host half of the Play together session actor. */
@@ -97,21 +136,39 @@ internal class HostEngine(
     private val timing: TogetherTiming,
     private val scope: CoroutineScope,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
- /** STREAM: the shell-uid stream process. */
+    /** STREAM: the shell-uid stream process. */
     private val streamHost: StreamHost = NoStreamHost,
- /** STREAM: player 2's binding in the host's emulator. */
+    /** STREAM: player 2's binding in the host's emulator. */
     private val player2: StreamPlayer2 = NoStreamPlayer2,
- /** a game's modes, best first. Tests pass their own. */
+    /** A game's modes, best first. Tests pass their own. */
     private val modesFor: (GameEntity) -> List<TogetherMode> = TogetherSupport::modesFor,
     private val streamAudioOverride: () -> String? = { StreamDebug.prop("ra_audio") },
- /** 26b, flag `overlay_26b` (default off): share the host's RetroArch overlay with the guest. */
+    /** STREAM: post-fire settle before the consent proxy starts ([ATTACH_STABLE_MS]). Tests pass their own. */
+    private val attachStableMs: () -> Long = { ATTACH_STABLE_MS },
+    /** Flag `overlay_26b` (default off): share the host's RetroArch overlay with the guest. */
     private val overlay26bEnabled: () -> Boolean = { false },
- /** RetroArch's shared config dir (`.../RetroArch`); null skips the overlay. Tests pass temp dirs. */
+    /** RetroArch's shared config dir (`.../RetroArch`); null skips the overlay. Tests pass temp dirs. */
     private val overlayConfigDir: () -> File? = { defaultOverlayConfigDir() },
- /** seeds the core's overlay from the RA APK when RA configures none. Tests pass their own. */
+    /** Seeds the core's overlay from the RA APK when RA configures none. Tests pass their own. */
     private val seedOverlayForCore: (String?) -> File? = { null },
- /** STREAM host flags: raw in-app value or null when unset. Tests pass their own. */
+    /** The stream session config text RetroArch loads (CONFIGFILE). */
+    private val streamCfgText: () -> String? = { defaultStreamCfgText() },
+    /** The host display + overlay viewport (overlay coords are fractions of the viewport). */
+    private val hostViewportInfo: () -> HostViewportInfo = { HostViewportInfo.UNKNOWN },
+    /** App context for reading installed emulator art (PM resources/APK). Null skips emu overlays. */
+    private val appContext: () -> Context? = { null },
+    /** File backend for emulator configs (Shizuku shell-uid in prod). Tests pass their own. */
+    private val emuOverlayFiles: () -> EmuFiles = { DirectFiles },
+    /** Host density dpi (Flycast layouts are dpi-aware). */
+    private val hostDensityDpi: () -> Int = { 0 },
+    /** Shared-storage Android/data root (emulator configs live under it). */
+    private val emuAndroidData: () -> File? = { defaultEmuAndroidData() },
+    /** STREAM host flags: raw in-app value or null when unset. Tests pass their own. */
     private val hostFlag: (String) -> String? = { null },
+    /** A real host pad means gate-on-pad, else the placeholder. Tests pass their own. */
+    private val hasRealHostPad: () -> Boolean = {
+        runCatching { ControllerRegistry.snapshot().isNotEmpty() }.getOrDefault(false)
+    },
     private val controlOptions: () -> TogetherControlOptions = TogetherControlOptions::read,
     private val controlLog: (String) -> Unit = { Log.i("GameBEXControl", it) },
     private val monotonicNs: () -> Long = System::nanoTime,
@@ -119,7 +176,7 @@ internal class HostEngine(
     private sealed interface Input {
         data class HostGame(
             val gameId: Long,
- /** A mode the host switched to; null picks the best one. */
+            /** A mode the host switched to; null picks the best one. */
             val forcedMode: TogetherMode? = null,
             val beforeStart: suspend () -> Unit,
         ) : Input
@@ -136,7 +193,7 @@ internal class HostEngine(
             val core: String?,
             val readiness: Readiness?,
             val token: Long,
- /** The game's other modes, best first. */
+            /** The game's other modes, best first. */
             val altModes: List<TogetherMode> = emptyList(),
         ) : Input
         data class SetupDone(
@@ -164,14 +221,18 @@ internal class HostEngine(
             val epoch: Int,
             val round: Int,
             val outcome: EmuRouter.Outcome,
- /** STREAM: the stream started for this round. */
+            /** STREAM: the stream started for this round. */
             val stream: StreamRound? = null,
- /** STREAM: player-2 steps to show once the game runs. */
+            /** STREAM: player-2 steps to show once the game runs. */
             val guide: String? = null,
- /** STREAM: hosted game folder for the guest touch layout; "" = unknown. */
+            /** STREAM: hosted game folder for the guest touch layout; "" = unknown. */
             val system: String = "",
- /** STREAM: actual host emulator backend for the guest touch layout; "" = unknown. */
+            /** STREAM: actual host emulator backend for the guest touch layout; "" = unknown. */
             val backend: String = "",
+            /** STREAM: nanoTime right before the emulator fired (0 = unknown); attach waits for settle. */
+            val firedAtNs: Long = 0L,
+            /** STREAM: hosted game file ext; bare dol/elf boots GC mode in Dolphin. */
+            val gameExt: String = "",
         ) : Input
         data class HeadStart(val epoch: Int, val round: Int) : Input
         data class SwitchMode(val mode: TogetherMode) : Input
@@ -180,7 +241,7 @@ internal class HostEngine(
         data class DebugCutLink(val epoch: Int, val round: Int, val link: Link) : Input
     }
 
- /** Actor-owned identity: old callbacks/completions must never release a replacement install. */
+    /** Actor-owned identity: old callbacks/completions must never release a replacement install. */
     private class CoreInstall(val epoch: Int, val token: Long, core: String) {
         val callbackSequence = AtomicLong()
         var progressSequence = 0L
@@ -189,10 +250,10 @@ internal class HostEngine(
         var stallJob: Job? = null
     }
 
- /** A stream the shell runs for one round, with the token the guest needs. */
+    /** A stream the shell runs for one round, with the token the guest needs. */
     private class StreamRound(val token: String, val started: StreamStarted)
 
- /** What STREAM prepares before the host's emulator starts. */
+    /** What STREAM prepares before the host's emulator starts. */
     private class StreamPrep(
         val round: StreamRound? = null,
         val p2Config: java.io.File? = null,
@@ -236,10 +297,10 @@ internal class HostEngine(
     private var resources: SessionResources? = null
     private var headStartJob: Job? = null
     private var forcedMode: TogetherMode? = null
- /** STREAM: the stream of the current round, or null. */
+    /** STREAM: the stream of the current round, or null. */
     private var stream: StreamRound? = null
     private var streamPoll: Job? = null
- /** STREAM: the guest's link dropped and the stream is being kept for [TogetherTiming.streamLinkGraceMs]. */
+    /** STREAM: the guest's link dropped and the stream is being kept for [TogetherTiming.streamLinkGraceMs]. */
     private var streamGrace: Job? = null
     private var streamGraceSerial = 0L
     private var streamResumeUntilNs: Long? = null
@@ -268,7 +329,7 @@ internal class HostEngine(
         }
     }
 
- /** Refreshes the cached player name without doing Settings/network work on the caller. */
+    /** Refreshes the cached player name without doing Settings/network work on the caller. */
     internal fun refreshPlayerName() {
         scope.launch {
             try {
@@ -286,13 +347,13 @@ internal class HostEngine(
         commitHostGame(gameId)
     }
 
- /** Sets CHECKING on the caller thread without entering the actor. */
+    /** Sets CHECKING on the caller thread without entering the actor. */
     internal fun prepareHostGame(gameId: Long) {
         val token = sessionToken.incrementAndGet()
         replaceView(token, HostView(HostStep.CHECKING, gameId, "", "", null, myName))
     }
 
- /** Starts the session after the other engine has finished ending. */
+    /** Starts the session after the other engine has finished ending. */
     internal fun commitHostGame(gameId: Long) {
         inputs.trySend(Input.HostGame(gameId) {})
     }
@@ -309,7 +370,7 @@ internal class HostEngine(
         inputs.trySend(Input.PlayAgain)
     }
 
- /** Host the same game in [mode] instead; only before a guest joins. */
+    /** Host the same game in [mode] instead; only before a guest joins. */
     fun switchMode(mode: TogetherMode) {
         inputs.trySend(Input.SwitchMode(mode))
     }
@@ -322,7 +383,7 @@ internal class HostEngine(
         inputs.trySend(Input.End(publishedToken(), null))
     }
 
- /** Completes only after this engine has run its ordered end cleanup. */
+    /** Completes only after this engine has run its ordered end cleanup. */
     internal suspend fun endAndAwait() {
         val done = CompletableDeferred<Unit>()
         inputs.send(Input.End(publishedToken(), done))
@@ -420,7 +481,7 @@ internal class HostEngine(
                     post(Input.ReadinessDone(startedEpoch, null, null, null, null, token))
                     return@launchStep
                 }
- // The best mode first; a switch picks another listed one.
+                // The best mode first; a switch picks another listed one.
                 val modes = modesFor(found)
                 val foundMode = forced?.takeIf { it in modes } ?: modes.firstOrNull()
                 if (foundMode == null) {
@@ -511,7 +572,7 @@ internal class HostEngine(
         val sessionResources = resources ?: return
         launchStep {
             try {
- // The core follows the chosen mode: a STREAM offer carries none.
+                // The core follows the chosen mode: a STREAM offer carries none.
                 val setupOffer = withContext(ioDispatcher) { library.offer(setupGame.id) }
                     ?.copy(core = TogetherSupport.coreFor(setupGame, setupMode))
                 if (setupOffer == null) {
@@ -686,7 +747,7 @@ internal class HostEngine(
             sendByeAndClose(input.link, com.gamebex.client.together.ByeReason.VERSION)
             return
         }
- // A STREAM guest must speak this host's stream protocol.
+        // A STREAM guest must speak this host's stream protocol.
         if (mode == TogetherMode.STREAM && input.hello.streamProto != StreamWire.VERSION) {
             _view.value = _view.value?.copy(message = TogetherCopy.byeText(com.gamebex.client.together.ByeReason.VERSION, input.hello.name))
             sendByeAndClose(input.link, com.gamebex.client.together.ByeReason.VERSION)
@@ -706,7 +767,11 @@ internal class HostEngine(
             guestPhase = com.gamebex.client.together.GuestPhase.CHECKING,
             guestDetail = null,
             guestProgress = null,
-            instructions = TogetherCopy.hostInstructions(currentMode),
+            instructions = TogetherCopy.hostInstructions(
+                currentMode,
+                p2SlotPrompt = currentMode == TogetherMode.STREAM &&
+                    game?.let(::resolveP2SlotMode) == P2SlotMode.GATE_REAL_PAD,
+            ),
             message = null,
             linkLost = false,
         )
@@ -851,6 +916,7 @@ internal class HostEngine(
                     if (step != HostStep.JOINED && step != HostStep.LAUNCHING && step != HostStep.IN_GAME) return
                     sendCore(input.link, message.core)
                 }
+                is LinkMsg.StreamOverlayRequest -> handleOverlayRequest(input.link, message)
                 is LinkMsg.Bye -> guestLeft(message.reason, input.link)
                 else -> Unit
             }
@@ -919,11 +985,11 @@ internal class HostEngine(
         }
     }
 
- /**
- * STREAM, link dropped without a Bye (a Wi-Fi blip, say): warn at once, but keep the stream and
- * player 2's pad for [TogetherTiming.streamLinkGraceMs] so the viewer's own reconnect can heal it.
- * An explicit Bye (guestLeft) still stops everything immediately.
- */
+    /**
+     * STREAM, link dropped without a Bye (a Wi-Fi blip, say): warn at once, but keep the stream and
+     * player 2's pad for [TogetherTiming.streamLinkGraceMs] so the viewer's own reconnect can heal it.
+     * An explicit Bye (guestLeft) still stops everything immediately.
+     */
     private fun keepStreamAfterLinkLoss(name: String) {
         recordControl("control_lost")
         debugCutJob?.cancel()
@@ -956,7 +1022,7 @@ internal class HostEngine(
         recordControl("control_resume_failed")
         val name = streamGuestName ?: TogetherCopy.otherPhone
         if (streamGuestConnected) {
- // The guest is still watching, so the stream (and its pad) stay.
+            // The guest is still watching, so the stream (and its pad) stay.
             _view.value = _view.value?.copy(message = TogetherCopy.streamLinkLostStill(name))
         } else {
             stopStream()
@@ -1052,11 +1118,14 @@ internal class HostEngine(
                 try {
                     withContext(NonCancellable) {
                         var prep = StreamPrep()
+                        var firedAt = 0L
                         val outcome = try {
                             withContext(ioDispatcher) {
- // Player 2's pad exists before the emulator starts, so it sees it at boot.
+                                // Player 2's pad exists before the emulator starts, so it sees it at boot.
                                 if (currentMode == TogetherMode.STREAM) prep = prepareStream(currentGame, guestAddress)
-                                prep.failure ?: emulators.launch(
+                                prep.failure ?: run {
+                                    firedAt = monotonicNs()
+                                    emulators.launch(
                                     TogetherLaunch(
                                         sessionId = currentSessionId,
                                         role = Role.HOST,
@@ -1072,6 +1141,7 @@ internal class HostEngine(
                                         runCatching { streamHost.gameLaunched() }.onFailure(::log)
                                     }
                                 }
+                                }
                             }
                         } catch (cancelled: CancellationException) {
                             if (prep.round != null) {
@@ -1086,7 +1156,9 @@ internal class HostEngine(
                         }
                         post(Input.HostLaunched(launchEpoch, launchRound, outcome, prep.round, prep.guide,
                             system = currentGame.folder,
-                            backend = touchBackendForEmuPkg((outcome as? EmuRouter.Outcome.Launched)?.emuPkg)))
+                            backend = touchBackendForEmuPkg((outcome as? EmuRouter.Outcome.Launched)?.emuPkg),
+                            firedAtNs = firedAt,
+                            gameExt = currentGame.ext))
                     }
                 } finally {
                     criticalLaunches.exit(marker)
@@ -1106,26 +1178,50 @@ internal class HostEngine(
         }
     }
 
- /**
- * STREAM, before the host's emulator starts: bind player 2, then
- * start capture, encoding and the pad for the joined guest only.
- */
+    /**
+     * The P2 slot workaround mode for this host (signer + version +
+     * pads + flag). Sampled per session; the shell applies it.
+     */
+    private fun resolveP2SlotMode(currentGame: GameEntity): P2SlotMode {
+        val emu = StreamEmus.emuFor(currentGame)
+        val ctx = appContext()
+        val signer = ctx?.let { P2SlotWorkaround.signerSha256(it, Emu.RETROARCH.pkg) }
+        val version = ctx?.let { RetroCoreProbe.versionCode(it) } ?: 0L
+        return P2SlotWorkaround.decide(emu, signer, version, hasRealHostPad(), hostFlag("p2_slot_workaround"))
+    }
+
+    /**
+     * STREAM, before the host's emulator starts: bind player 2, then
+     * start capture, encoding and the pad for the joined guest only.
+     */
     private suspend fun prepareStream(currentGame: GameEntity, guestAddress: String?): StreamPrep {
         if (guestAddress == null) return StreamPrep(failure = EmuRouter.Outcome.Failed(TogetherCopy.streamNetwork))
         val emu = StreamEmus.emuFor(currentGame)
             ?: return StreamPrep(failure = EmuRouter.Outcome.Blocked(TogetherCopy.notSupported))
-        var prepared = player2.prepare(currentGame, emu, rsoundReady = false)
+        var prepared = player2.prepare(currentGame, emu, rsoundReady = false, p2SlotMode = resolveP2SlotMode(currentGame))
         if (prepared is P2Prep.Failed) return StreamPrep(failure = EmuRouter.Outcome.Failed(prepared.text))
+        if (emu == Emu.DOLPHIN) ensureDolphinStreamOverlay()
         val rsoundRequested = emu == Emu.RETROARCH && streamAudioOverride() != "opensl"
         val token = StreamToken.generate()
-        val started = streamHost.start(streamConfigForFlags(token, guestAddress, rsoundRequested, hostFlag))
+        val vp = hostViewportInfo()
+        val cropVp = if (vp.viewport.isEmpty || vp.displayW <= 0 || vp.displayH <= 0) ""
+        else "${vp.viewport.x},${vp.viewport.y},${vp.viewport.w},${vp.viewport.h},${vp.displayW},${vp.displayH}"
+        val startLevelProp = if (com.gamebex.client.BuildConfig.DEBUG) {
+            runCatching { com.gamebex.client.stream.StreamDebug.prop("start_level")?.toIntOrNull() }.getOrNull()
+        } else null
+        val streamConfig = streamConfigForFlags(
+            token, guestAddress, rsoundRequested, hostFlag, cropVp, startLevelProp,
+            p2SlotMode = resolveP2SlotMode(currentGame).wire,
+            cropAspect = StreamEmus.cropAspectForRaCore(StreamEmus.raCore(currentGame)),
+        )
+        val started = streamHost.start(streamConfig)
         if (!started.ok) {
             return StreamPrep(failure = EmuRouter.Outcome.Failed(TogetherCopy.streamStartFailed(started.error)))
         }
         var handedOff = false
         try {
             if (rsoundRequested && started.rsound) {
-                prepared = player2.prepare(currentGame, emu, rsoundReady = true)
+                prepared = player2.prepare(currentGame, emu, rsoundReady = true, p2SlotMode = resolveP2SlotMode(currentGame))
                 if (prepared is P2Prep.Failed) return StreamPrep(failure = EmuRouter.Outcome.Failed(prepared.text))
             }
             return StreamPrep(
@@ -1142,7 +1238,7 @@ internal class HostEngine(
 
     private suspend fun handleHostLaunched(input: Input.HostLaunched) {
         if (!isCurrent(input.epoch) || input.round != round || _view.value?.step != HostStep.LAUNCHING) {
- // A stream started for a launch nobody waits for any more must not keep the pad.
+            // A stream started for a launch nobody waits for any more must not keep the pad.
             if (input.stream != null) launchSession { runCatching { withContext(ioDispatcher) { streamHost.stop() } }.onFailure(::log) }
             return
         }
@@ -1156,7 +1252,7 @@ internal class HostEngine(
                     try {
                         withContext(ioDispatcher) {
                             currentGuest.send(LinkMsg.Launch(currentSession, input.round))
- // The guest opens its viewer on this, after Launch.
+                            // The guest opens its viewer on this, after Launch.
                             if (started != null) {
                                 currentGuest.send(
                                     LinkMsg.StreamReady(
@@ -1174,10 +1270,17 @@ internal class HostEngine(
                                         backend = input.backend,
                                     ),
                                 )
- // the guest renders the host's own overlay when it can use it.
-                                hostOverlayMessage(game, input.backend, currentSession, input.round)?.let {
+                                // The guest renders the host's own overlay when it can use it.
+                                hostOverlayMessage(game, input.backend, currentSession, input.round)?.forEach {
                                     currentGuest.send(it)
                                 }
+                                // Standalone emulators send their own touch controls.
+                                // Per-part: one oversized part must not starve the rest (part 1
+                                // threw and part 2 was never attempted). The guest draws what
+                                // arrives and re-requests the rest.
+                                val emuPkg = (input.outcome as? EmuRouter.Outcome.Launched)?.emuPkg
+                                hostEmuOverlayMessages(emuPkg, input.system, input.backend, currentSession, input.round, input.gameExt)
+                                    ?.forEach { runCatching { currentGuest.send(it) }.onFailure(::log) }
                             }
                         }
                     } catch (cancelled: CancellationException) {
@@ -1207,8 +1310,18 @@ internal class HostEngine(
                 } else null
                 startStreamPoll(input.round)
                 currentGuest?.let(::startDebugCuts)
- // The game is in front now: capture only its app (the host picks it in Android's share prompt).
-                launchSession { runCatching { withContext(ioDispatcher) { streamHost.attachCapture() } }.onFailure(::log) }
+                // The game is in front now: capture only its app (the host picks it in Android's share prompt).
+                // The proxy waits for the task stack to settle first: started into a mid-boot shuffle it
+                // dies on a stale START when the grant returns. BAL (no visible
+                // activity this late) is defeated with a 1px overlay window; see StreamAppCapture.
+                launchSession {
+                    runCatching {
+                        val elapsedMs = (monotonicNs() - input.firedAtNs) / 1_000_000
+                        val waitMs = (attachStableMs() - elapsedMs).coerceAtLeast(0)
+                        if (waitMs > 0) delay(waitMs)
+                        withContext(ioDispatcher) { streamHost.attachCapture() }
+                    }.onFailure(::log)
+                }
             }
             val name = _view.value?.guestName ?: TogetherCopy.otherPhone
             platform.updateService(TogetherCopy.ongoingPlaying(name, game?.title ?: ""))
@@ -1225,7 +1338,7 @@ internal class HostEngine(
                 }
             }
         } else {
- // The game didn't start: the stream it was meant for must not outlive it.
+            // The game didn't start: the stream it was meant for must not outlive it.
             if (input.stream != null) launchSession { runCatching { withContext(ioDispatcher) { streamHost.stop() } }.onFailure(::log) }
             val message = TogetherCopy.launchFailed(TogetherCopy.outcomeText(outcome))
             _view.value = _view.value?.copy(
@@ -1235,17 +1348,48 @@ internal class HostEngine(
         }
     }
 
- /**
- * the host's active RetroArch overlay for the guest, or null when the
- * flag is off, the host runs another emulator, or nothing is readable
- * (then the guest falls back to 26a). Runs on IO: reads shared storage.
- */
+    /**
+     * The host's active RetroArch overlay for the guest — cfg, effective
+     * settings and full-size images in frame-fitting parts — or null when
+     * the flag is off, the host runs another emulator, or nothing is
+     * readable (then the guest falls back to its own RA stock overlay).
+     * Runs on IO: reads shared storage. Remembers the cfg file to answer
+     * the guest's re-requests.
+     */
+    /**
+     * The rect the stream's encoder crops to, in host-display px — the
+     * shell's exact computation ([streamCropRect] with the shell's
+     * effective flag/aspect/viewport inputs; the shell-uid encoder and
+     * this app-uid host read the same adb props on debug builds) — or
+     * null when the shell streams full-frame (flag off, unknown display,
+     * the full-frame bail-out [streamCropEncodeLevel] applies, or an
+     * EGL-less fallback the guest can't see; the guest's aspect guard
+     * covers the last case). The capture runs display-native so the
+     * stamp is the content rect 1:1. Stamped on the overlay sends so the
+     * guest offsets its video surface instead of centering.
+     */
+    private fun hostCropRect(info: HostViewportInfo, cropAspect: String): CropRect? {
+        if (!shellFlag("stream_crop", hostFlag("stream_crop") == "1")) return null
+        if (info.displayW <= 0 || info.displayH <= 0) return null
+        val propAspect = if (com.gamebex.client.BuildConfig.DEBUG) {
+            runCatching { com.gamebex.client.stream.StreamDebug.prop("stream_crop_aspect") }.getOrNull()
+        } else null
+        val (num, den) = (StreamCropOptions.aspectOrNull(propAspect)
+            ?: StreamCropOptions.aspectOrNull(cropAspect) ?: intArrayOf(4, 3)).let { it[0] to it[1] }
+        val vp = info.viewport
+        val vpStr = if (vp.isEmpty) "" else "${vp.x},${vp.y},${vp.w},${vp.h},${info.displayW},${info.displayH}"
+        val rect = runCatching { streamCropRect(info.displayW, info.displayH, num, den, vpStr) }.getOrNull()
+            ?: return null
+        if (rect.width >= info.displayW && rect.height >= info.displayH) return null
+        return rect
+    }
+
     private fun hostOverlayMessage(
         currentGame: GameEntity?,
         backend: String,
         sessionId: String,
         round: Int,
-    ): LinkMsg.StreamOverlay? {
+    ): List<LinkMsg.StreamOverlay>? {
         if (!overlay26bEnabled()) {
             runCatching { android.util.Log.i("GameBEXTogether", "26b skip: flag off") }
             return null
@@ -1254,27 +1398,218 @@ internal class HostEngine(
             runCatching { android.util.Log.i("GameBEXTogether", "26b skip: game=$currentGame backend=$backend") }
             return null
         }
-        val configDir = overlayConfigDir() ?: run {
+        val mainFile = runCatching { emuAndroidData()?.let { File(it, "${Emu.RETROARCH.pkg}/files/retroarch.cfg") } }.getOrNull()
+        val mainText = runCatching { mainFile?.let { emuOverlayFiles().readText(it.path) } }.getOrNull()
+        val configDir = overlayConfigDir() ?: mainFile?.parentFile?.takeIf { mainText != null } ?: run {
             runCatching { android.util.Log.i("GameBEXTogether", "26b skip: no RA config dir") }
             return null
         }
         val core = TogetherSupport.coreFor(currentGame, TogetherMode.RA_NETPLAY)
- // A stock RetroArch configures no overlay: fall back to the
- // seeded per-core cfg (idempotent — usually already on disk
- // from session-config time) before giving up to 26a.
-        val msg = runCatching {
-            HostOverlayBundle.read(configDir, core, sessionId, round)
-                ?: runCatching { seedOverlayForCore(core) }
-                    .getOrNull()?.let { HostOverlayBundle.packFile(it, sessionId, round) }
+        val streamText = runCatching { streamCfgText() }.getOrNull()
+        // RA resolves its overlay against its own window (the viewport),
+        // which letterboxes off the cutout side — not the display.
+        val info = runCatching { hostViewportInfo() }.getOrNull() ?: HostViewportInfo.UNKNOWN
+        val vp = info.viewport
+        val (screenW, screenH) = if (vp.isEmpty) 0 to 0 else vp.w to vp.h
+        // A stock RetroArch configures no overlay: fall back to the
+        // seeded per-core cfg (idempotent — usually already on disk
+        // from session-config time) before giving up.
+        // The stamp uses the session core's aspect, like the shell's
+        // crop (StreamConfig.cropAspect from prepareStream).
+        val cropAspect = StreamEmus.cropAspectForRaCore(StreamEmus.raCore(currentGame))
+        val crop = runCatching { hostCropRect(info, cropAspect) }.getOrNull()
+        val packed: Triple<File, RaOverlaySettings, List<LinkMsg.StreamOverlay>>? = runCatching {
+            val cfgFile = HostOverlayBundle.activeOverlayFile(configDir, core, streamText)
+            if (cfgFile != null) {
+                val settings = HostOverlayBundle.effectiveSettings(configDir, core, streamText, mainText)
+                HostOverlayBundle.packFile(
+                    cfgFile, sessionId, round, settings, screenW, screenH,
+                    screenX = vp.x, screenY = vp.y, displayW = info.displayW, displayH = info.displayH,
+                    cropX = crop?.left ?: 0, cropY = crop?.top ?: 0,
+                    cropW = crop?.width ?: 0, cropH = crop?.height ?: 0,
+                )?.let { Triple(cfgFile, settings, it) }
+            } else {
+                runCatching { seedOverlayForCore(core) }.getOrNull()?.let { seeded ->
+                    val settings = HostOverlayBundle.effectiveSettings(configDir, core, streamText, mainText)
+                    HostOverlayBundle.packFile(
+                        seeded, sessionId, round, settings, screenW, screenH,
+                        screenX = vp.x, screenY = vp.y, displayW = info.displayW, displayH = info.displayH,
+                        cropX = crop?.left ?: 0, cropY = crop?.top ?: 0,
+                        cropW = crop?.width ?: 0, cropH = crop?.height ?: 0,
+                    )?.let { Triple(seeded, settings, it) }
+                }
+            }
         }.getOrNull()
+        lastOverlayCfg = packed?.let { Triple(it.first, sessionId, round) }
         runCatching {
             android.util.Log.i(
                 "GameBEXTogether",
-                if (msg == null) "26b skip: nothing packed core=$core"
-                else "26b send: core=$core cfg=${msg.cfg.length}B images=${msg.images.size}",
+                if (packed == null) "26b skip: nothing packed core=$core"
+                else {
+                    val s = packed.second
+                    "26b send: core=$core cfg=${packed.first.absolutePath} screen=${screenW}x$screenH " +
+                        "viewport=${vp.x},${vp.y},${vp.w}x${vp.h} display=${info.displayW}x${info.displayH} " +
+                        "crop=${crop?.let { "${it.left},${it.top},${it.width}x${it.height}" } ?: "none"} " +
+                        "parts=${packed.third.size} images=${packed.third.sumOf { it.images.size }} " +
+                        "opacity=${s.opacity} floatingAlpha=${s.floatingAlpha} autoScale=${s.autoScale} showInputs=${s.showInputs} " +
+                        "scale=${s.scaleLandscape},${s.scalePortrait} aspect=${s.aspectAdjustLandscape},${s.aspectAdjustPortrait} " +
+                        "sep=${s.xSeparationLandscape},${s.ySeparationLandscape},${s.xSeparationPortrait},${s.ySeparationPortrait} " +
+                        "off=${s.xOffsetLandscape},${s.yOffsetLandscape},${s.xOffsetPortrait},${s.yOffsetPortrait}"
+                },
             )
         }
-        return msg
+        return packed?.third
+    }
+
+    /** The cfg file behind the last overlay send, for re-requests: file, session, round. */
+    private var lastOverlayCfg: Triple<File, String, Int>? = null
+
+    /**
+     * The standalone emulator's own touch controls for this round —
+     * art rasterized at exact host pixels plus exact rects — or null when
+     * the flag is off, the host runs RetroArch, or the emulator's overlay
+     * is unreadable (the guest falls back to its stock overlay). Runs on IO.
+     */
+    private fun hostEmuOverlayMessages(
+        emuPkg: String?,
+        system: String,
+        backend: String,
+        sessionId: String,
+        round: Int,
+        gameExt: String = "",
+    ): List<LinkMsg.StreamEmuOverlay>? {
+        if (!overlay26bEnabled()) return null
+        if (emuPkg.isNullOrEmpty() || backend == "retroarch") return null
+        val ctx = appContext() ?: run {
+            runCatching { android.util.Log.i("GameBEXTogether", "emu skip: no app ctx") }
+            return null
+        }
+        // Standalone emulators lay out against their own window too
+        // (default cutout mode letterboxes landscape apps off the cutout
+        // side); unknown viewport falls back to the display.
+        val info = runCatching { hostViewportInfo() }.getOrNull() ?: HostViewportInfo.UNKNOWN
+        val vp = info.viewport.takeUnless { it.isEmpty }
+            ?: HostViewport(0, 0, info.displayW, info.displayH)
+        val (screenW, screenH) = vp.w to vp.h
+        if (screenW <= 0 || screenH <= 0) {
+            runCatching { android.util.Log.i("GameBEXTogether", "emu skip: no host screen") }
+            return null
+        }
+        val dpi = runCatching { hostDensityDpi() }.getOrDefault(0)
+        val androidData = emuAndroidData() ?: run {
+            runCatching { android.util.Log.i("GameBEXTogether", "emu skip: no Android/data") }
+            return null
+        }
+        // Standalone emulators keep the historical 4:3 crop.
+        val crop = runCatching { hostCropRect(info, "4:3") }.getOrNull()
+        val bundle = runCatching {
+            EmuOverlayReader.read(
+                ctx, emuPkg, system.ifEmpty { null }, serial = null, gameExt = gameExt,
+                screenW = screenW, screenH = screenH,
+                screenX = vp.x, screenY = vp.y, displayW = info.displayW, displayH = info.displayH,
+                cropX = crop?.left ?: 0, cropY = crop?.top ?: 0,
+                cropW = crop?.width ?: 0, cropH = crop?.height ?: 0,
+                density = if (dpi > 0) dpi / 160f else 0f, dpi = dpi,
+                files = emuOverlayFiles(), androidData = androidData,
+            )
+        }.getOrNull()
+        if (bundle == null) {
+            lastEmuBundle = null
+            runCatching { android.util.Log.i("GameBEXTogether", "emu skip: unreadable emuPkg=$emuPkg") }
+            return null
+        }
+        val parts = EmuOverlayReader.packParts(sessionId, round, bundle)
+        lastEmuBundle = Triple(bundle, sessionId, round)
+        runCatching {
+            android.util.Log.i(
+                "GameBEXTogether",
+                "emu send: backend=${bundle.backend} emuPkg=$emuPkg ext=$gameExt screen=${screenW}x$screenH " +
+                    "viewport=${vp.x},${vp.y},${vp.w}x${vp.h} display=${info.displayW}x${info.displayH} " +
+                    "crop=${crop?.let { "${it.left},${it.top},${it.width}x${it.height}" } ?: "none"} " +
+                    "dpi=$dpi controls=${bundle.controls.size} parts=${parts.size}",
+            )
+        }
+        return parts
+    }
+
+    /**
+     * Stream-host Dolphin prep: local-play setup turns its touch overlay off
+     * (physical pad), but a stream guest needs Dolphin's own controls on both
+     * sides. Runs before the emulator boots, so Dolphin reads it. Best
+     * effort: when the write fails the reader sees overlay-off and shares
+     * nothing, and the guest keeps its stock overlay.
+     */
+    private fun ensureDolphinStreamOverlay() {
+        runCatching {
+            val androidData = emuAndroidData() ?: return@runCatching
+            val files = emuOverlayFiles()
+            val ini = File(androidData, "${Emu.DOLPHIN.pkg}/files/Config/Dolphin.ini").path
+            val before = files.readText(ini) ?: return@runCatching
+            val after = EmuControllerConfig.dolphinStreamIni(before)
+            if (after !== before && after != before) {
+                files.writeTextAtomic(ini, after)
+                runCatching { Log.i("GameBEXTogether", "emu prep: Dolphin overlay on for stream") }
+            }
+        }.onFailure(::log)
+    }
+
+    /** The bundle behind the last emu overlay send, for re-requests: bundle, session, round. */
+    private var lastEmuBundle: Triple<EmuOverlayReader.Bundle, String, Int>? = null
+
+    /** Answers a guest [LinkMsg.StreamOverlayRequest] with a top-up part. Runs on IO. */
+    private suspend fun handleOverlayRequest(link: Link, message: LinkMsg.StreamOverlayRequest) {
+        if (message.emu) {
+            handleEmuOverlayRequest(link, message)
+            return
+        }
+        val (cfgFile, session, currentRound) = lastOverlayCfg ?: return
+        if (message.sessionId != session || message.round != currentRound) return
+        if (message.sessionId != sessionId) return
+        val step = _view.value?.step
+        if (step != HostStep.JOINED && step != HostStep.LAUNCHING && step != HostStep.IN_GAME) return
+        val topUp = runCatching {
+            withContext(ioDispatcher) {
+                HostOverlayBundle.packRefs(cfgFile, message.sessionId, message.round, message.missing)
+            }
+        }.getOrNull() ?: return
+        runCatching { link.send(topUp) }
+        runCatching {
+            android.util.Log.i("GameBEXTogether", "26b top-up: images=${topUp.images.size}")
+        }
+    }
+
+    /** Answers an emu re-request with one top-up part carrying the missing controls' art. */
+    private suspend fun handleEmuOverlayRequest(link: Link, message: LinkMsg.StreamOverlayRequest) {
+        val (bundle, session, currentRound) = lastEmuBundle ?: return
+        if (message.sessionId != session || message.round != currentRound) return
+        if (message.sessionId != sessionId) return
+        val step = _view.value?.step
+        if (step != HostStep.JOINED && step != HostStep.LAUNCHING && step != HostStep.IN_GAME) return
+        val wanted = message.missing.toSet()
+        val controls = bundle.controls.filter { it.id in wanted }
+        if (controls.isEmpty()) return
+        val topUp = LinkMsg.StreamEmuOverlay(
+            sessionId = message.sessionId,
+            round = message.round,
+            backend = bundle.backend,
+            controls = controls,
+            partIndex = -1,
+            partCount = -1,
+            screenX = bundle.screenX,
+            screenY = bundle.screenY,
+            screenW = bundle.screenW,
+            screenH = bundle.screenH,
+            displayW = bundle.displayW,
+            displayH = bundle.displayH,
+            cropX = bundle.cropX,
+            cropY = bundle.cropY,
+            cropW = bundle.cropW,
+            cropH = bundle.cropH,
+        )
+        runCatching { link.send(topUp) }
+        runCatching {
+            android.util.Log.i("GameBEXTogether", "emu top-up: controls=${controls.size}")
+        }
     }
 
     private fun handleHeadStart(input: Input.HeadStart) {
@@ -1295,7 +1630,7 @@ internal class HostEngine(
         }
     }
 
- /** Only before a guest joins, and only to a mode this game lists. */
+    /** Only before a guest joins, and only to a mode this game lists. */
     private suspend fun handleSwitchMode(next: TogetherMode) {
         val current = _view.value ?: return
         if (guest != null || next == current.mode || next !in current.altModes) return
@@ -1304,7 +1639,7 @@ internal class HostEngine(
         handleHostGame(Input.HostGame(id, next) {})
     }
 
- /** The host's stream line, refreshed every [StreamCaps.STATUS_POLL_MS]; also feeds the shell's app watchdog. */
+    /** The host's stream line, refreshed every [StreamCaps.STATUS_POLL_MS]; also feeds the shell's app watchdog. */
     private fun startStreamPoll(pollRound: Int) {
         streamPoll?.cancel()
         lastInputPackets = -1L
@@ -1352,11 +1687,11 @@ internal class HostEngine(
         _view.value = _view.value?.copy(streamLine = line)
     }
 
- /**
- * The guest's input sender sends at least every 50 ms, so a connected guest whose packet count stands
- * still across two polls (2+ s) has dropped off without the link noticing yet: warn the host at once
- * (a heads-up while the game is on screen) and say when it is back.
- */
+    /**
+     * The guest's input sender sends at least every 50 ms, so a connected guest whose packet count stands
+     * still across two polls (2+ s) has dropped off without the link noticing yet: warn the host at once
+     * (a heads-up while the game is on screen) and say when it is back.
+     */
     private fun watchForSilence(status: StreamStatus, name: String) {
         val packets = status.inputPackets
         val moving = packets != lastInputPackets
@@ -1372,7 +1707,7 @@ internal class HostEngine(
         }
     }
 
- /** Stops the stream and removes player 2's pad; the host keeps playing. */
+    /** Stops the stream and removes player 2's pad; the host keeps playing. */
     private fun stopStream() {
         streamResumeOwner = null
         streamResumeUntilNs = null
@@ -1439,10 +1774,13 @@ internal class HostEngine(
             }
         }
         val currentGame = game ?: return
-        val currentCore = core ?: return
+        // STREAM carries no offer core, but a RetroArch host still
+        // needs its core installed; resolve it like readiness does
+        // (TogetherEmulatorsImpl.readinessStreamHost).
+        val currentCore = core ?: StreamEmus.raCore(currentGame) ?: return
         val install = CoreInstall(epoch, publishedToken(), currentCore)
         coreInstall = install
- // Publish before the backend starts, even if it never sends its first callback.
+        // Publish before the backend starts, even if it never sends its first callback.
         showCoreInstall(install)
         scheduleCoreInstallStall(install)
         install.job = launchStep {
@@ -1459,11 +1797,11 @@ internal class HostEngine(
                 log(t)
                 post(Input.CoreFetch(install, result = CoreResult.Failed(TogetherCopy.noWifi)))
             } finally {
- // Only the actor releases ownership; cancellation cannot strand the running marker.
+                // Only the actor releases ownership; cancellation cannot strand the running marker.
                 post(Input.CoreFetchFinished(install))
             }
         }
- // Covers a job cancelled before its body (and therefore its finally) ever starts.
+        // Covers a job cancelled before its body (and therefore its finally) ever starts.
         install.job?.invokeOnCompletion { post(Input.CoreFetchFinished(install)) }
     }
 
@@ -1673,7 +2011,7 @@ internal class HostEngine(
         }.onFailure(::log)
         runCatching { criticalLaunches.join(2_000L) }.onFailure(::log)
         runCatching { sendByeAndClose(guest, com.gamebex.client.together.ByeReason.LEFT) }.onFailure(::log)
- // The pad goes first, then player 2's emulator settings come back.
+        // The pad goes first, then player 2's emulator settings come back.
         runCatching {
             streamPoll = null
             if (stream != null || mode == TogetherMode.STREAM) withContext(ioDispatcher) { streamHost.stop() }
@@ -1795,15 +2133,32 @@ internal fun streamConfigForFlags(
     guestAddress: String,
     rsound: Boolean,
     hostFlag: (String) -> String?,
+    cropViewport: String = "",
+    /**
+     * Debug adb-prop override for the start level (0..3, else ignored):
+     * the host honors `debug.gamebex.start_level` on debug builds the
+     * way the shell honors its props, so lab captures can pin full-res
+     * video (overlays need 1:1 video, not upscaled). Pure: the
+     * caller samples the prop.
+     */
+    startLevelOverride: Int? = null,
+    /** [P2SlotMode.wire], resolved by the caller. */
+    p2SlotMode: String = P2SlotMode.OFF.wire,
+    /** Encoder-crop aspect ("N:D"); the session core's game picture, default 4:3. */
+    cropAspect: String = "4:3",
 ): StreamConfig = StreamConfig(
     token = token,
     guestAddress = guestAddress,
     rsound = rsound,
-    level = hostFlag("start_level")?.toIntOrNull()?.takeIf { it in 0..3 } ?: 1,
+    p2SlotMode = p2SlotMode,
+    level = startLevelOverride?.takeIf { it in 0..3 }
+        ?: hostFlag("start_level")?.toIntOrNull()?.takeIf { it in 0..3 } ?: 1,
     queueDeadlineMs = hostFlag("queue_deadline_ms")?.toIntOrNull()?.takeIf { it in 0..40 } ?: 0,
     latencyCc = hostFlag("latency_cc") == "1",
     inputCs6 = hostFlag("input_cs6") == "1",
     encoderFps = hostFlag("encoder_fps")?.toIntOrNull()?.takeIf { it == 50 } ?: 0,
     keyframesOnRequest = StreamFlags.toggleOn("keyframes_on_request", hostFlag),
     crop = hostFlag("stream_crop") == "1",
+    cropAspect = cropAspect,
+    cropViewport = cropViewport,
 )

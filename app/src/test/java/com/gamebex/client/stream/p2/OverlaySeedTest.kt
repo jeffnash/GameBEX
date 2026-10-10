@@ -27,11 +27,63 @@ class OverlaySeedTest {
         assertEquals("arcade.cfg", OverlaySeed.assetForCore("fbneo")!!.cfg)
     }
 
-    @Test fun assetForCoreNullWhenUnmapped() {
+    @Test fun assetForCoreNullOnlyWhenBlank() {
         assertNull(OverlaySeed.assetForCore(null))
         assertNull(OverlaySeed.assetForCore(""))
-        assertNull(OverlaySeed.assetForCore("dolphin"))
-        assertNull(OverlaySeed.assetForCore("ppsspp"))
+        assertNull(OverlaySeed.assetForCore("  "))
+    }
+
+    @Test fun assetForCoreCoversNewSystems() {
+        assertEquals("atari2600.cfg", OverlaySeed.assetForCore("stella")!!.cfg)
+        assertEquals("atari7800.cfg", OverlaySeed.assetForCore("prosystem")!!.cfg)
+        assertEquals("turbografx-16.cfg", OverlaySeed.assetForCore("mednafen_pce")!!.cfg)
+        assertEquals("pc-fx.cfg", OverlaySeed.assetForCore("mednafen_pcfx")!!.cfg)
+        assertEquals("virtualboy.cfg", OverlaySeed.assetForCore("mednafen_vb")!!.cfg)
+        assertEquals("wonderswan.cfg", OverlaySeed.assetForCore("mednafen_wswan")!!.cfg)
+        assertEquals("neogeo_pocket.cfg", OverlaySeed.assetForCore("mednafen_ngp")!!.cfg)
+        assertEquals("NDS.cfg", OverlaySeed.assetForCore("melonds")!!.cfg)
+        assertEquals("neogeo.cfg", OverlaySeed.assetForCore("neocd")!!.cfg)
+        assertEquals("pokemini.cfg", OverlaySeed.assetForCore("pokemini")!!.cfg)
+        assertEquals("psp.cfg", OverlaySeed.assetForCore("ppsspp")!!.cfg)
+        assertEquals("DOS.cfg", OverlaySeed.assetForCore("dosbox_pure")!!.cfg)
+        assertEquals("genesis.cfg", OverlaySeed.assetForCore("picodrive")!!.cfg)
+    }
+
+    @Test fun assetForCoreFallsBackToRetropad() {
+        // What RetroArch itself shows for cores with no system overlay.
+        assertEquals("retropad.cfg", OverlaySeed.assetForCore("citra")!!.cfg)
+        assertEquals("retropad.cfg", OverlaySeed.assetForCore("same_cdi")!!.cfg)
+        assertEquals("retropad.cfg", OverlaySeed.assetForCore("applewin")!!.cfg)
+        assertEquals("retropad.cfg", OverlaySeed.assetForCore("bogus_core")!!.cfg)
+    }
+
+    @Test fun assetForCoreCoversDolphinAndOpera() {
+        // gc/wii and 3do fall back to RA stock too.
+        assertEquals("gamecube.cfg", OverlaySeed.assetForCore("dolphin")!!.cfg)
+        assertEquals("The 3DO Company - 3DO.cfg", OverlaySeed.assetForCore("opera")!!.cfg)
+    }
+
+    @Test fun normalizeZipPathContainsDotDot() {
+        assertEquals(
+            "assets/overlays/gamepads/flat/img/A.png",
+            OverlaySeed.normalizeZipPath("assets/overlays/gamepads/Named_Overlays/../flat/img/A.png"),
+        )
+        assertEquals("assets/overlays/x.png", OverlaySeed.normalizeZipPath("assets/overlays/./x.png"))
+        assertNull(OverlaySeed.normalizeZipPath("assets/overlays/../../evil.png"))
+        assertNull(OverlaySeed.normalizeZipPath("/abs/path.png"))
+    }
+
+    @Test fun readLoadsCfgAndImagesToMemory() {
+        val asset = OverlaySeed.Asset("assets/overlays/gamepads/n64", "n64.cfg")
+        val apk = fakeApk(
+            "assets/overlays/gamepads/n64/n64.cfg" to CFG,
+            "assets/overlays/gamepads/n64/img/a.png" to "PNG-A",
+        )
+        val (cfgText, images) = OverlaySeed.read(apk, asset)!!
+        assertTrue(cfgText.contains("overlay0_desc0"))
+        assertEquals("PNG-A", images.getValue("img/a.png").decodeToString())
+        assertNull(OverlaySeed.read(File(tmp, "nope.apk"), asset))
+        assertNull(OverlaySeed.read(fakeApk(), asset))
     }
 
     @Test fun seedCopiesCfgAndImages() {
@@ -55,16 +107,32 @@ class OverlaySeedTest {
         assertNull(OverlaySeed.seed(File(tmp, "nope.apk"), asset, tmp))
     }
 
-    @Test fun seedRefusesDotDotRefs() {
-        val evil = CFG + "overlay0_desc1_overlay = ../evil.png\n"
+    @Test fun seedFlattensContainedDotDotRefs() {
+        // Named overlays share ../flat/img art: contained `..` flattens into
+        // the dest dir and the seeded cfg is rewritten to match.
+        val named = CFG + "overlay0_desc1_overlay = ../shared/b.png\n"
+        val asset = OverlaySeed.Asset("assets/overlays/gamepads/Named", "named.cfg")
+        val apk = fakeApk(
+            "assets/overlays/gamepads/Named/named.cfg" to named,
+            "assets/overlays/gamepads/Named/img/a.png" to "PNG-A",
+            "assets/overlays/gamepads/shared/b.png" to "PNG-B",
+        )
+        val cfg = OverlaySeed.seed(apk, asset, tmp)!!
+        assertTrue(File(tmp, "overlays/gamebex/named/shared_b.png").isFile)
+        assertTrue(cfg.readText().contains("shared_b.png"))
+        assertTrue(!cfg.readText().contains(".."))
+    }
+
+    @Test fun seedRefusesEscapingRefs() {
+        val evil = CFG + "overlay0_desc1_overlay = ../../../../evil.png\n"
         val asset = OverlaySeed.Asset("assets/overlays/gamepads/n64", "n64.cfg")
         val apk = fakeApk(
             "assets/overlays/gamepads/n64/n64.cfg" to evil,
-            "assets/overlays/gamepads/evil.png" to "EVIL",
+            "evil.png" to "EVIL",
         )
         val cfg = OverlaySeed.seed(apk, asset, tmp)!!
         assertTrue(cfg.isFile)
-        assertTrue(!File(tmp, "overlays/gamebex/evil.png").exists())
+        assertTrue(!File(tmp, "evil.png").exists())
         assertTrue(!File(tmp, "overlays/evil.png").exists())
     }
 

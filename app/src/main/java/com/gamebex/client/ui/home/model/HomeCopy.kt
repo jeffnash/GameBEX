@@ -29,10 +29,10 @@ object HomeCopy {
     private val BYTE_COUNT_RE = Regex("""^[0-9]+$""")
     private val THOUSANDS = Regex("""^[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?$""")
 
- /**
- * "just now", "12 min ago", "today", "yesterday", "Monday",
- * "last week", "3 weeks ago", "Mar 3".
- */
+    /**
+     * "just now", "12 min ago", "today", "yesterday", "Monday",
+     * "last week", "3 weeks ago", "Mar 3".
+     */
     fun relative(atMs: Long, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): String {
         val delta = (nowMs - atMs).coerceAtLeast(0)
         if (delta < MINUTE) return "just now"
@@ -47,11 +47,11 @@ object HomeCopy {
         return MONTH_DAY.format(then)
     }
 
- /** Midnight-free local date; `LocalDate.ofInstant` needs API 34. */
+    /** Midnight-free local date; `LocalDate.ofInstant` needs API 34. */
     private fun localDate(ms: Long, zone: ZoneId): LocalDate =
         Instant.ofEpochMilli(ms).atZone(zone).toLocalDate()
 
- /** "480 MB" under 1 GB (no decimals), else "1.4 GB" (one decimal). */
+    /** "480 MB" under 1 GB (no decimals), else "1.4 GB" (one decimal). */
     fun size(bytes: Long): String {
         val b = bytes.coerceAtLeast(0)
         return when {
@@ -62,13 +62,13 @@ object HomeCopy {
         }
     }
 
- /**
- * "1.4 GB", "480MB", "1,2 Go", "733 MB", "2 GiB", "812 KB", a no-break
- * space between value and unit, and trailing text ("1.4 GB (zip)") →
- * bytes, or null when [text] doesn't start with a size. `1,234 MB` is a
- * thousands separator (1234 MB) but `1,2 Go` is a decimal (1.2 Go).
- * Binary units.
- */
+    /**
+     * "1.4 GB", "480MB", "1,2 Go", "733 MB", "2 GiB", "812 KB", a no-break
+     * space between value and unit, and trailing text ("1.4 GB (zip)") →
+     * bytes, or null when [text] doesn't start with a size. `1,234 MB` is a
+     * thousands separator (1234 MB) but `1,2 Go` is a decimal (1.2 Go).
+     * Binary units.
+     */
     fun parseSize(text: String?, allowBareBytes: Boolean = true): Long? {
         val t = text
             ?.replace('\u00A0', ' ')
@@ -90,13 +90,13 @@ object HomeCopy {
         return (value * mult).toLong()
     }
 
- /** `1,234[.5]` → 1234.5 (thousands), `1,2` → 1.2 (decimal). */
+    /** `1,234[.5]` → 1234.5 (thousands), `1,2` → 1.2 (decimal). */
     private fun parseDecimal(raw: String): Double? {
         val cleaned = if (THOUSANDS.matches(raw)) raw.replace(",", "") else raw.replace(',', '.')
         return cleaned.toDoubleOrNull()
     }
 
- /** "under a minute", "3 min", "1 h 5 min"; empty when [sec] is unknown. */
+    /** "under a minute", "3 min", "1 h 5 min"; empty when [sec] is unknown. */
     fun eta(sec: Long?): String {
         val s = (sec ?: return "").coerceAtLeast(0)
         if (s < 60) return "under a minute"
@@ -106,7 +106,7 @@ object HomeCopy {
         return if (m == 0L) "$h h" else "$h h $m min"
     }
 
- /** Fixed map; unknown folders are uppercased and cut to 4. */
+    /** Fixed map; unknown folders are uppercased and cut to 4. */
     private val SYSTEM_SHORT = mapOf(
         "gc" to "GC", "wii" to "Wii", "ps2" to "PS2", "psx" to "PS1", "psp" to "PSP",
         "psvita" to "Vita", "n64" to "N64", "nds" to "DS", "n3ds" to "3DS", "gba" to "GBA",
@@ -124,12 +124,12 @@ object HomeCopy {
 
     private val TRAILING_ARTICLE = Regex("""^(.*?),\s*(The|An|A)(\s*[-:].*)?$""", RegexOption.IGNORE_CASE)
 
- /**
- * "Legend of Zelda, The" → "The Legend of Zelda" (also "A" and "An",
- * keeping any "- Game Subtitle" suffix: "Legend of Zelda, The - A Link
- * to the Past" → "The Legend of Zelda - A Link to the Past"; No-Intro
- * form). Used for card titles, the TV case art and search.
- */
+    /**
+     * "Legend of Zelda, The" → "The Legend of Zelda" (also "A" and "An",
+     * keeping any "- Game Subtitle" suffix: "Legend of Zelda, The - A Link
+     * to the Past" → "The Legend of Zelda - A Link to the Past"; No-Intro
+     * form). Used for card titles, the TV case art and search.
+     */
     fun displayTitle(title: String): String {
         val t = title.trim()
         val m = TRAILING_ARTICLE.matchEntire(t) ?: return t
@@ -138,13 +138,13 @@ object HomeCopy {
 
     private val LEADING_ARTICLES = setOf("the", "a", "an")
 
- /**
- * Up to two initials from a title, skipping leading articles ("The Legend
- * of Zelda" → "LO"). Code points, not chars, so surrogate pairs (𝐀, emoji
- * scripts) survive intact. A title with no usable initials (blank,
- * whitespace-only, punctuation) falls back to [fallback] — the game's
- * system tag — else "?".
- */
+    /**
+     * Up to two initials from a title, skipping leading articles ("The Legend
+     * of Zelda" → "LO"). Code points, not chars, so surrogate pairs (𝐀, emoji
+     * scripts) survive intact. A title with no usable initials (blank,
+     * whitespace-only, punctuation) falls back to [fallback] — the game's
+     * system tag — else "?".
+     */
     fun initials(title: String, fallback: String? = null): String {
         val words = title.split(Regex("[^\\p{L}\\p{N}]+"))
             .filter { it.isNotEmpty() }
@@ -155,7 +155,7 @@ object HomeCopy {
         return if (marks.isEmpty()) fallback ?: "?" else marks.joinToString("")
     }
 
- /** Card line. [online] false tags download lines with "offline". */
+    /** Card line. [online] false tags download lines with "offline". */
     fun cardLine(state: CardState, system: SystemTag?, nowMs: Long, online: Boolean = true): String = when (state) {
         is CardState.Saved -> parts(system?.short, "saved ${relative(state.atMs, nowMs)}")
         is CardState.Played -> parts(system?.short, "played ${relative(state.atMs, nowMs)}")
@@ -177,7 +177,7 @@ object HomeCopy {
         CardState.None -> ""
     }
 
- /** "Download again · 1.2 GB" / "Download · 1.4 GB", size dropped when unknown. */
+    /** "Download again · 1.2 GB" / "Download · 1.4 GB", size dropped when unknown. */
     private fun downloadedAgain(size: SizeInfo?, again: Boolean): String {
         val verb = if (again) "Download again" else "Download"
         return if (size == null) verb else "$verb · ${size.label}"
@@ -193,12 +193,12 @@ object HomeCopy {
         }
     }
 
- /**
- * A live prep shows its phase plus bytes ("Extracting
- * archive… 312 of 996 MB · 31%"); a 20s-stalled one says "Still
- * working…" with the last known bytes; a never-reported one keeps
- * the bare "preparing…".
- */
+    /**
+     * A live prep shows its phase plus bytes ("Extracting
+     * archive… 312 of 996 MB · 31%"); a 20s-stalled one says "Still
+     * working…" with the last known bytes; a never-reported one keeps
+     * the bare "preparing…".
+     */
     private fun preparingLine(s: CardState.Preparing, short: String?): String {
         if (s.read < 0 && s.phase == null) return parts(short, "preparing…")
         val phase = s.phase?.trimEnd('…')?.trimEnd() ?: "Preparing"
@@ -219,7 +219,7 @@ object HomeCopy {
     private fun percent(read: Long, total: Long): Int =
         if (total > 0) ((read.coerceIn(0, total) * 100) / total).toInt() else 0
 
- /** "2.0 of 3.1 GB" — the unit is written once, after the total. */
+    /** "2.0 of 3.1 GB" — the unit is written once, after the total. */
     private fun progressPair(read: Long, total: Long): String {
         if (total <= 0) return size(read)
         val r = read.coerceIn(0, total)
@@ -234,12 +234,12 @@ object HomeCopy {
     private fun oneDecimal(bytes: Long): String =
         String.format(Locale.ENGLISH, "%.1f", bytes.toDouble() / GB)
 
- /**
- * TV state line, already uppercase. [system] names the BIOS in the
- * NeedsBios line ("NEEDS THE SATURN BIOS"). [tvStateKey] is the
- * tone-coloured headline and [tvStateDetail] the light-gray continuation;
- * this is the two joined with " · ".
- */
+    /**
+     * TV state line, already uppercase. [system] names the BIOS in the
+     * NeedsBios line ("NEEDS THE SATURN BIOS"). [tvStateKey] is the
+     * tone-coloured headline and [tvStateDetail] the light-gray continuation;
+     * this is the two joined with " · ".
+     */
     fun tvState(
         state: CardState,
         siteName: String?,
@@ -250,7 +250,7 @@ object HomeCopy {
         tvStateDetail(state, siteName, nowMs),
     ).joinToString(" · ")
 
- /** Tone-coloured uppercase headline of the TV state line. */
+    /** Tone-coloured uppercase headline of the TV state line. */
     fun tvStateKey(
         state: CardState,
         siteName: String?,
@@ -280,7 +280,7 @@ object HomeCopy {
         CardState.None -> ""
     }
 
- /** Light-gray uppercase continuation of the TV state line. */
+    /** Light-gray uppercase continuation of the TV state line. */
     fun tvStateDetail(state: CardState, siteName: String?, nowMs: Long): String? = when (state) {
         is CardState.Saved -> "SAVED ${relative(state.atMs, nowMs).uppercase(Locale.ENGLISH)}"
         is CardState.Added -> "ADDED ${relative(state.atMs, nowMs).uppercase(Locale.ENGLISH)}"
@@ -297,7 +297,7 @@ object HomeCopy {
         else -> null
     }
 
- /** Leading glyph for [tvStateKey]. */
+    /** Leading glyph for [tvStateKey]. */
     fun tvGlyph(state: CardState): TvGlyph? = when (state) {
         is CardState.Saved, is CardState.Played -> TvGlyph.RESUME
         is CardState.Added -> TvGlyph.NEW
@@ -311,10 +311,10 @@ object HomeCopy {
         CardState.None -> null
     }
 
- /**
- * TV facts line; null when there is nothing to say. [sizeBytes] is
- * the game's own size (Added, OnSite) when the caller knows it.
- */
+    /**
+     * TV facts line; null when there is nothing to say. [sizeBytes] is
+     * the game's own size (Added, OnSite) when the caller knows it.
+     */
     fun tvFacts(
         state: CardState,
         system: SystemTag?,
@@ -361,7 +361,7 @@ object HomeCopy {
         }
     }
 
- /** Primary button; the size is part of the label. */
+    /** Primary button; the size is part of the label. */
     fun primaryLabel(state: CardState): String = when (state) {
         is CardState.Saved, is CardState.Played -> "Resume"
         is CardState.Added -> "Play"
@@ -385,14 +385,14 @@ object HomeCopy {
         CardState.None -> ""
     }
 
- /** "Primary short": the primary label without the size. */
+    /** "Primary short": the primary label without the size. */
     fun primaryShort(state: CardState): String = when (state) {
         is CardState.OffPhone -> "Download again"
         is CardState.OnSite -> "Download"
         else -> primaryLabel(state)
     }
 
- /** Button tone. */
+    /** Button tone. */
     fun buttonTone(state: CardState): ButtonTone = when (state) {
         is CardState.Saved, is CardState.Played, is CardState.Added -> ButtonTone.PLAY
         is CardState.NeedsBios, is CardState.NeedsEmulator, is CardState.NeedsFix,
@@ -406,7 +406,7 @@ object HomeCopy {
         -> ButtonTone.NEUTRAL
     }
 
- /** TV state line tone: NEW/DOWNLOADING mint, RESUME pink, fixes amber, offline gray. */
+    /** TV state line tone: NEW/DOWNLOADING mint, RESUME pink, fixes amber, offline gray. */
     fun tvTone(state: CardState): TvTone = when (state) {
         is CardState.NeedsBios, is CardState.NeedsEmulator, is CardState.NeedsFix,
         is CardState.DownloadProblem, is CardState.NoRoom,
@@ -485,7 +485,7 @@ object HomeCopy {
         LinkKind.SEARCHING -> "Searching ${siteName ?: "the site"}…"
     }
 
- /** Second line of a quiet link; null when the row is title-only. */
+    /** Second line of a quiet link; null when the row is title-only. */
     fun linkBody(kind: LinkKind, siteName: String?, message: String? = null): String? = when (kind) {
         LinkKind.NO_PLUGIN_HINT -> "Add one in System → Game sources to search a site from here."
         LinkKind.OFFLINE_NOTE ->
@@ -494,7 +494,7 @@ object HomeCopy {
         else -> null
     }
 
- /** Trailing action label; null = no action (the row isn't tappable). */
+    /** Trailing action label; null = no action (the row isn't tappable). */
     fun linkLabel(kind: LinkKind): String? = when (kind) {
         LinkKind.NO_PLUGIN_HINT -> "Open Game sources"
         LinkKind.SEE_ALL_ON_SITE -> "Open in Discover"
@@ -504,24 +504,24 @@ object HomeCopy {
     fun headerSearchPlaceholder(siteName: String?): String =
         if (siteName != null) "Search your games and $siteName" else "Search your games"
 
- /** The top bar reads exactly like the rail ("Discover"), whatever site is installed. */
+    /** The top bar reads exactly like the rail ("Discover"), whatever site is installed. */
     @Suppress("UNUSED_PARAMETER")
     fun headerBrowseLabel(siteName: String?): String = navDiscover
 
- /** "2", "offline", or null. */
+    /** "2", "offline", or null. */
     fun headerDownloadsBadge(active: Int, online: Boolean): String? = when {
         !online -> "offline"
         active > 0 -> active.toString()
         else -> null
     }
 
- /** Delete confirm, source-downloaded games (the body text). */
+    /** Delete confirm, source-downloaded games (the body text). */
     fun deleteSourceGameBody(title: String): String =
         "Delete $title from this phone? Your saves stay, and you can download it again from Home."
 
     fun deleteSourceGameTitle(title: String): String = "Delete $title?"
 
- /** "Downloading {title} · {size}", or "Downloading {title}" when unknown. */
+    /** "Downloading {title} · {size}", or "Downloading {title}" when unknown. */
     fun downloadingToast(title: String, size: SizeInfo?): String =
         downloadingToast(title, size?.label)
 
@@ -532,15 +532,12 @@ object HomeCopy {
 
     const val surpriseNothing = "Add a game first, then Y picks one for you."
 
- // ---------------------------------------------------- readiness notes
-
     const val needsSpace = "There isn't enough free space."
     const val needsVolume = "The SD card with this game isn't inserted."
     const val sourceGone = "Its ROM site plugin was removed."
+    /** Stale prep: Preparing with no live run for 3 ticks — Detail offers Retry. */
+    const val prepStalled = "Preparation didn't finish."
 
- // -------------------------------- package constants
-
- // From HomeCardFactory.
     const val details = "Details"
     const val pause = "Pause"
     const val openLibrary = "Open Library"
@@ -548,15 +545,15 @@ object HomeCopy {
     const val gameBex = "GAMEBEX"
     const val allDownloads = "All downloads"
     const val noGameInserted = "NO GAME INSERTED"
- /** Test-card plate label (the banner above it reads [noGameInserted]). */
+    /** Test-card plate label (the banner above it reads [noGameInserted]). */
     const val noGameLabel = "NO GAME"
     const val noPluginLabel = "NO ROM SITE PLUGIN"
- /** TvContent.Notice labels for the SETUP invites and Roll again. */
+    /** TvContent.Notice labels for the SETUP invites and Roll again. */
     const val findYourGames = "FIND YOUR GAMES"
     const val rollAgainTv = "ROLL AGAIN"
     const val allSystemsReady = "ALL SYSTEMS READY"
 
- /** "1 SYSTEM NEEDS SETUP" / "N SYSTEMS NEED SETUP" (CHECK_SYSTEMS invite). */
+    /** "1 SYSTEM NEEDS SETUP" / "N SYSTEMS NEED SETUP" (CHECK_SYSTEMS invite). */
     fun systemsNeedSetup(n: Int): String =
         if (n == 1) "1 SYSTEM NEEDS SETUP" else "$n SYSTEMS NEED SETUP"
     const val moreOn = "MORE ON"
@@ -589,14 +586,14 @@ object HomeCopy {
     const val glyphCloud = "\u2601\uFE0E"
     const val glyphWarn = "\u26A0\uFE0E"
 
- /**
- * The emulator part of a facts line, or null when the label says nothing
- * ("None" is `emulatorLabel`'s unknown-system output and must never show).
- */
+    /**
+     * The emulator part of a facts line, or null when the label says nothing
+     * ("None" is `emulatorLabel`'s unknown-system output and must never show).
+     */
     private fun emulatorOf(system: SystemTag?): String? =
         system?.emulator?.takeIf { it.isNotBlank() && it != "None" }
 
- /** Joins the non-blank parts of a line with " · ". */
+    /** Joins the non-blank parts of a line with " · ". */
     private fun parts(vararg bits: String?): String =
         bits.mapNotNull { it?.takeIf { s -> s.isNotBlank() } }.joinToString(" · ")
 }

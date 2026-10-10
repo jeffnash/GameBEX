@@ -10,6 +10,8 @@ import android.util.Log
  * bare app_process (StreamShellMain) this does it, as Shizuku's starter does
  * (Shizuku-API server-shared/src/main/java/rikka/shizuku/server/UserService.java).
  */
+// The shell process requires ActivityThread setup and caches its process-wide system context.
+@android.annotation.SuppressLint("PrivateApi", "StaticFieldLeak")
 object ShellRuntime {
     private const val TAG = "GameBEXStream"
     @Volatile private var cached: Context? = null

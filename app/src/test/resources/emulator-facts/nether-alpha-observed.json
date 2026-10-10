@@ -1,0 +1,51 @@
+{
+  "rows": [
+    {
+      "opacity": 75,
+      "white_stroke_peak_on_black": [
+        178,
+        178,
+        178
+      ],
+      "roi": [
+        170,
+        270,
+        197,
+        338
+      ]
+    },
+    {
+      "opacity": 50,
+      "white_stroke_peak_on_black": [
+        119,
+        119,
+        119
+      ],
+      "roi": [
+        170,
+        270,
+        197,
+        338
+      ]
+    },
+    {
+      "opacity": 30,
+      "white_stroke_peak_on_black": [
+        71,
+        71,
+        71
+      ],
+      "roi": [
+        170,
+        270,
+        197,
+        338
+      ]
+    }
+  ],
+  "resource_color_rgb": [
+    238,
+    238,
+    238
+  ]
+}

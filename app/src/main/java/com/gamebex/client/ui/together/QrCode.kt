@@ -18,7 +18,7 @@ import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
 
 @Composable
-fun QrCode(text: String, dimension: Dp = 300.dp, modifier: Modifier = Modifier) {
+fun QrCode(text: String, modifier: Modifier = Modifier, dimension: Dp = 300.dp) {
     val matrix = remember(text) { qrMatrix(text) }
     Canvas(modifier.size(dimension).background(Color.White)) {
         val columns = matrix.width

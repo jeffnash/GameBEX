@@ -36,6 +36,13 @@ object EmuControllerConfig {
      */
     fun dolphinIni(text: String): String = IniText.set(text, "Android", "ShowInputOverlay", "False")
 
+    /**
+     * Stream host only: touch overlay ON. Local play hides it (a physical
+     * pad drives P1), but a stream guest has no pad — both sides need
+     * Dolphin's own overlay, which the guest then copies 1:1.
+     */
+    fun dolphinStreamIni(text: String): String = IniText.set(text, "Android", "ShowInputOverlay", "True")
+
     // Vita3K: files/config.yml.
 
     /**

@@ -1,12 +1,12 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <!-- Native emulator launch and library scanning require shared ROM file access. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
@@ -21,6 +21,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Stream: optional touch-pad haptics, off by default. -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Stream: a 1px overlay keeps the share-consent start BAL-allowed once the game covers us (gc-d2). -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <!-- Package visibility for emulator presence checks + intent resolution. -->
     <queries>
@@ -63,6 +65,7 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="sensorLandscape"
+            tools:ignore="DiscouragedApi"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.GameBEX">
             <intent-filter>
@@ -82,6 +85,7 @@
             android:name=".ui.AssistActivity"
             android:exported="false"
             android:screenOrientation="sensorLandscape"
+            tools:ignore="DiscouragedApi"
             android:theme="@style/Theme.GameBEX" />
         <!-- Stream guest viewer. configChanges: a controller connecting or
              disconnecting must not recreate it (keyboard|navigation). -->
@@ -90,6 +94,7 @@
             android:exported="false"
             android:launchMode="singleTop"
             android:screenOrientation="sensorLandscape"
+            tools:ignore="DiscouragedApi"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
             android:theme="@style/Theme.GameBEX" />
         <provider
@@ -106,6 +111,16 @@
             android:authorities="${applicationId}.roms"
             android:exported="false"
             android:grantUriPermissions="true" />
+        <provider
+            android:name=".launch.GameDocumentsProvider"
+            android:authorities="${applicationId}.game-documents"
+            android:exported="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS"
+            android:grantUriPermissions="true">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
         <!-- Shizuku hands its binder to us through this provider. -->
         <provider
             android:name="rikka.shizuku.ShizukuProvider"

@@ -106,7 +106,10 @@ class UhidPad private constructor(private val fd: FileDescriptor) : VirtualPad {
          * at [StreamCaps.MIN_HOST_SDK] or later.)
          */
         @android.annotation.SuppressLint("NewApi")
-        fun open(): UhidPad? {
+        fun open(
+            name: String = StreamCaps.PAD_NAME,
+            uniq: String = StreamCaps.PAD_UNIQ,
+        ): UhidPad? {
             val fd = try {
                 Os.open(PATH, OsConstants.O_RDWR or OsConstants.O_CLOEXEC, 0)
             } catch (e: ErrnoException) {
@@ -115,9 +118,9 @@ class UhidPad private constructor(private val fd: FileDescriptor) : VirtualPad {
             }
             return try {
                 val create = UhidEvents.create2(
-                    name = StreamCaps.PAD_NAME,
+                    name = name,
                     phys = StreamCaps.PAD_PHYS,
-                    uniq = StreamCaps.PAD_UNIQ,
+                    uniq = uniq,
                     bus = StreamCaps.PAD_BUS,
                     vendor = StreamCaps.PAD_VENDOR,
                     product = StreamCaps.PAD_PRODUCT,

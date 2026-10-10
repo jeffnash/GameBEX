@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.util.Log
@@ -70,12 +71,19 @@ object EmuRouter {
      */
     /**
      * "Start fresh" (skip the savestate auto-load) is only honorable where
-     * we own the launch config: the RetroArch route via its CONFIGFILE
-     * extra. Standalone emulators expose no per-launch switch, so they
-     * never offer it. Pure.
+     * we own the launch config: the RetroArch route — or a RetroArch
+     * alternate on a Standalone platform — via its CONFIGFILE extra.
+     * Standalone emulators expose no per-launch switch, so they never
+     * offer it. Pure.
      */
     fun canStartFresh(folder: String, emulatorOverride: String?): Boolean {
-        if (PlatformRegistry.byFolder[folder]?.route !is Route.RetroCore) return false
+        val platform = PlatformRegistry.byFolder[folder] ?: return false
+        // A RetroArch alternate on a Standalone platform (GC/Wii/PSP) boots
+        // the RA core, so fresh works there too.
+        if (platform.route is Route.Standalone) {
+            return emulatorOverride == Emu.RETROARCH.pkg && platform.altRetroCore != null
+        }
+        if (platform.route !is Route.RetroCore) return false
         return emulatorOverride == null || emulatorOverride == Emu.RETROARCH.pkg
     }
 
@@ -298,34 +306,58 @@ object EmuRouter {
                 if (emuOverride != null && emuOverride != Emu.RETROARCH) {
                     return fireStandalone(ctx, game, emuOverride)
                 }
-                val core = game.coreOverride ?: route.core
-                // System-file packs (Dolphin Sys, PPSSPP fonts, blueMSX
-                // databases) land before boot. Non-fatal: most games run
-                // without them and the System screen keeps flagging it.
-                (CoreSystemFiles.ensure(ctx, core, onCoreFetch) as? CoreSystemFiles.Result.Failed)
-                    ?.let { Log.w(TAG, "system files for $core: ${it.reason}") }
-                val cores = RetroCoreProbe.queryInstalledCores(ctx)
-                if (shouldFetchCore(cores, core, isInstalled(ctx.packageManager, RA_PKG))) {
-                    // Missing core ANRs RetroArch (it hangs on a
-                    // nonexistent LIBRETRO path) — and an unanswered probe
-                    // must never boot blind for the same reason. The fetch
-                    // path is idempotent (staged-core cache), so a redundant
-                    // fetch only costs a reinstall, never a hang.
-                    val rom = RomStore.resolveLaunchFile(ctx, game)
-                    return when (val r = RetroCoreFetcher.ensureCore(ctx, core, rom, onCoreFetch)) {
-                        is RetroCoreFetcher.Result.Fetched -> {
-                            // Sideload never boots a ROM: confirmation must
-                            // precede the normal managed config/fresh launch.
-                            val launched = fireRetroArch(ctx, game, core, fresh)
-                            if (launched is Outcome.Launched) launched.copy(coreFetched = true) else launched
-                        }
-                        is RetroCoreFetcher.Result.Failed -> Outcome.NeedsSetup(r.reason)
-                    }
-                }
-                fireRetroArch(ctx, game, core, fresh)
+                fireRetroCore(ctx, game, game.coreOverride ?: route.core, fresh, onCoreFetch)
             }
-            is Route.Standalone -> fireStandalone(ctx, game, emuOverride ?: route.emu)
+            is Route.Standalone -> {
+                // A RetroArch alternate (GC/Wii/PSP) boots the RA core, not RA
+                // as a standalone app: fireStandalone has no core/content
+                // path. Without an alt core the override is meaningless.
+                if (emuOverride == Emu.RETROARCH) {
+                    val alt = platform.altRetroCore
+                    if (alt != null) return fireRetroCore(ctx, game, game.coreOverride ?: alt, fresh, onCoreFetch)
+                }
+                fireStandalone(ctx, game, emuOverride ?: route.emu)
+            }
         }
+    }
+
+    /**
+     * Boot [game] in RetroArch's [core]: system files, core fetch when
+     * the probe says it's missing (a missing core ANRs RetroArch), then
+     * the managed-config launch. Shared by RetroCore routes and
+     * Standalone platforms with a RetroArch alternate.
+     */
+    private suspend fun fireRetroCore(
+        ctx: Context,
+        game: GameEntity,
+        core: String,
+        fresh: Boolean,
+        onCoreFetch: ((read: Long, total: Long) -> Unit)?,
+    ): Outcome {
+        // System-file packs (Dolphin Sys, PPSSPP fonts, blueMSX
+        // databases) land before boot. Non-fatal: most games run
+        // without them and the System screen keeps flagging it.
+        (CoreSystemFiles.ensure(ctx, core, onCoreFetch) as? CoreSystemFiles.Result.Failed)
+            ?.let { Log.w(TAG, "system files for $core: ${it.reason}") }
+        val cores = RetroCoreProbe.queryInstalledCores(ctx)
+        if (shouldFetchCore(cores, core, isInstalled(ctx.packageManager, RA_PKG))) {
+            // Missing core ANRs RetroArch (it hangs on a
+            // nonexistent LIBRETRO path) — and an unanswered probe
+            // must never boot blind for the same reason. The fetch
+            // path is idempotent (staged-core cache), so a redundant
+            // fetch only costs a reinstall, never a hang.
+            val rom = RomStore.resolveLaunchFile(ctx, game)
+            return when (val r = RetroCoreFetcher.ensureCore(ctx, core, rom, onCoreFetch)) {
+                is RetroCoreFetcher.Result.Fetched -> {
+                    // Sideload never boots a ROM: confirmation must
+                    // precede the normal managed config/fresh launch.
+                    val launched = fireRetroArch(ctx, game, core, fresh)
+                    if (launched is Outcome.Launched) launched.copy(coreFetched = true) else launched
+                }
+                is RetroCoreFetcher.Result.Failed -> Outcome.NeedsSetup(r.reason)
+            }
+        }
+        return fireRetroArch(ctx, game, core, fresh)
     }
 
     private suspend fun playTogether(ctx: Context, game: GameEntity, req: TogetherLaunch): Outcome {
@@ -436,7 +468,9 @@ object EmuRouter {
         val file = RomStore.resolveLaunchFile(ctx, game)
             ?: return Outcome.Failed("ROM file is no longer available.")
         if (!file.isFile) return Outcome.Failed("ROM file is no longer available.")
-        val coreSo = "/data/data/$RA_PKG/cores/${core}_libretro_android.so"
+        val dataDir = runCatching { ctx.packageManager.getApplicationInfo(RA_PKG, 0).dataDir }.getOrNull()
+            ?: return Outcome.Failed("Emulator data directory unavailable.")
+        val coreSo = java.io.File(dataDir, "cores/${core}_libretro_android.so").path
         // Managed frontend config (fills height, smooth, overlay auto-hide).
         // When shared storage is unreachable the extra is omitted and RA
         // boots on its own config — never the cross-app Android/data path,
@@ -591,8 +625,13 @@ object EmuRouter {
             return Outcome.NeedsSetup("Import \"${game.title}\" inside ${emu.label}, then play from there.")
         }
         val uri = RomProvider.uriFor(game.id)
+        // Keep the prepared filename visible to standalone VIEW receivers.
+        val namedUri = runCatching {
+            RomStore.resolveLaunchFile(ctx, game)?.let { RomProvider.uriFor(game.id, it.name) }
+        }.getOrNull() ?: uri
+        val viewUri = if (needsNamedViewUri(emu)) namedUri else uri
         val intent: Intent = when (emu) {
-            Emu.PPSSPP -> viewIn(ctx, emu.pkg, uri, null)
+            Emu.PPSSPP -> viewIn(ctx, emu.pkg, viewUri, null)
             Emu.MELONDS -> Intent(Intent.ACTION_VIEW).apply {
                 component = ComponentName(emu.pkg, "me.magnum.melonds.ui.emulator.EmulatorActivity")
                 data = uri
@@ -601,9 +640,13 @@ object EmuRouter {
                 ?: return Outcome.Failed("Azahar has no viewer for this file.")
             Emu.DOLPHIN -> Intent(Intent.ACTION_MAIN).apply {
                 component = ComponentName(emu.pkg, "org.dolphinemu.dolphinemu.ui.main.MainActivity")
-                data = uri
+                data = namedUri
             }
-            Emu.FLYCAST -> viewIn(ctx, emu.pkg, uri, null)
+            Emu.FLYCAST -> {
+                val file = RomStore.resolveLaunchFile(ctx, game)
+                    ?: return Outcome.Failed("Flycast's prepared game file is unavailable.")
+                flycastViewIn(ctx, emu.pkg, GameDocumentsProvider.uriFor(game.id, file.name))
+            }
             Emu.J2MELOADER -> viewIn(ctx, emu.pkg, uri, "application/java-archive")
             // ES-DE contract: VIEW on the exported MainActivity alias. The
             // name-bearing URI lets it sniff iso/chd/cso from the extension.
@@ -623,7 +666,7 @@ object EmuRouter {
             }
         }
         return try {
-            ctx.startActivity(intent)
+            startStandalone(ctx, emu, intent)
             Log.i(TAG, "launched ${emu.label} rom=${game.relPath}")
             Outcome.Launched(emu.label, emu.pkg)
         } catch (e: ActivityNotFoundException) {
@@ -635,8 +678,54 @@ object EmuRouter {
         }
     }
 
-    /** Implicit VIEW resolved to an explicit component inside [pkg]
-     *  (avoids choosers and wrong-app matches). */
+    internal fun startStandalone(ctx: Context, emu: Emu, intent: Intent) {
+        if (emu == Emu.FLYCAST) {
+            val tree = intent.data?.let(GameDocumentsProvider::treeForDocument)
+                ?: throw ActivityNotFoundException("Flycast needs a selected game document")
+            val prefs = ctx.getSharedPreferences("flycast_document_grant", Context.MODE_PRIVATE)
+            val previous = prefs.getString("tree", null)?.let(Uri::parse)
+            if (previous != null && previous != tree) ctx.revokeUriPermission(emu.pkg, previous, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            ctx.grantUriPermission(emu.pkg, tree, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
+            intent.addFlags(Intent.FLAG_GRANT_PREFIX_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            try {
+                ctx.startActivity(intent)
+                prefs.edit().putString("tree", tree.toString()).apply()
+            } catch (failure: Exception) {
+                ctx.revokeUriPermission(emu.pkg, tree, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                prefs.edit().remove("tree").apply()
+                throw failure
+            }
+            return
+        }
+        if (emu == Emu.DOLPHIN) {
+            ctx.grantUriPermission(emu.pkg, intent.data, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        ctx.startActivity(intent)
+    }
+
+    /** Standalones requiring the prepared filename in VIEW data. */
+    internal fun needsNamedViewUri(emu: Emu): Boolean =
+        emu == Emu.PPSSPP || emu == Emu.FLYCAST
+
+    internal fun flycastViewIn(ctx: Context, pkg: String, uri: Uri): Intent? = runCatching {
+        val pm = ctx.packageManager
+        val launcher = pm.getLaunchIntentForPackage(pkg)?.component ?: return null
+        if (launcher.packageName != pkg) return null
+        val launcherInfo = pm.getActivityInfo(launcher, 0)
+        if (launcherInfo.packageName != pkg || !launcherInfo.enabled || launcherInfo.applicationInfo?.enabled != true) return null
+        val target = ComponentName.createRelative(pkg, launcherInfo.targetActivity ?: launcherInfo.name)
+        val actual = flycastLauncherTarget(pkg, pm.getActivityInfo(target, 0)) ?: return null
+        Intent(Intent.ACTION_VIEW).apply { component = actual; data = uri }
+    }.getOrNull()
+
+    internal fun flycastLauncherTarget(pkg: String, info: ActivityInfo?): ComponentName? {
+        if (info == null || info.packageName != pkg || !info.enabled || !info.exported ||
+            info.applicationInfo?.packageName != pkg || info.applicationInfo?.enabled != true ||
+            info.name.isNullOrBlank() || info.targetActivity != null) return null
+        return ComponentName(pkg, info.name)
+    }
+
+    /** Implicit VIEW resolved to an explicit component inside [pkg]. */
     private fun viewIn(ctx: Context, pkg: String, uri: Uri, mime: String?): Intent? {
         val probe = Intent(Intent.ACTION_VIEW).apply {
             if (mime != null) setDataAndType(uri, mime) else data = uri

@@ -108,7 +108,25 @@ class StreamShellService() : IStreamShell.Stub() {
     }
 
     override fun gameLaunched() {
-        synchronized(lock) { session }?.gameLaunched()
+        synchronized(lock) { session }?.gameLaunched() ?: return
+        // The stream starts while the phone is portrait (lobby) but the
+        // emulator runs landscape with a letterboxed window: the crop the
+        // encoder opened with centers like legacy, off the game. Wait for
+        // the rotation off the binder thread, then re-pin the crop to the
+        // landscape viewport (a same-size shift: the encoder is untouched).
+        val ctx = context
+        Thread({
+            if (!waitForLandscapeRotation(ctx)) {
+                Log.i(TAG, "video crop keeps portrait viewport (no landscape rotation)")
+                return@Thread
+            }
+            val vp = currentCropViewport(ctx)
+            if (vp.isEmpty() || parseViewport(vp) == null) {
+                Log.i(TAG, "video crop keeps portrait viewport (unreadable display metrics)")
+                return@Thread
+            }
+            synchronized(lock) { session }?.updateCropViewport(vp)
+        }, "gbx-crop-viewport").apply { isDaemon = true; start() }
     }
 
     private fun stopSession() {

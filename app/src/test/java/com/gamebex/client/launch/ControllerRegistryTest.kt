@@ -68,6 +68,14 @@ class ControllerRegistryTest {
         assertTrue(pads.isEmpty())
     }
 
+    @Test fun placeholderPadIsExcludedToo() {
+        val pads = ControllerRegistry.pads(listOf(
+            dev(7, StreamCaps.PLACEHOLDER_PAD_NAME, "stream-p1slot"),
+            dev(9, "GameSir-X5s", "real"),
+        ))
+        assertEquals(listOf("GameSir-X5s"), pads.map { it.name })
+    }
+
     @Test fun observerReportsInitialSnapshotAndRescansEveryDeviceEvent() {
         var devices = listOf(dev(7, StreamCaps.PAD_NAME, "stream-p2"))
         val seen = mutableListOf<List<ControllerRegistry.Pad>>()

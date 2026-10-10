@@ -2,26 +2,20 @@ package com.gamebex.client.stream.guest
 
 import com.gamebex.client.stream.proto.PadState
 
-/**
- * Per-system touch layouts: profiles, anchors, control tables and output
- * bindings. Geometry is in dp and resolved to pixels once by
- * [resolveTouchLayout]; hit testing lives in TouchHitTester.
- *
- * All bit names below are [PadState] constants, not RetroPad labels. Axes are
- * -127..127, triggers 0..255, hat 0..7 clockwise from up or HAT_CENTER (8).
- */
+
 
 const val TOUCH_MIN_TARGET_DP: Float = 48f
 const val TOUCH_CLEARANCE_DP: Float = 8f
 
-enum class TouchBackend { RETROARCH, DOLPHIN, NETHERSX2, ARMSX2, UNKNOWN }
+enum class TouchBackend { RETROARCH, DOLPHIN, NETHERSX2, ARMSX2, FLYCAST, UNKNOWN }
 
-/** Maps the wire name (StreamEndpoint.backend); unknown names get the generic pad. */
+
 fun touchBackendFromName(name: String): TouchBackend = when (name) {
     "retroarch" -> TouchBackend.RETROARCH
     "dolphin" -> TouchBackend.DOLPHIN
     "nethersx2" -> TouchBackend.NETHERSX2
     "armsx2" -> TouchBackend.ARMSX2
+    "flycast" -> TouchBackend.FLYCAST
     else -> TouchBackend.UNKNOWN
 }
 
@@ -47,14 +41,10 @@ object TouchControllerModes {
     const val SATURN_3D: String = "saturn_3d"
 }
 
-/** Normalized rectangle inside the encoded frame, when the host provides one. */
+
 data class TouchViewport(val u0: Float, val v0: Float, val u1: Float, val v1: Float)
 
-/**
- * Identifies the host's emulator route. Optional metadata: a null or
- * unrecognized profile falls back to [TouchLayoutId.GENERIC], never to a
- * guess from the folder name alone.
- */
+
 data class TouchProfile(
     val folder: String,
     val backend: TouchBackend = TouchBackend.UNKNOWN,
@@ -103,36 +93,30 @@ fun selectTouchLayout(profile: TouchProfile?): TouchLayoutId {
     }
 }
 
-/** What a touch control drives on the wire. */
+
 sealed interface TouchOutput {
-    /** One or more [PadState] button bits. */
+
     data class Buttons(val bits: Int) : TouchOutput
 
-    /** A stick axes pair; [right] selects rx/ry, otherwise lx/ly. */
+
     data class Stick(val right: Boolean) : TouchOutput
 
-    /**
-     * A full trigger. Digital press emits the L2/R2 bit plus axis 255;
-     * [analogDrag] instead drags 0..255 with the full-press bit at t>=0.95.
-     */
+
     data class Trigger(val left: Boolean, val analogDrag: Boolean = false) : TouchOutput
 
-    /**
-     * A GameCube half trigger. The RetroArch core binds halves to L3/R3 with
-     * zero trigger axes; standalone Dolphin binds lt/rt=128 with no bits.
-     */
+
     data class HalfTrigger(val left: Boolean, val bit: Int, val axisValue: Int) : TouchOutput
 
     enum class CDir { UP, DOWN, LEFT, RIGHT }
 
-    /** An N64 C button: held directions combine into rx/ry, opposites cancel. */
+
     data class CButton(val dir: CDir) : TouchOutput
 
-    /** Local-only control (Menu); never contributes controller input. */
+
     data object Menu : TouchOutput
 }
 
-/** Group anchors as fractions of the safe area: side-bar centers plus Wide fallbacks. */
+
 enum class TouchAnchor(val u: Float, val v: Float, val wideU: Float, val wideV: Float) {
     LP(0.10f, 0.47f, 0.095f, 0.68f),
     RP(0.90f, 0.47f, 0.905f, 0.68f),
@@ -155,16 +139,16 @@ enum class TouchAnchor(val u: Float, val v: Float, val wideU: Float, val wideV: 
 sealed interface TouchControl {
     val id: String
     val anchor: TouchAnchor
-    /** Wide-mode center override for this control, when the table gives one. */
+
     val wideU: Float?
     val wideV: Float?
-    /** Mirrored by the swap-sides preset; center utilities and Menu stay put. */
+
     val mirror: Boolean
-    /** May overlap the picture (utilities, aux, Menu); exempt from the side-bar fit check. */
+
     val overlayOk: Boolean
 }
 
-/** One rolling d-pad: a cross inside a circular input region. */
+
 data class DpadControl(
     override val id: String,
     override val anchor: TouchAnchor,
@@ -172,6 +156,9 @@ data class DpadControl(
     override val wideU: Float? = null,
     override val wideV: Float? = null,
     override val mirror: Boolean = true,
+
+    val atU: Float? = null,
+    val atV: Float? = null,
 ) : TouchControl {
     override val overlayOk: Boolean = false
 }
@@ -183,11 +170,14 @@ data class StickControl(
     val diameterDp: Float = 112f,
     val knobDp: Float = 40f,
     val travelDp: Float = 36f,
-    /** Definition default before the Fixed/Floating setting: right camera sticks float. */
+
     val floatingDefault: Boolean = false,
     override val wideU: Float? = null,
     override val wideV: Float? = null,
     override val mirror: Boolean = true,
+
+    val atU: Float? = null,
+    val atV: Float? = null,
 ) : TouchControl {
     override val overlayOk: Boolean = false
 }
@@ -202,7 +192,7 @@ data class FaceButtonDef(
     val output: TouchOutput,
 )
 
-/** A sliding face cluster with explicit two-button chord pairs (button ids). */
+
 data class FaceClusterControl(
     override val id: String,
     override val anchor: TouchAnchor,
@@ -217,7 +207,7 @@ data class FaceClusterControl(
     override val overlayOk: Boolean = false
 }
 
-/** A shoulder, utility, aux or half-trigger button. */
+
 data class KeyControl(
     override val id: String,
     override val anchor: TouchAnchor,
@@ -227,21 +217,27 @@ data class KeyControl(
     val roundDp: Float = 12f,
     val circular: Boolean = false,
     val output: TouchOutput,
-    /** True where the host reads a continuous trigger (Dreamcast, standalone GC). */
+
     val analogCapable: Boolean = false,
     override val wideU: Float? = null,
     override val wideV: Float? = null,
     override val mirror: Boolean = true,
+
+    val atU: Float? = null,
+    val atV: Float? = null,
     override val overlayOk: Boolean =
         anchor == TouchAnchor.SELECT || anchor == TouchAnchor.START || anchor == TouchAnchor.START_ALONE ||
             anchor == TouchAnchor.LA || anchor == TouchAnchor.RA,
 ) : TouchControl
 
-/** The local 48dp Menu control; activating it releases touch input. */
+
 data class MenuControl(
     override val id: String = "menu",
     override val anchor: TouchAnchor = TouchAnchor.MENU,
     val sizeDp: Float = 48f,
+
+    val atU: Float? = null,
+    val atV: Float? = null,
 ) : TouchControl {
     override val wideU: Float? = null
     override val wideV: Float? = null
@@ -249,10 +245,16 @@ data class MenuControl(
     override val overlayOk: Boolean = true
 }
 
-/** Normalized chord pair: order-independent, stable for tie-breaking. */
+
 fun touchChord(a: String, b: String): Pair<String, String> = if (a <= b) a to b else b to a
 
-data class TouchLayoutSpec(val id: TouchLayoutId, val name: String, val controls: List<TouchControl>)
+
+data class TouchLayoutSpec(
+    val id: TouchLayoutId,
+    val name: String,
+    val controls: List<TouchControl>,
+    val emulatorCopy: Boolean = false,
+)
 
 private fun selectStartPair(): List<KeyControl> = listOf(
     KeyControl("select", TouchAnchor.SELECT, "Select", 64f, 48f, output = TouchOutput.Buttons(PadState.SELECT), mirror = false),
@@ -262,7 +264,7 @@ private fun selectStartPair(): List<KeyControl> = listOf(
 private fun startAlone(): KeyControl =
     KeyControl("start", TouchAnchor.START_ALONE, "Start", 64f, 48f, output = TouchOutput.Buttons(PadState.START), mirror = false)
 
-/** Four-button diamond: 42dp center-to-button offsets, 56dp hit discs. */
+
 private fun diamondCluster(
     id: String,
     anchor: TouchAnchor,
@@ -304,43 +306,7 @@ private fun baseTouchLayoutSpec(id: TouchLayoutId): TouchLayoutSpec = when (id) 
             KeyControl("r", TouchAnchor.RO, "R", 64f, 48f, output = TouchOutput.Buttons(PadState.R1)),
         ) + selectStartPair() + MenuControl(),
     )
-    TouchLayoutId.N64 -> TouchLayoutSpec(
-        id, "Nintendo 64",
-        listOf(
-            StickControl("stick", TouchAnchor.LP, right = false),
-            DpadControl("dpad", TouchAnchor.LS, 104f),
-            // Matches RetroArch's own n64 overlay (overlays/gamepads/n64/n64.cfg):
-            // A/B level at mid-right (B left of A), C-buttons bottom-right, Z at (0.80, 0.25).
-            FaceClusterControl(
-                id = "ab", anchor = TouchAnchor.RP, atU = 0.875f, atV = 0.47f,
-                wideU = 0.875f, wideV = 0.47f,
-                buttons = listOf(
-                    FaceButtonDef("b", "B", -30f, 0f, 56f, 48f, TouchOutput.Buttons(PadState.X)),
-                    FaceButtonDef("a", "A", 30f, 0f, 56f, 48f, TouchOutput.Buttons(PadState.A)),
-                ),
-                chords = setOf(touchChord("a", "b")),
-            ),
-            FaceClusterControl(
-                id = "c", anchor = TouchAnchor.RP, atU = 0.875f, atV = 0.778f,
-                wideU = 0.875f, wideV = 0.778f,
-                buttons = listOf(
-                    FaceButtonDef("cup", "▲", 0f, -36f, 48f, 40f, TouchOutput.CButton(TouchOutput.CDir.UP)),
-                    FaceButtonDef("cright", "▶", 36f, 0f, 48f, 40f, TouchOutput.CButton(TouchOutput.CDir.RIGHT)),
-                    FaceButtonDef("cdown", "▼", 0f, 36f, 48f, 40f, TouchOutput.CButton(TouchOutput.CDir.DOWN)),
-                    FaceButtonDef("cleft", "◀", -36f, 0f, 48f, 40f, TouchOutput.CButton(TouchOutput.CDir.LEFT)),
-                ),
-            ),
-            KeyControl("l", TouchAnchor.LO, "L", 64f, 48f, output = TouchOutput.Buttons(PadState.L1)),
-            KeyControl("r", TouchAnchor.RO, "R", 64f, 48f, output = TouchOutput.Buttons(PadState.R1)),
-            KeyControl(
-                "z", TouchAnchor.RA, "Z", 64f, 48f, output = TouchOutput.Trigger(left = true),
-                // RA's own wide slot is mid-screen; Z stays put on wide phones.
-                wideU = 0.80f, wideV = 0.25f,
-            ),
-            startAlone(),
-            MenuControl(),
-        ),
-    )
+    TouchLayoutId.N64 -> baseTouchLayoutSpec(TouchLayoutId.GENERIC).copy(id = id, name = "Nintendo 64 (degraded generic)")
     TouchLayoutId.PSX_DIGITAL -> TouchLayoutSpec(
         id, "PlayStation (digital)",
         listOf(
@@ -356,107 +322,99 @@ private fun baseTouchLayoutSpec(id: TouchLayoutId): TouchLayoutSpec = when (id) 
             KeyControl("r2", TouchAnchor.RI, "R2", 64f, 48f, output = TouchOutput.Trigger(left = false)),
         ) + selectStartPair() + MenuControl(),
     )
-    TouchLayoutId.PSX_DUALSHOCK, TouchLayoutId.PS2 -> run {
-        val name = if (id == TouchLayoutId.PS2) "PlayStation 2" else "PlayStation (DualShock)"
-        TouchLayoutSpec(
-            id, name,
-            listOf(
-                DpadControl("dpad", TouchAnchor.LP, 120f),
-                diamondCluster(
-                    "face", TouchAnchor.RP,
-                    faceButton("triangle", "△", PadState.Y), faceButton("circle", "○", PadState.B),
-                    faceButton("cross", "×", PadState.A), faceButton("square", "□", PadState.X),
-                ),
-                StickControl("stick_l", TouchAnchor.LS, right = false),
-                StickControl("stick_r", TouchAnchor.RS, right = true, floatingDefault = true),
-                KeyControl("l3", TouchAnchor.LA, "L3", 48f, 48f, circular = true, output = TouchOutput.Buttons(PadState.L3)),
-                KeyControl("r3", TouchAnchor.RA, "R3", 48f, 48f, circular = true, output = TouchOutput.Buttons(PadState.R3)),
-                KeyControl("l1", TouchAnchor.LO, "L1", 64f, 48f, output = TouchOutput.Buttons(PadState.L1)),
-                KeyControl("l2", TouchAnchor.LI, "L2", 64f, 48f, output = TouchOutput.Trigger(left = true)),
-                KeyControl("r1", TouchAnchor.RO, "R1", 64f, 48f, output = TouchOutput.Buttons(PadState.R1)),
-                KeyControl("r2", TouchAnchor.RI, "R2", 64f, 48f, output = TouchOutput.Trigger(left = false)),
-            ) + selectStartPair() + MenuControl(),
-        )
-    }
-    TouchLayoutId.GC_CORE, TouchLayoutId.GC_STANDALONE -> run {
-        val standalone = id == TouchLayoutId.GC_STANDALONE
-        val faceBits = if (standalone) {
-            mapOf("a" to PadState.A, "b" to PadState.X, "x" to PadState.B, "y" to PadState.Y)
-        } else {
-            mapOf("a" to PadState.B, "b" to PadState.A, "x" to PadState.Y, "y" to PadState.X)
-        }
-        val halfL = if (standalone) TouchOutput.HalfTrigger(left = true, bit = 0, axisValue = 128)
-        else TouchOutput.HalfTrigger(left = true, bit = PadState.L3, axisValue = 0)
-        val halfR = if (standalone) TouchOutput.HalfTrigger(left = false, bit = 0, axisValue = 128)
-        else TouchOutput.HalfTrigger(left = false, bit = PadState.R3, axisValue = 0)
-        TouchLayoutSpec(
-            id, if (standalone) "GameCube (standalone)" else "GameCube (core)",
-            listOf(
-                StickControl("stick", TouchAnchor.LP, right = false),
-                DpadControl("dpad", TouchAnchor.LS, 104f),
-                StickControl("cstick", TouchAnchor.RS, right = true, wideU = 0.74f, wideV = 0.82f),
-                FaceClusterControl(
-                    id = "face", anchor = TouchAnchor.RP, atU = 0.91f, atV = 0.48f,
-                    wideU = 0.915f, wideV = 0.68f,
-                    buttons = listOf(
-                        FaceButtonDef("a", "A", 0f, 0f, 64f, 56f, TouchOutput.Buttons(faceBits.getValue("a"))),
-                        FaceButtonDef("b", "B", -54f, 40f, 48f, 40f, TouchOutput.Buttons(faceBits.getValue("b"))),
-                        FaceButtonDef("x", "X", 42f, -46f, 48f, 40f, TouchOutput.Buttons(faceBits.getValue("x"))),
-                        FaceButtonDef("y", "Y", -28f, -62f, 48f, 40f, TouchOutput.Buttons(faceBits.getValue("y"))),
-                    ),
-                    chords = setOf(touchChord("a", "b"), touchChord("a", "x"), touchChord("a", "y")),
-                ),
-                KeyControl("l", TouchAnchor.LO, "L", 64f, 48f, output = TouchOutput.Trigger(left = true), analogCapable = standalone),
-                KeyControl("r", TouchAnchor.RO, "R", 64f, 48f, output = TouchOutput.Trigger(left = false), analogCapable = standalone),
-                KeyControl("lhalf", TouchAnchor.LI, "L½", 64f, 48f, output = halfL),
-                KeyControl("rhalf", TouchAnchor.RI, "R½", 64f, 48f, output = halfR),
-                KeyControl("z", TouchAnchor.RA, "Z", 48f, 48f, circular = true, output = TouchOutput.Buttons(PadState.R1)),
-                startAlone(),
-                MenuControl(),
-            ),
-        )
-    }
-    TouchLayoutId.WII_NUNCHUK_RA, TouchLayoutId.WII_NUNCHUK_STANDALONE -> run {
-        val standalone = id == TouchLayoutId.WII_NUNCHUK_STANDALONE
-        val diamond = if (standalone) {
+    TouchLayoutId.PSX_DUALSHOCK -> TouchLayoutSpec(
+        id, "PlayStation (DualShock)",
+        listOf(
+            DpadControl("dpad", TouchAnchor.LP, 120f),
             diamondCluster(
                 "face", TouchAnchor.RP,
-                faceButton("b1", "1", PadState.X), faceButton("b2", "2", PadState.Y),
-                faceButton("a", "A", PadState.A), faceButton("b", "B", PadState.B),
-            )
-        } else {
+                faceButton("triangle", "△", PadState.Y), faceButton("circle", "○", PadState.B),
+                faceButton("cross", "×", PadState.A), faceButton("square", "□", PadState.X),
+            ),
+            StickControl("stick_l", TouchAnchor.LS, right = false),
+            StickControl("stick_r", TouchAnchor.RS, right = true, floatingDefault = true),
+            KeyControl("l3", TouchAnchor.LA, "L3", 48f, 48f, circular = true, output = TouchOutput.Buttons(PadState.L3)),
+            KeyControl("r3", TouchAnchor.RA, "R3", 48f, 48f, circular = true, output = TouchOutput.Buttons(PadState.R3)),
+            KeyControl("l1", TouchAnchor.LO, "L1", 64f, 48f, output = TouchOutput.Buttons(PadState.L1)),
+            KeyControl("l2", TouchAnchor.LI, "L2", 64f, 48f, output = TouchOutput.Trigger(left = true)),
+            KeyControl("r1", TouchAnchor.RO, "R1", 64f, 48f, output = TouchOutput.Buttons(PadState.R1)),
+            KeyControl("r2", TouchAnchor.RI, "R2", 64f, 48f, output = TouchOutput.Trigger(left = false)),
+        ) + selectStartPair() + MenuControl(),
+    )
+
+
+
+
+
+    TouchLayoutId.PS2 -> baseTouchLayoutSpec(TouchLayoutId.PSX_DUALSHOCK).copy(id = id, name = "PlayStation 2 (degraded generic)")
+    TouchLayoutId.GC_CORE -> TouchLayoutSpec(
+        id, "GameCube (core)",
+        listOf(
+            StickControl("stick", TouchAnchor.LP, right = false),
+            DpadControl("dpad", TouchAnchor.LS, 104f),
+            StickControl("cstick", TouchAnchor.RS, right = true, wideU = 0.74f, wideV = 0.82f),
+            FaceClusterControl(
+                id = "face", anchor = TouchAnchor.RP, atU = 0.91f, atV = 0.48f,
+                wideU = 0.915f, wideV = 0.68f,
+                buttons = listOf(
+                    FaceButtonDef("a", "A", 0f, 0f, 64f, 56f, TouchOutput.Buttons(PadState.B)),
+                    FaceButtonDef("b", "B", -54f, 40f, 48f, 40f, TouchOutput.Buttons(PadState.A)),
+                    FaceButtonDef("x", "X", 42f, -46f, 48f, 40f, TouchOutput.Buttons(PadState.Y)),
+                    FaceButtonDef("y", "Y", -28f, -62f, 48f, 40f, TouchOutput.Buttons(PadState.X)),
+                ),
+                chords = setOf(touchChord("a", "b"), touchChord("a", "x"), touchChord("a", "y")),
+            ),
+            KeyControl("l", TouchAnchor.LO, "L", 64f, 48f, output = TouchOutput.Trigger(left = true)),
+            KeyControl("r", TouchAnchor.RO, "R", 64f, 48f, output = TouchOutput.Trigger(left = false)),
+            KeyControl("lhalf", TouchAnchor.LI, "L½", 64f, 48f, output = TouchOutput.HalfTrigger(left = true, bit = PadState.L3, axisValue = 0)),
+            KeyControl("rhalf", TouchAnchor.RI, "R½", 64f, 48f, output = TouchOutput.HalfTrigger(left = false, bit = PadState.R3, axisValue = 0)),
+            KeyControl("z", TouchAnchor.RA, "Z", 48f, 48f, circular = true, output = TouchOutput.Buttons(PadState.R1)),
+            startAlone(),
+            MenuControl(),
+        ),
+    )
+
+
+
+
+
+    TouchLayoutId.GC_STANDALONE -> baseTouchLayoutSpec(TouchLayoutId.GC_CORE).let { base ->
+        base.copy(id = id, name = "GameCube (degraded generic)", controls = base.controls.filter { it.id !in setOf("lhalf", "rhalf") }.map { control ->
+            if (control is FaceClusterControl) control.copy(buttons = control.buttons.map { button ->
+                val bits = when (button.id) { "a" -> PadState.A; "b" -> PadState.B; "x" -> PadState.X; "y" -> PadState.Y; else -> 0 }
+                button.copy(output = TouchOutput.Buttons(bits))
+            }) else control
+        })
+    }
+    TouchLayoutId.WII_NUNCHUK_RA -> TouchLayoutSpec(
+        id, "Wii Remote + Nunchuk",
+        listOf(
+            StickControl("nunchuk", TouchAnchor.LP, right = false),
+            DpadControl("dpad", TouchAnchor.LS, 104f),
             diamondCluster(
                 "face", TouchAnchor.RP,
                 faceButton("b1", "1", PadState.START), faceButton("b2", "2", PadState.SELECT),
                 faceButton("a", "A", PadState.B), faceButton("b", "B", PadState.A),
-            )
-        }
-        val extras = if (standalone) {
-            listOf(
-                KeyControl("c", TouchAnchor.LO, "C", 64f, 48f, output = TouchOutput.Buttons(PadState.L1)),
-                KeyControl("z", TouchAnchor.LI, "Z", 64f, 48f, output = TouchOutput.Trigger(left = true)),
-                KeyControl("minus", TouchAnchor.SELECT, "−", 64f, 48f, output = TouchOutput.Buttons(PadState.SELECT), mirror = false),
-                KeyControl("plus", TouchAnchor.START, "+", 64f, 48f, output = TouchOutput.Buttons(PadState.START), mirror = false),
-            )
-        } else {
-            listOf(
-                KeyControl("c", TouchAnchor.LO, "C", 64f, 48f, output = TouchOutput.Buttons(PadState.Y)),
-                KeyControl("z", TouchAnchor.LI, "Z", 64f, 48f, output = TouchOutput.Buttons(PadState.X)),
-                KeyControl("minus", TouchAnchor.SELECT, "−", 64f, 48f, output = TouchOutput.Buttons(PadState.L1), mirror = false),
-                KeyControl("plus", TouchAnchor.START, "+", 64f, 48f, output = TouchOutput.Buttons(PadState.R1), mirror = false),
-                KeyControl("home", TouchAnchor.RA, "Home", 48f, 48f, circular = true, output = TouchOutput.Buttons(PadState.R3)),
-                KeyControl("shake_n", TouchAnchor.RI, "Shake N", 64f, 48f, output = TouchOutput.Trigger(left = true)),
-                KeyControl("shake_r", TouchAnchor.RO, "Shake R", 64f, 48f, output = TouchOutput.Trigger(left = false)),
-            )
-        }
-        TouchLayoutSpec(
-            id, if (standalone) "Wii Remote + Nunchuk (standalone)" else "Wii Remote + Nunchuk",
-            listOf(
-                StickControl("nunchuk", TouchAnchor.LP, right = false),
-                DpadControl("dpad", TouchAnchor.LS, 104f),
-                diamond,
-            ) + extras + MenuControl(),
-        )
+            ),
+            KeyControl("c", TouchAnchor.LO, "C", 64f, 48f, output = TouchOutput.Buttons(PadState.Y)),
+            KeyControl("z", TouchAnchor.LI, "Z", 64f, 48f, output = TouchOutput.Buttons(PadState.X)),
+            KeyControl("minus", TouchAnchor.SELECT, "−", 64f, 48f, output = TouchOutput.Buttons(PadState.L1), mirror = false),
+            KeyControl("plus", TouchAnchor.START, "+", 64f, 48f, output = TouchOutput.Buttons(PadState.R1), mirror = false),
+            KeyControl("home", TouchAnchor.RA, "Home", 48f, 48f, circular = true, output = TouchOutput.Buttons(PadState.R3)),
+            KeyControl("shake_n", TouchAnchor.RI, "Shake N", 64f, 48f, output = TouchOutput.Trigger(left = true)),
+            KeyControl("shake_r", TouchAnchor.RO, "Shake R", 64f, 48f, output = TouchOutput.Trigger(left = false)),
+            MenuControl(),
+        ),
+    )
+
+
+    TouchLayoutId.WII_NUNCHUK_STANDALONE -> baseTouchLayoutSpec(TouchLayoutId.WII_NUNCHUK_RA).let { base ->
+        base.copy(id = id, name = "Wii (degraded generic)", controls = base.controls.map { control ->
+            if (control is FaceClusterControl) control.copy(buttons = control.buttons.map { button ->
+                val bits = when (button.id) { "a" -> PadState.A; "b" -> PadState.B; "b1" -> PadState.X; "b2" -> PadState.Y; else -> 0 }
+                button.copy(output = TouchOutput.Buttons(bits))
+            }) else control
+        })
     }
     TouchLayoutId.SATURN, TouchLayoutId.SATURN_3D -> run {
         val threeD = id == TouchLayoutId.SATURN_3D
@@ -560,11 +518,7 @@ private fun baseTouchLayoutSpec(id: TouchLayoutId): TouchLayoutSpec = when (id) 
     )
 }
 
-/**
- * The layout table for [id] with preference variants applied: the N64
- * C-buttons/C-stick preset and analog-drag triggers where supported. Stick
- * Fixed/Floating resolves at geometry time (see [ResolvedStick]).
- */
+
 fun touchLayoutSpec(id: TouchLayoutId, prefs: TouchPrefs): TouchLayoutSpec {
     val base = baseTouchLayoutSpec(id)
     val swappedC = prefs.n64CStick && id == TouchLayoutId.N64
@@ -584,7 +538,7 @@ fun touchLayoutSpec(id: TouchLayoutId, prefs: TouchPrefs): TouchLayoutSpec {
     return base.copy(controls = controls)
 }
 
-/** Right stick pinned to the N64 C-cluster center (the C-stick preset). */
+
 data class CStickControl(
     val atU: Float?,
     val atV: Float?,
@@ -663,14 +617,7 @@ data class ResolvedTouchLayout(
     val menu: ResolvedMenu?,
 )
 
-/**
- * Resolves [definition] to pixels inside a safe area of [safeWidthPx] x [safeHeightPx]
- * (origin at 0,0; the caller already applied system insets). Controls keep an
- * 8dp clearance inside the safe area. The side-bar arrangement is used only
- * when every non-exempt group fits beside the content rect with 8dp between
- * unrelated groups; otherwise the Wide anchors apply and controls may overlap
- * the picture. Sizes are preserved, never shrunk to fit.
- */
+
 fun resolveTouchLayout(
     definition: TouchLayoutSpec,
     safeWidthPx: Float,
@@ -680,6 +627,9 @@ fun resolveTouchLayout(
     viewport: TouchViewport?,
 ): ResolvedTouchLayout {
     val content = touchContentRect(safeWidthPx, safeHeightPx, prefs.contentAspect, viewport)
+
+    if (definition.emulatorCopy) return resolveAttempt(definition, safeWidthPx, safeHeightPx, density, prefs, wide = false)
+        .copy(content = content)
     val sideBar = resolveAttempt(definition, safeWidthPx, safeHeightPx, density, prefs, wide = false)
     if (touchFitsSideBar(sideBar, safeWidthPx, safeHeightPx, density, content)) {
         return sideBar.copy(content = content)
@@ -690,15 +640,10 @@ fun resolveTouchLayout(
     )
 }
 
-/** Secondary groups, shifted inward in Wide mode. */
+
 private val WIDE_SECONDARY_ANCHORS: Set<TouchAnchor> = setOf(TouchAnchor.LS, TouchAnchor.RS)
 
-/**
- * In Wide mode each secondary (LS/RS) group moves horizontally toward the
- * screen center until its bounds clear every outer group's bounds by
- * [TOUCH_CLEARANCE_DP], or the center is reached. Sizes are preserved.
- * The Menu utility is not an outer group.
- */
+
 fun touchShiftWideSecondaries(layout: ResolvedTouchLayout, safeW: Float, density: Float): ResolvedTouchLayout {
     if (!layout.wide) return layout
     val m = TOUCH_CLEARANCE_DP * density
@@ -746,11 +691,7 @@ fun touchShiftWideSecondaries(layout: ResolvedTouchLayout, safeW: Float, density
     )
 }
 
-/**
- * The largest size percent in [TouchPrefs.SIZE_MIN, requested] (step
- * [TouchPrefs.SIZE_STEP]) whose resolved layout has no overlapping hit areas.
- * The Touch controls slider shows this value when clamping applies.
- */
+
 fun effectiveTouchSizePercent(
     definition: TouchLayoutSpec,
     safeW: Float,
@@ -759,6 +700,9 @@ fun effectiveTouchSizePercent(
     prefs: TouchPrefs,
     viewport: TouchViewport?,
 ): Int {
+
+
+    if (definition.emulatorCopy) return prefs.validated().sizePercent
     var size = prefs.validated().sizePercent
     while (size > TouchPrefs.SIZE_MIN) {
         val layout = resolveTouchLayout(definition, safeW, safeH, density, prefs.copy(sizePercent = size), viewport)
@@ -785,14 +729,26 @@ private fun resolveAttempt(
     definition.controls.forEach { control ->
         var u = if (wide) control.anchor.wideU else control.anchor.u
         var v = if (wide) control.anchor.wideV else control.anchor.v
-        if (control is FaceClusterControl) {
-            if (!wide && control.atU != null && control.atV != null) {
-                u = control.atU; v = control.atV
+        if (!wide) {
+
+            val atU: Float? = when (control) {
+                is FaceClusterControl -> control.atU
+                is CStickControl -> control.atU
+                is DpadControl -> control.atU
+                is StickControl -> control.atU
+                is KeyControl -> control.atU
+                is MenuControl -> control.atU
             }
-        }
-        if (control is CStickControl) {
-            if (!wide && control.atU != null && control.atV != null) {
-                u = control.atU; v = control.atV
+            val atV: Float? = when (control) {
+                is FaceClusterControl -> control.atV
+                is CStickControl -> control.atV
+                is DpadControl -> control.atV
+                is StickControl -> control.atV
+                is KeyControl -> control.atV
+                is MenuControl -> control.atV
+            }
+            if (atU != null && atV != null) {
+                u = atU; v = atV
             }
         }
         val wideU = control.wideU
@@ -804,7 +760,8 @@ private fun resolveAttempt(
         val centerX = u * safeW
         val centerY = v * safeH
         val minHitDp = touchMinHitDp(control)
-        val scale = maxOf(baseScale, TOUCH_MIN_TARGET_DP / minHitDp)
+
+        val scale = if (definition.emulatorCopy) baseScale else maxOf(baseScale, TOUCH_MIN_TARGET_DP / minHitDp)
         val clampDx: (TouchRectPx) -> Float = { bounds ->
             val m = TOUCH_CLEARANCE_DP * density
             if (bounds.left < m) m - bounds.left else if (bounds.right > safeW - m) safeW - m - bounds.right else 0f
@@ -883,7 +840,7 @@ private fun touchMinHitDp(control: TouchControl): Float = when (control) {
     is MenuControl -> control.sizeDp
 }
 
-/** The assumed content rect: the aspect-fit frame, narrowed by a host viewport. */
+
 fun touchContentRect(
     safeW: Float,
     safeH: Float,
@@ -928,11 +885,7 @@ private fun touchFitsSideBar(
     return true
 }
 
-/**
- * Hit-shape intersections between unrelated controls (different control ids).
- * Buttons inside one cluster are related by construction. Empty means the
- * layout has no unintended target overlap.
- */
+
 fun touchLayoutOverlaps(layout: ResolvedTouchLayout): List<String> {
     data class Shape(val id: String, val label: String, val circle: FloatArray?, val rect: TouchRectPx?)
     val shapes = mutableListOf<Shape>()

@@ -1,0 +1,6 @@
+<lint>
+    <!-- The pinned AAPT toolchain failed resource linking without the adaptive-icon API qualifier, despite minSdk26. -->
+    <issue id="ObsoleteSdkInt">
+        <ignore path="src/main/res/mipmap-anydpi-v26" />
+    </issue>
+</lint>

@@ -1,0 +1,278 @@
+{
+  "view_rect_xywh": [
+    105,
+    404,
+    263,
+    263
+  ],
+  "dpi": 280,
+  "direction_order": [
+    "up",
+    "down",
+    "left",
+    "right"
+  ],
+  "cases": [
+    {
+      "point": [
+        236,
+        535
+      ],
+      "expected_dirs": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "readout": "O \u00bbp 0 < 0O (\u00a2 0"
+    },
+    {
+      "point": [
+        236,
+        450
+      ],
+      "expected_dirs": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "readout": "255 D 0 < 0O (\u00a2 0"
+    },
+    {
+      "point": [
+        150,
+        535
+      ],
+      "expected_dirs": [
+        false,
+        false,
+        true,
+        false
+      ],
+      "readout": "O \u00bbp 0 < O g * 255"
+    },
+    {
+      "point": [
+        150,
+        450
+      ],
+      "expected_dirs": [
+        true,
+        false,
+        true,
+        false
+      ],
+      "readout": "255 D 0 < O g * 255"
+    },
+    {
+      "point": [
+        236,
+        490
+      ],
+      "expected_dirs": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "readout": "255 D 0 < 0O (\u00a2 0"
+    },
+    {
+      "point": [
+        236,
+        491
+      ],
+      "expected_dirs": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "readout": "O \u00bbp 0 < 0O (\u00a2 0"
+    },
+    {
+      "point": [
+        236,
+        492
+      ],
+      "expected_dirs": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "readout": "O \u00bbp 0 < 0O (\u00a2 0"
+    },
+    {
+      "point": [
+        236,
+        579
+      ],
+      "expected_dirs": [
+        false,
+        true,
+        false,
+        false
+      ],
+      "readout": "O \u00bbp 0O < * 255 \u00a2 0"
+    },
+    {
+      "point": [
+        236,
+        580
+      ],
+      "expected_dirs": [
+        false,
+        true,
+        false,
+        false
+      ],
+      "readout": "O \u00bbp 0O < * 255 \u00a2 0"
+    },
+    {
+      "point": [
+        236,
+        581
+      ],
+      "expected_dirs": [
+        false,
+        true,
+        false,
+        false
+      ],
+      "readout": "O \u00bbp 0O < * 255 \u00a2 0"
+    },
+    {
+      "point": [
+        191,
+        535
+      ],
+      "expected_dirs": [
+        false,
+        false,
+        true,
+        false
+      ],
+      "readout": "O \u00bbp 0 < O g * 255"
+    },
+    {
+      "point": [
+        192,
+        535
+      ],
+      "expected_dirs": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "readout": "O \u00bbp 0 < 0O (\u00a2 0"
+    },
+    {
+      "point": [
+        193,
+        535
+      ],
+      "expected_dirs": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "readout": "O \u00bbp 0 < 0O (\u00a2 0"
+    },
+    {
+      "point": [
+        279,
+        535
+      ],
+      "expected_dirs": [
+        false,
+        false,
+        false,
+        true
+      ],
+      "readout": "O D * 255 < 0O (\u00a2 0"
+    },
+    {
+      "point": [
+        280,
+        535
+      ],
+      "expected_dirs": [
+        false,
+        false,
+        false,
+        true
+      ],
+      "readout": "O D * 255 < 0O (\u00a2 0"
+    },
+    {
+      "point": [
+        281,
+        535
+      ],
+      "expected_dirs": [
+        false,
+        false,
+        false,
+        true
+      ],
+      "readout": "O D * 255 < 0O (\u00a2 0"
+    },
+    {
+      "point": [
+        236,
+        577
+      ],
+      "expected_dirs": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "readout": "O \u00bbp 0 < 0O (\u00a2 0"
+    },
+    {
+      "point": [
+        236,
+        578
+      ],
+      "expected_dirs": [
+        false,
+        true,
+        false,
+        false
+      ],
+      "readout": "O \u00bbp 0O < * 255 \u00a2 0"
+    },
+    {
+      "point": [
+        277,
+        535
+      ],
+      "expected_dirs": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "readout": "O \u00bbp 0 < 0O (\u00a2 0"
+    },
+    {
+      "point": [
+        278,
+        535
+      ],
+      "expected_dirs": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "readout": "O \u00bbp 0 < 0O (\u00a2 0"
+    }
+  ],
+  "observed_edges": "integer third87; low region is coordinate<87; high is coordinate>=174"
+}

@@ -1,0 +1,92 @@
+{
+  "normal_composition_order": [
+    "outer art",
+    "normal thumb art"
+  ],
+  "held_composition_order": [
+    "pressed thumb art",
+    "outer art at virtual/recentered bounds"
+  ],
+  "outer_draw_count": 1,
+  "per_layer_opacity_byte": 165,
+  "measured_geometry": {
+    "outer_xywh": [
+      27,
+      446,
+      198,
+      198
+    ],
+    "held_thumb_xywh": [
+      102,
+      473,
+      144,
+      144
+    ],
+    "down": [
+      126,
+      545
+    ],
+    "move": [
+      175,
+      545
+    ]
+  },
+  "black_background_samples": [
+    {
+      "point": [
+        200,
+        545
+      ],
+      "native_rgb": [
+        36,
+        36,
+        36
+      ],
+      "previous_guest_rgb": [
+        15,
+        15,
+        15
+      ]
+    },
+    {
+      "point": [
+        224,
+        545
+      ],
+      "native_rgb": [
+        28,
+        28,
+        28
+      ],
+      "previous_guest_rgb": [
+        12,
+        12,
+        12
+      ]
+    },
+    {
+      "point": [
+        180,
+        490
+      ],
+      "native_rgb": [
+        175,
+        175,
+        175
+      ],
+      "previous_guest_rgb": [
+        179,
+        179,
+        179
+      ]
+    }
+  ],
+  "held_difference_bbox_xyxy": [
+    102,
+    473,
+    245,
+    616
+  ],
+  "held_previous_pixelPct": 69.89434913249976,
+  "rest_pixelPct": 100.0
+}

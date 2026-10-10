@@ -38,6 +38,18 @@ class TogetherCopyTest {
         assertEquals("Ready. Waiting for Sam to start.", TogetherCopy.readyWaiting("Sam"))
     }
 
+    @Test fun streamInstructionsGainTheControllerPrompt() {
+        val plain = TogetherCopy.hostInstructions(TogetherMode.STREAM)
+        assertEquals(3, plain.size)
+        val prompted = TogetherCopy.hostInstructions(TogetherMode.STREAM, p2SlotPrompt = true)
+        assertEquals(plain + TogetherCopy.pressControllerPrompt, prompted)
+        // Other modes never take the prompt.
+        assertEquals(
+            TogetherCopy.hostInstructions(TogetherMode.RA_NETPLAY),
+            TogetherCopy.hostInstructions(TogetherMode.RA_NETPLAY, p2SlotPrompt = true),
+        )
+    }
+
     @Test fun gbLinkInstructionsExplainTheLinkRules() {
         val rules = listOf(
             "Use the game's link cable menu, for example Cable Club to trade.",

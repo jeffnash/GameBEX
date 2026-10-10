@@ -14,7 +14,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +35,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,8 +48,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
@@ -56,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.gamebex.client.R
+import com.gamebex.client.stream.StreamDebug
 import com.gamebex.client.stream.proto.PadState
 import com.gamebex.client.together.TogetherCopy
 import com.gamebex.client.ui.SpaceGrotesk
@@ -116,6 +122,23 @@ fun StreamViewerScreen(
             menu = false
         }
     }
+    // The host stamps its encoder crop rect on the overlay send (emu
+    // wins, mirroring the pad): a live stamp offsets the video surface
+    // to the emulator's own game rect, and tells the pad where the
+    // video sits so it stops re-drawing buttons the cropped video
+    // already shows (a double 0.7 blend renders at 0.91).
+    val raStored by StreamOverlayStore.flow.collectAsState()
+    val emuStored by EmuOverlayStore.flow.collectAsState()
+    val emuCrop = emuStored?.takeIf { it.hostCropW > 0 && it.hostCropH > 0 }
+    val raCrop = raStored?.takeIf { it.hostCropW > 0 && it.hostCropH > 0 }
+    val crop = emuCrop?.let {
+        intArrayOf(it.hostCropX, it.hostCropY, it.hostCropW, it.hostCropH, it.hostDisplayW, it.hostDisplayH)
+    } ?: raCrop?.let {
+        intArrayOf(it.hostCropX, it.hostCropY, it.hostCropW, it.hostCropH, it.hostDisplayW, it.hostDisplayH)
+    }
+    val videoCropSignal = crop?.let {
+        VideoCropSignal(it[0], it[1], it[2], it[3], it[4], it[5], ui.width, ui.height)
+    }
     Box(
         modifier
             .fillMaxSize()
@@ -123,29 +146,48 @@ fun StreamViewerScreen(
             .testTag(TAG_ROOT),
     ) {
         if (ui.status != ViewerStatus.ENDED) {
-            AndroidView(
-                factory = { ctx ->
-                    SurfaceView(ctx).apply {
-                        if (surfaceOpaque) holder.setFormat(android.graphics.PixelFormat.OPAQUE)
-                        holder.addCallback(object : SurfaceHolder.Callback {
-                            override fun surfaceCreated(h: SurfaceHolder) = surfaceCallback(h.surface)
-                            override fun surfaceChanged(h: SurfaceHolder, format: Int, w: Int, hgt: Int) = Unit
-                            override fun surfaceDestroyed(h: SurfaceHolder) {
-                                releaseTouchCallback()
-                                surfaceCallback(null)
-                            }
-                        })
-                    }
-                },
-                update = { view ->
-                    if (fixedSurface) view.holder.setFixedSize(ui.width.coerceAtLeast(1), ui.height.coerceAtLeast(1))
-                    else view.holder.setSizeFromLayout()
-                },
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .aspectRatio(ui.width.coerceAtLeast(1).toFloat() / ui.height.coerceAtLeast(1).toFloat())
-                    .testTag(TAG_VIDEO),
-            )
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val placement = crop?.let {
+                    videoCropPlacement(
+                        it[0], it[1], it[2], it[3], it[4], it[5],
+                        constraints.maxWidth, constraints.maxHeight,
+                        ui.width.coerceAtLeast(1), ui.height.coerceAtLeast(1),
+                    )
+                }
+                val density = LocalDensity.current
+                AndroidView(
+                    factory = { ctx ->
+                        SurfaceView(ctx).apply {
+                            if (surfaceOpaque) holder.setFormat(android.graphics.PixelFormat.OPAQUE)
+                            holder.addCallback(object : SurfaceHolder.Callback {
+                                override fun surfaceCreated(h: SurfaceHolder) = surfaceCallback(h.surface)
+                                override fun surfaceChanged(h: SurfaceHolder, format: Int, w: Int, hgt: Int) = Unit
+                                override fun surfaceDestroyed(h: SurfaceHolder) {
+                                    releaseTouchCallback()
+                                    surfaceCallback(null)
+                                }
+                            })
+                        }
+                    },
+                    update = { view ->
+                        if (fixedSurface) view.holder.setFixedSize(ui.width.coerceAtLeast(1), ui.height.coerceAtLeast(1))
+                        else view.holder.setSizeFromLayout()
+                    },
+                    modifier = if (placement == null) {
+                        Modifier
+                            .align(Alignment.Center)
+                            .aspectRatio(ui.width.coerceAtLeast(1).toFloat() / ui.height.coerceAtLeast(1).toFloat())
+                            .testTag(TAG_VIDEO)
+                    } else {
+                        with(density) {
+                            Modifier
+                                .absoluteOffset { IntOffset(placement.x, placement.y) }
+                                .size(placement.w.toDp(), placement.h.toDp())
+                                .testTag(TAG_VIDEO)
+                        }
+                    },
+                )
+            }
         }
         if (overlays.touchPad) {
             StreamOverlayPad(
@@ -159,6 +201,7 @@ fun StreamViewerScreen(
                 onMenu = onTouchMenu,
                 useHostOverlay = useHostOverlay,
                 onEffectiveSize = { effectiveSize = it },
+                videoCrop = videoCropSignal,
             )
         }
         if (loading) {
@@ -210,7 +253,9 @@ fun StreamViewerScreen(
                     ui.stats.forEach { Text(it, color = Color.White, fontSize = 12.sp) }
                 }
             }
-            if (controlsVisible) {
+            // debug.gamebex.viewer_naked=1 (DEBUG only) hides the Menu chip
+            // so screenshots hold nothing but video and the overlay replica.
+            if (controlsVisible && !StreamDebug.flag("viewer_naked")) {
                 OutlinedButton(
                     onClick = { menu = !menu },
                     modifier = Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp).testTag(TAG_MENU),

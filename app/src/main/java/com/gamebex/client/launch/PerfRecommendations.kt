@@ -56,7 +56,11 @@ object PerfRecommendations {
             is Route.GuidedInstall -> forEmu(r.emu, null, tier)
             else -> null
         }
-        val alts = platform.altEmus.mapNotNull { forEmu(it, null, tier) }
+        val alts = platform.altEmus.mapNotNull {
+            // A RetroArch alternate carries its core for per-core hints.
+            val core = if (it == Emu.RETROARCH) platform.altRetroCore else null
+            forEmu(it, core, tier)
+        }
         return listOfNotNull(primary) + alts
     }
 

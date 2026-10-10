@@ -16,6 +16,8 @@ import androidx.annotation.RequiresApi
  * audio and app-ops checks compare the caller's package with its uid, and the
  * shell uid owns com.android.shell, not com.gamebex.client or "android".
  */
+// Shell-uid media capture requires a package context on the existing ActivityThread.
+@android.annotation.SuppressLint("PrivateApi", "DiscouragedPrivateApi")
 class ShellContext private constructor(base: Context) : ContextWrapper(base) {
     override fun getPackageName(): String = SHELL_PACKAGE
 

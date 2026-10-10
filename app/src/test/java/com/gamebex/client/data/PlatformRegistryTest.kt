@@ -39,9 +39,32 @@ class PlatformRegistryTest {
     /** Disc/32-bit systems ride cores, standalones as alternates. */
     @Test fun migratedRoutesRideCores() {
         assertEquals(Route.RetroCore("flycast"), PlatformRegistry.byFolder["dreamcast"]?.route)
-        assertEquals(Route.RetroCore("dolphin"), PlatformRegistry.byFolder["gc"]?.route)
         assertEquals(Route.RetroCore("melonds"), PlatformRegistry.byFolder["nds"]?.route)
         assertEquals(Route.RetroCore("citra"), PlatformRegistry.byFolder["n3ds"]?.route)
-        assertEquals(Route.RetroCore("ppsspp"), PlatformRegistry.byFolder["psp"]?.route)
+    }
+
+    /**
+     * The RA ppsspp core ANRs on real games (Ridge Racers, Sims 2: black
+     * screen, ANR dialog), so PSP defaults to the PPSSPP app with the
+     * core as the alternate.
+     */
+    @Test fun pspDefaultsToPpssppApp() {
+        val platform = PlatformRegistry.byFolder["psp"]!!
+        assertEquals(Route.Standalone(Emu.PPSSPP), platform.route)
+        assertEquals(listOf(Emu.RETROARCH), platform.altEmus)
+        assertEquals("ppsspp", platform.altRetroCore)
+    }
+
+    /**
+     * The RA dolphin core ANRs in normal play, so GC and Wii default
+     * to the Dolphin app with the core as the alternate.
+     */
+    @Test fun gameCubeAndWiiDefaultToDolphinApp() {
+        for (folder in listOf("gc", "wii")) {
+            val platform = PlatformRegistry.byFolder[folder]!!
+            assertEquals(Route.Standalone(Emu.DOLPHIN), platform.route)
+            assertEquals(listOf(Emu.RETROARCH), platform.altEmus)
+            assertEquals("dolphin", platform.altRetroCore)
+        }
     }
 }

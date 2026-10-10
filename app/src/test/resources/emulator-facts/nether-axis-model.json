@@ -1,0 +1,296 @@
+{
+  "view_rect_xywh": [
+    105,
+    404,
+    263,
+    263
+  ],
+  "integer_center": [
+    236,
+    535
+  ],
+  "resource_padding_dp": 20,
+  "resource_density": 1.75,
+  "padded_half_pixels": 96,
+  "calibrated_touch_gain": 1.1,
+  "cases": [
+    {
+      "point": [
+        236,
+        535
+      ],
+      "native_gain": 1.33,
+      "expected_console_axes": [
+        127,
+        127
+      ],
+      "expected_knob_delta": [
+        0,
+        0
+      ],
+      "expected_normalized_axes": [
+        0.0,
+        0.0
+      ],
+      "calibrated_axes_before_unit_clamp": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "point": [
+        270,
+        535
+      ],
+      "native_gain": 1.33,
+      "expected_console_axes": [
+        193,
+        127
+      ],
+      "expected_knob_delta": [
+        34,
+        0
+      ],
+      "expected_normalized_axes": [
+        0.3895833333333334,
+        0.0
+      ],
+      "calibrated_axes_before_unit_clamp": [
+        0.3895833333333334,
+        0.0
+      ]
+    },
+    {
+      "point": [
+        300,
+        535
+      ],
+      "native_gain": 1.33,
+      "expected_console_axes": [
+        251,
+        127
+      ],
+      "expected_knob_delta": [
+        64,
+        0
+      ],
+      "expected_normalized_axes": [
+        0.7333333333333334,
+        0.0
+      ],
+      "calibrated_axes_before_unit_clamp": [
+        0.7333333333333334,
+        0.0
+      ]
+    },
+    {
+      "point": [
+        330,
+        535
+      ],
+      "native_gain": 1.33,
+      "expected_console_axes": [
+        255,
+        127
+      ],
+      "expected_knob_delta": [
+        94,
+        0
+      ],
+      "expected_normalized_axes": [
+        1,
+        0.0
+      ],
+      "calibrated_axes_before_unit_clamp": [
+        1.0770833333333334,
+        0.0
+      ]
+    },
+    {
+      "point": [
+        236,
+        590
+      ],
+      "native_gain": 1.33,
+      "expected_console_axes": [
+        127,
+        234
+      ],
+      "expected_knob_delta": [
+        0,
+        55
+      ],
+      "expected_normalized_axes": [
+        0.0,
+        0.6302083333333334
+      ],
+      "calibrated_axes_before_unit_clamp": [
+        0.0,
+        0.6302083333333334
+      ]
+    },
+    {
+      "point": [
+        300,
+        600
+      ],
+      "native_gain": 1.33,
+      "expected_console_axes": [
+        216,
+        217
+      ],
+      "expected_knob_delta": [
+        45,
+        46
+      ],
+      "expected_normalized_axes": [
+        0.5225490009288349,
+        0.530713829068348
+      ],
+      "calibrated_axes_before_unit_clamp": [
+        0.5225490009288349,
+        0.530713829068348
+      ]
+    },
+    {
+      "point": [
+        270,
+        535
+      ],
+      "native_gain": 1.0,
+      "expected_console_axes": [
+        177,
+        127
+      ],
+      "expected_knob_delta": [
+        34,
+        0
+      ],
+      "expected_normalized_axes": [
+        0.3895833333333334,
+        0.0
+      ],
+      "calibrated_axes_before_unit_clamp": [
+        0.3895833333333334,
+        0.0
+      ]
+    },
+    {
+      "point": [
+        300,
+        535
+      ],
+      "native_gain": 1.0,
+      "expected_console_axes": [
+        221,
+        127
+      ],
+      "expected_knob_delta": [
+        64,
+        0
+      ],
+      "expected_normalized_axes": [
+        0.7333333333333334,
+        0.0
+      ],
+      "calibrated_axes_before_unit_clamp": [
+        0.7333333333333334,
+        0.0
+      ]
+    },
+    {
+      "point": [
+        300,
+        600
+      ],
+      "native_gain": 1.0,
+      "expected_console_axes": [
+        194,
+        195
+      ],
+      "expected_knob_delta": [
+        45,
+        46
+      ],
+      "expected_normalized_axes": [
+        0.5225490009288349,
+        0.530713829068348
+      ],
+      "calibrated_axes_before_unit_clamp": [
+        0.5225490009288349,
+        0.530713829068348
+      ]
+    },
+    {
+      "point": [
+        460,
+        535
+      ],
+      "native_gain": 1.33,
+      "expected_console_axes": [
+        255,
+        127
+      ],
+      "expected_knob_delta": [
+        96,
+        0
+      ],
+      "expected_normalized_axes": [
+        1,
+        0.0
+      ],
+      "calibrated_axes_before_unit_clamp": [
+        1.1,
+        0.0
+      ]
+    },
+    {
+      "point": [
+        460,
+        700
+      ],
+      "native_gain": 1.33,
+      "expected_console_axes": [
+        255,
+        238
+      ],
+      "expected_knob_delta": [
+        77,
+        56
+      ],
+      "expected_normalized_axes": [
+        0.8856607892731256,
+        0.6523840635270792
+      ],
+      "calibrated_axes_before_unit_clamp": [
+        0.8856607892731256,
+        0.6523840635270792
+      ]
+    },
+    {
+      "point": [
+        330,
+        630
+      ],
+      "native_gain": 1.33,
+      "expected_console_axes": [
+        255,
+        255
+      ],
+      "expected_knob_delta": [
+        66,
+        67
+      ],
+      "expected_normalized_axes": [
+        0.765631910182559,
+        0.77377693050365
+      ],
+      "calibrated_axes_before_unit_clamp": [
+        0.765631910182559,
+        0.77377693050365
+      ]
+    }
+  ],
+  "model": "Radial direction is the drag angle; travel magnitude is the larger absolute axis displacement, capped at padded integer half-side. Float components determine axes; only visual pixel deltas truncate. Console unsigned-byte conversion floors127.5*(1+clamped(axis*native_gain)).",
+  "all_expected_console_bytes_matched": true
+}

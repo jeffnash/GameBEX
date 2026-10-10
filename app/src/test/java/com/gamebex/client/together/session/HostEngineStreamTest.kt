@@ -2,6 +2,8 @@ package com.gamebex.client.together.session
 
 import com.gamebex.client.data.Emu
 import com.gamebex.client.data.local.GameEntity
+import com.gamebex.client.launch.DirectFiles
+import com.gamebex.client.launch.EmuFiles
 import com.gamebex.client.launch.EmuRouter
 import com.gamebex.client.stream.P2Prep
 import com.gamebex.client.stream.StreamError
@@ -91,6 +93,9 @@ class HostEngineStreamTest {
         platform: FakePlatform = FakePlatform(),
         audioOverride: String? = null,
         captureGate: CompletableDeferred<Unit>? = null,
+        files: EmuFiles = DirectFiles,
+        androidData: File? = null,
+        stableMs: Long = 0,
     ): Harness {
         val engineScope = scope.engineTestScope()
         val events = mutableListOf<String>()
@@ -112,9 +117,14 @@ class HostEngineStreamTest {
             }
         }
         val recordingPlayer2 = object : StreamPlayer2 by player2 {
-            override suspend fun prepare(game: GameEntity, emu: Emu, rsoundReady: Boolean): P2Prep {
+            override suspend fun prepare(
+                game: GameEntity,
+                emu: Emu,
+                rsoundReady: Boolean,
+                p2SlotMode: com.gamebex.client.stream.p2.P2SlotMode,
+            ): P2Prep {
                 if (rsoundReady) events += "rsound"
-                return player2.prepare(game, emu, rsoundReady)
+                return player2.prepare(game, emu, rsoundReady, p2SlotMode)
             }
         }
         val transport = FakeLinkTransport()
@@ -133,6 +143,9 @@ class HostEngineStreamTest {
             recordingPlayer2,
             modes ?: com.gamebex.client.together.TogetherSupport::modesFor,
             { audioOverride },
+            emuOverlayFiles = { files },
+            emuAndroidData = { androidData },
+            attachStableMs = { stableMs },
         )
         return Harness(engine, transport, discovery, emulators, stream, player2, events, platform)
     }
@@ -184,6 +197,39 @@ class HostEngineStreamTest {
     }
 
     @Test
+    fun useStreamInsteadSwitchesTheLobbyBothWaysBeforeTheGuestJoins() = runTest {
+        val snes = n64.copy(title = "Super Mario World", folder = "snes", fileName = "smw.sfc", ext = "sfc")
+        val offer = n64Offer.copy(title = "Super Mario World", folder = "snes", fileName = "smw.sfc")
+        val h = harness(this, game = snes, offer = offer)
+        h.engine.hostGame(1)
+        advanceUntilIdle()
+        assertEquals(HostStep.WAITING, h.engine.view.value?.step)
+        assertEquals(TogetherMode.RA_NETPLAY, h.engine.view.value?.mode)
+        assertEquals(listOf(TogetherMode.STREAM), h.engine.view.value?.altModes)
+        h.engine.switchMode(TogetherMode.STREAM)
+        advanceUntilIdle()
+        assertEquals(HostStep.WAITING, h.engine.view.value?.step)
+        assertEquals(TogetherMode.STREAM, h.engine.view.value?.mode)
+        assertEquals(listOf(TogetherMode.RA_NETPLAY), h.engine.view.value?.altModes)
+        h.engine.switchMode(TogetherMode.RA_NETPLAY)
+        advanceUntilIdle()
+        assertEquals(TogetherMode.RA_NETPLAY, h.engine.view.value?.mode)
+        assertEquals(listOf(TogetherMode.STREAM), h.engine.view.value?.altModes)
+    }
+
+    @Test
+    fun switchModeIgnoresTheCurrentModeAndModesOutsideTheAlts() = runTest {
+        val h = harness(this)
+        h.engine.hostGame(1)
+        advanceUntilIdle()
+        assertEquals(TogetherMode.STREAM, h.engine.view.value?.mode)
+        h.engine.switchMode(TogetherMode.STREAM)
+        h.engine.switchMode(TogetherMode.RA_NETPLAY)
+        advanceUntilIdle()
+        assertEquals(TogetherMode.STREAM, h.engine.view.value?.mode)
+    }
+
+    @Test
     fun streamReadyCarriesSystemFolderAndActualBackendForGuestPad() = runTest {
         val h = harness(this)
         h.emulators.inner.launchOutcomes = ArrayDeque(listOf(EmuRouter.Outcome.Launched("RetroArch", Emu.RETROARCH.pkg)))
@@ -194,12 +240,35 @@ class HostEngineStreamTest {
     }
 
     @Test
+    fun dolphinStreamHostTurnsTheTouchOverlayOn() = runTest {
+        val tmp = Files.createTempDirectory("gbx-dolphin-stream").toFile()
+        try {
+            val ini = File(tmp, "${Emu.DOLPHIN.pkg}/files/Config/Dolphin.ini")
+            ini.parentFile!!.mkdirs()
+            ini.writeText("[Android]\nShowInputOverlay = False\n[General]\nISOPaths = 1\n")
+            val gc = n64.copy(folder = "gc", title = "Crazy Taxi", fileName = "ct.iso", relPath = "ct.iso", ext = "iso", emulatorOverride = Emu.DOLPHIN.pkg)
+            val offer = OfferedGame(title = "Crazy Taxi", folder = "gc", fileName = "ct.iso", fileSize = 1)
+            val h = harness(
+                this, game = gc, offer = offer,
+                player2 = FakeStreamPlayer2(P2Prep.Written),
+                modes = { listOf(TogetherMode.STREAM) },
+                androidData = tmp,
+            )
+            h.startGame(this)
+            assertEquals(HostStep.IN_GAME, h.engine.view.value?.step)
+            assertTrue(ini.readText().contains("ShowInputOverlay = True"))
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
+    @Test
     fun touchBackendNamesNeverGuessUnknownPackages() {
         assertEquals("retroarch", touchBackendForEmuPkg(Emu.RETROARCH.pkg))
         assertEquals("dolphin", touchBackendForEmuPkg(Emu.DOLPHIN.pkg))
         assertEquals("nethersx2", touchBackendForEmuPkg(Emu.NETHER.pkg))
         assertEquals("armsx2", touchBackendForEmuPkg(Emu.ARMSX2.pkg))
-        assertEquals("", touchBackendForEmuPkg(Emu.PPSSPP.pkg))
+        assertEquals("ppsspp", touchBackendForEmuPkg(Emu.PPSSPP.pkg))
         assertEquals("", touchBackendForEmuPkg("com.example.other"))
         assertEquals("", touchBackendForEmuPkg(null))
     }
@@ -315,6 +384,25 @@ class HostEngineStreamTest {
         captureGate.complete(Unit)
         runCurrent()
         assertEquals(1, h.stream.captureAttaches)
+    }
+
+    @Test
+    fun attachWaitsForTheTaskStackToSettle() = runTest {
+        val h = harness(this, stableMs = 500)
+        h.startGame(this)
+        assertEquals(0, h.stream.captureAttaches)
+        advanceTimeBy(500)
+        runCurrent()
+        assertEquals(1, h.stream.captureAttaches)
+        assertEquals(listOf("stream", "launch", "gameLaunched", "capture"), h.events)
+    }
+
+    @Test
+    fun attachSettleCoversDolphinsActivityHop() {
+        // Dolphin's MainActivity→EmulationActivity hop lands ~546ms after
+        // fire; a proxy started into it dies on a stale START.
+        // Shrink this only with a fresh no-crash Dolphin run.
+        assertEquals(3_000L, ATTACH_STABLE_MS)
     }
 
     @Test

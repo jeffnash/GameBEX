@@ -28,6 +28,22 @@ class HostEngineFlagsTest {
         assertFalse(cfg("keyframes_on_request" to "0").keyframesOnRequest)
     }
 
+    @Test fun cropAspectDefaultsFourThreeAndPassesThrough() {
+        assertEquals("4:3", cfg().cropAspect)
+        assertEquals(
+            "3:2",
+            streamConfigForFlags("tok", "10.0.0.2", true, mapOf<String, String>()::get, cropAspect = "3:2").cropAspect,
+        )
+    }
+
+    @Test fun p2SlotModeDefaultsOffAndPassesThrough() {
+        assertEquals("off", cfg().p2SlotMode)
+        assertEquals(
+            "placeholder",
+            streamConfigForFlags("tok", "10.0.0.2", true, mapOf<String, String>()::get, p2SlotMode = "placeholder").p2SlotMode,
+        )
+    }
+
     @Test fun everyHostFlagMapsIntoTheConfig() {
         val c = cfg(
             "start_level" to "2",
@@ -70,5 +86,14 @@ class HostEngineFlagsTest {
         assertEquals(1, cfg("start_level" to "-1").level)
         assertEquals(0, cfg("start_level" to "0").level)
         assertEquals(3, cfg("start_level" to "3").level)
+    }
+
+    @Test fun debugPropOverrideWinsOverTheStoredStartLevel() {
+        val flags = mapOf("start_level" to "2")::get
+        assertEquals(0, streamConfigForFlags("tok", "10.0.0.2", true, flags, startLevelOverride = 0).level)
+        assertEquals(3, streamConfigForFlags("tok", "10.0.0.2", true, flags, startLevelOverride = 3).level)
+        // Out of range: falls through to the stored flag, then the default.
+        assertEquals(2, streamConfigForFlags("tok", "10.0.0.2", true, flags, startLevelOverride = 9).level)
+        assertEquals(1, streamConfigForFlags("tok", "10.0.0.2", true, emptyMap<String, String>()::get, startLevelOverride = 9).level)
     }
 }

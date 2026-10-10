@@ -41,6 +41,10 @@ class AvcScreenSource(
     private var appTarget: CaptureTarget? = null
     private var drain: Thread? = null
     private var cropPass: StreamCropPass? = null
+    /** The rect the live crop pass cuts, or null when uncropped. Guarded by [lock]. */
+    private var activeCropRect: CropRect? = null
+    /** Current crop viewport: the config's portrait-time value until [updateCropViewport] re-pins it. */
+    @Volatile private var cropViewportNow: String = cropOptions.viewport
     private var generation = 0
     private var restarts = 0
     private val seq = AtomicInteger()
@@ -126,11 +130,67 @@ class AvcScreenSource(
         synchronized(lock) { appTarget = target }
     }
 
+    /**
+     * Re-pins the crop to the landscape [viewport] once the game rotates
+     * the display: the config's portrait-time viewport centers the crop
+     * like legacy, off the emulator window. Same-size shifts swap the GL
+     * pass and re-point capture (the encoder is untouched); a resize
+     * (legacy level-size capture → native display capture) re-opens the
+     * encoder at the same level via [changeLevel] (new config + keyframe,
+     * the guest's routine restart path); anything else — idle,
+     * uncropped, unparseable, EGL failure — keeps the live pass. Later
+     * level changes reuse the re-pinned viewport.
+     */
+    override fun updateCropViewport(viewport: String) {
+        var reopen = false
+        synchronized(lock) {
+            if (!running) return
+            if (parseViewport(viewport) == null) {
+                Log.w(TAG, "video crop keeps viewport (unparseable update)")
+                return
+            }
+            cropViewportNow = viewport
+            val pass = cropPass ?: return
+            val current = activeCropRect ?: return
+            val lv = level
+            val updated = cropOptions.copy(viewport = viewport)
+            val (capW, capH) = streamCropCaptureSize(lv, updated)
+            val rect = runCatching {
+                streamCropRect(capW, capH, cropOptions.aspectNum, cropOptions.aspectDen, viewport)
+            }.getOrNull() ?: return
+            if (rect == current) {
+                Log.i(TAG, "video crop already pinned rect=${rect.left},${rect.top} ${rect.width}x${rect.height}")
+                return
+            }
+            if (streamCropEncodeSize(rect) != streamCropEncodeSize(current)) {
+                reopen = true
+                return@synchronized
+            }
+            val target = appTarget ?: return
+            val input = surface ?: return
+            val replacement = runCatching { StreamCropPass(capW, capH, rect, input) }.getOrNull()
+            if (replacement == null) {
+                Log.w(TAG, "video crop keeps rect (EGL unavailable for the update)")
+                return
+            }
+            runCatching { pass.release() }
+            cropPass = replacement
+            activeCropRect = rect
+            Log.i(TAG, "video crop re-pinned src=${capW}x${capH} rect=${rect.left},${rect.top} ${rect.width}x${rect.height} viewport=$viewport")
+            runCatching { target.onSurface(replacement.inputSurface, capW, capH) }
+        }
+        if (reopen) {
+            Log.i(TAG, "video crop re-opening the encoder for the landscape viewport")
+            changeLevel(level, bitrate)
+        }
+    }
+
     /** Configures the first encoder that accepts [level], then starts capture into it. */
     private fun openLocked(level: VideoLevel, bitrate: Int, allowCrop: Boolean = true) {
         val target = appTarget ?: throw StreamFailure(StreamError.DISPLAY_CAPTURE, "explicit screen sharing consent required")
         val activeOptions = if (intraRefreshDisabled) options.copy(intraRefresh = false) else options
-        val (encodeLevel, cropRect) = if (allowCrop) streamCropEncodeLevel(level, cropOptions) else level to null
+        val effectiveCrop = if (cropViewportNow == cropOptions.viewport) cropOptions else cropOptions.copy(viewport = cropViewportNow)
+        val (encodeLevel, cropRect) = if (allowCrop) streamCropEncodeLevel(level, effectiveCrop) else level to null
         val candidates = AvcEncoders.rank(catalog, encodeLevel, activeOptions)
         if (candidates.isEmpty()) throw StreamFailure(StreamError.ENCODER, "no H.264 encoder for ${encodeLevel.width}x${encodeLevel.height}")
         var last: Throwable? = null
@@ -188,11 +248,18 @@ class AvcScreenSource(
                     start()
                 }
                 Log.i(TAG, "video: ${info.name} ${encodeLevel.width}x${encodeLevel.height}@${configuration.fps} requestedFps=${encodeLevel.fps} ${bitrate}bps strict=${configuration.strict} software=${!info.hardware} via $captureApi")
+                // Native path: the capture runs at the display size and the
+                // GL pass crops display-px 1:1 into the encoder (no
+                // 1604→1600 resampling smear); legacy captures at the level
+                // size, uncropped streams unchanged.
+                val (capW, capH) = if (cropRect != null) streamCropCaptureSize(level, effectiveCrop)
+                else level.width to level.height
                 val captureSurface = if (cropRect != null) {
                     try {
-                        val pass = StreamCropPass(level.width, level.height, cropRect, input)
+                        val pass = StreamCropPass(capW, capH, cropRect, input)
                         cropPass = pass
-                        Log.i(TAG, "video crop src=${level.width}x${level.height} rect=${cropRect.left},${cropRect.top} ${cropRect.width}x${cropRect.height} encode=${encodeLevel.width}x${encodeLevel.height}")
+                        activeCropRect = cropRect
+                        Log.i(TAG, "video crop src=${capW}x${capH} rect=${cropRect.left},${cropRect.top} ${cropRect.width}x${cropRect.height} encode=${encodeLevel.width}x${encodeLevel.height}")
                         pass.inputSurface
                     } catch (t: Throwable) {
                         Log.w(TAG, "video crop disabled, EGL unavailable: ${t.javaClass.simpleName}: ${t.message}")
@@ -201,7 +268,7 @@ class AvcScreenSource(
                     }
                 } else input
                 try {
-                    target.onSurface(captureSurface, level.width, level.height)
+                    target.onSurface(captureSurface, capW, capH)
                 } catch (t: Throwable) {
                     closeLocked()
                     throw StreamFailure(StreamError.DISPLAY_CAPTURE, "capture surface failed", t)
@@ -218,6 +285,7 @@ class AvcScreenSource(
         if (surface != null) runCatching { appTarget?.onSurface(null, 0, 0) }
         runCatching { cropPass?.release() }
         cropPass = null
+        activeCropRect = null
         runCatching { codec?.stop() }
         runCatching { codec?.release() }
         runCatching { surface?.release() }

@@ -66,8 +66,8 @@ class HomeFixtureActivity : ComponentActivity() {
         // fixture-vs-mockup comparison comes out ~12% small.
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         if (android.os.Build.VERSION.SDK_INT >= 28) {
-            window.attributes.layoutInDisplayCutoutMode =
-                android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            window.attributes.layoutInDisplayCutoutMode = if (android.os.Build.VERSION.SDK_INT >= 30)
+                android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS else android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // Hide the system bars like MainActivity's immersive effect, or the

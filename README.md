@@ -72,6 +72,7 @@ RetroArch core if its build differs, and both start together.
 | RetroArch netplay | SNES, NES, Genesis, Master System, Game Gear, Sega CD, SG-1000, TurboGrafx-16/CD, arcade and Neo Geo (FBNeo) |
 | Game Boy link | Game Boy, Game Boy Color (Gambatte's network link) |
 | PSP ad hoc | PSP (PPSSPP) |
+| Stream | Every system. Where a native mode above exists it stays the default and the host offers **Use Stream instead**. |
 
 The joining phone can also find the host under **System → Device → Play
 together**, scan its QR code, or type its address. Each phone shows a console name
@@ -125,7 +126,9 @@ Steps:
 | --- | --- |
 | SNES, NES, Game Boy/Color, GBA, Genesis, Master System, Game Gear, Sega CD, 32X, TurboGrafx-16/CD, and more | RetroArch (Snes9x, Mesen, Gambatte, mGBA, Genesis Plus GX, PicoDrive, Beetle PCE) |
 | PlayStation, Saturn, Dreamcast, NAOMI, 3DO, Neo Geo CD, PC-FX | RetroArch (Beetle PSX, Beetle Saturn, Flycast, Opera, NeoCD, Beetle PC-FX) |
-| Nintendo 64, Nintendo DS, Nintendo 3DS, PSP, GameCube, Wii | RetroArch (Mupen64Plus-Next, melonDS, Citra, PPSSPP, Dolphin) |
+| Nintendo 64, Nintendo DS, Nintendo 3DS | RetroArch (Mupen64Plus-Next, melonDS, Citra) |
+| GameCube, Wii | Dolphin (or the RetroArch Dolphin core) |
+| PSP | PPSSPP (or the RetroArch PPSSPP core) |
 | Arcade (MAME sets), Neo Geo (zips stay zipped) | RetroArch (FBNeo) |
 | MS-DOS, Windows 3.x | RetroArch (DOSBox Pure) |
 | PlayStation 2 | NetherSX2 (or ARMSX2) |
@@ -133,8 +136,9 @@ Steps:
 | ScummVM games, J2ME games | ScummVM, J2ME Loader |
 | OUYA | installed as an Android app |
 
-Where a standalone emulator exists (Dolphin, PPSSPP, melonDS, Azahar, MAME4droid),
-you can switch a game to it.
+Where a standalone emulator exists (melonDS, Azahar, MAME4droid),
+you can switch a game to it. GameCube and Wii default to Dolphin;
+PSP defaults to PPSSPP.
 
 Folder names and file types for every system:
 [PlatformRegistry.kt](app/src/main/java/com/gamebex/client/data/PlatformRegistry.kt)

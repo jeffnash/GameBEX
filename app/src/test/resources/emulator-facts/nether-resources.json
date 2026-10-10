@@ -1,0 +1,5048 @@
+{
+  "apk_sha256": "2029e30dcc1ba1ecb8d73313f18b429b40e6044c7785c52af08b948ef94b3ddf",
+  "resource_table_sha256": "4269bcb6940850ad64b8c6777bad510531943d665ede95653b0566d6286031ff",
+  "layouts": [
+    {
+      "resource": "layout/layout_touchscreen_controller_analog_stick",
+      "nodes": [
+        {
+          "category": "container",
+          "xml_line": 2,
+          "attributes": {
+            "orientation": {
+              "value": "1",
+              "resource_attribute": "orientation"
+            },
+            "id": {
+              "value": "id/constraintLayout",
+              "resource_attribute": "id"
+            },
+            "clipChildren": {
+              "value": "false",
+              "resource_attribute": "clipChildren"
+            },
+            "layout_width": {
+              "value": "-1",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "-1",
+              "resource_attribute": "layout_height"
+            }
+          }
+        },
+        {
+          "category": "placeholder",
+          "xml_line": 4,
+          "attributes": {
+            "layout_width": {
+              "value": "-2",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "-2",
+              "resource_attribute": "layout_height"
+            },
+            "translationZ": {
+              "value": "16777206.000000px",
+              "resource_attribute": "translationZ"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 5,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_r2",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "60.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "270.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_r2_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_r2_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 6,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_r1",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "60.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "220.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_r1_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_r1_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 7,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_l1",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "60.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginBottom": {
+              "value": "220.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_l1_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_l1_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 8,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_l2",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "60.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginBottom": {
+              "value": "270.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_l2_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_l2_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 9,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_start",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "40.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "25.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "90.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginBottom": {
+              "value": "8.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintHorizontal_bias": {
+              "value": "0.5",
+              "resource_attribute": "attr/layout_constraintHorizontal_bias"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_start_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_start_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 10,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_select",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "40.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "25.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "90.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "8.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintHorizontal_bias": {
+              "value": "0.5",
+              "resource_attribute": "attr/layout_constraintHorizontal_bias"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_select_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_select_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 11,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_analog",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "25.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "25.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginBottom": {
+              "value": "8.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintHorizontal_bias": {
+              "value": "0.5",
+              "resource_attribute": "attr/layout_constraintHorizontal_bias"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_analog_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_analog_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 12,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_cross",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "30.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_cross_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_cross_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 13,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_square",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "120.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "80.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_square_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_square_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 14,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_triangle",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "130.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_triangle_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_triangle_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 15,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_circle",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "80.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_circle_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_circle_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "axis",
+          "xml_line": 16,
+          "attributes": {
+            "id": {
+              "value": "id/controller_axis_left",
+              "resource_attribute": "id"
+            },
+            "paddingLeft": {
+              "value": "20.000000dp",
+              "resource_attribute": "paddingLeft"
+            },
+            "paddingTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "paddingTop"
+            },
+            "paddingRight": {
+              "value": "20.000000dp",
+              "resource_attribute": "paddingRight"
+            },
+            "paddingBottom": {
+              "value": "20.000000dp",
+              "resource_attribute": "paddingBottom"
+            },
+            "layout_width": {
+              "value": "150.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "150.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginBottom": {
+              "value": "30.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 17,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_l3",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "180.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginBottom": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_l3_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_l3_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 18,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_r3",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "180.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_r3_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_r3_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 19,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_pause",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_pause_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_pause_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 20,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_quick_load",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_quick_load_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_quick_load_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 21,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_quick_save",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "75.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_quick_save_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_quick_save_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 22,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_toggle_speed_limit",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "130.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_toggle_speed_limit",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_toggle_speed_limit",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 23,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_toggle_turbo",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "185.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_toggle_turbo",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_toggle_turbo",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 24,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_toggle_slowmo",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "240.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_toggle_slowmo",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_toggle_slowmo",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 25,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_pressure",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "295.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_pressure_modifier",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_pressure_modifier",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 26,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_m1",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "240.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_m1_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_m1_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 27,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_m2",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "185.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_m2_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_m2_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 28,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_m3",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "130.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_m3_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_m3_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 29,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_m4",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "75.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_m4_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_m4_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "resource": "layout/layout_touchscreen_controller_analog_sticks",
+      "nodes": [
+        {
+          "category": "container",
+          "xml_line": 2,
+          "attributes": {
+            "orientation": {
+              "value": "1",
+              "resource_attribute": "orientation"
+            },
+            "id": {
+              "value": "id/constraintLayout",
+              "resource_attribute": "id"
+            },
+            "clipChildren": {
+              "value": "false",
+              "resource_attribute": "clipChildren"
+            },
+            "layout_width": {
+              "value": "-1",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "-1",
+              "resource_attribute": "layout_height"
+            }
+          }
+        },
+        {
+          "category": "placeholder",
+          "xml_line": 4,
+          "attributes": {
+            "layout_width": {
+              "value": "-2",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "-2",
+              "resource_attribute": "layout_height"
+            },
+            "translationZ": {
+              "value": "16777206.000000px",
+              "resource_attribute": "translationZ"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 5,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_r2",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "60.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "270.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_r2_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_r2_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 6,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_r1",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "60.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "220.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_r1_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_r1_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 7,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_l1",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "60.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginBottom": {
+              "value": "220.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_l1_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_l1_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 8,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_l2",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "60.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginBottom": {
+              "value": "270.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_l2_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_l2_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 9,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_start",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "40.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "25.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "80.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginBottom": {
+              "value": "8.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintHorizontal_bias": {
+              "value": "0.5",
+              "resource_attribute": "attr/layout_constraintHorizontal_bias"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_start_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_start_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 10,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_select",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "40.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "25.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "80.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "8.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintHorizontal_bias": {
+              "value": "0.5",
+              "resource_attribute": "attr/layout_constraintHorizontal_bias"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_select_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_select_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 11,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_cross",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "30.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_cross_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_cross_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 12,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_square",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "120.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "80.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_square_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_square_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 13,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_triangle",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "130.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_triangle_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_triangle_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 14,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_circle",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "80.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_circle_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_circle_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "axis",
+          "xml_line": 15,
+          "attributes": {
+            "id": {
+              "value": "id/controller_axis_left",
+              "resource_attribute": "id"
+            },
+            "paddingLeft": {
+              "value": "20.000000dp",
+              "resource_attribute": "paddingLeft"
+            },
+            "paddingTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "paddingTop"
+            },
+            "paddingRight": {
+              "value": "20.000000dp",
+              "resource_attribute": "paddingRight"
+            },
+            "paddingBottom": {
+              "value": "20.000000dp",
+              "resource_attribute": "paddingBottom"
+            },
+            "layout_width": {
+              "value": "150.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "150.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginBottom": {
+              "value": "30.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            }
+          }
+        },
+        {
+          "category": "axis",
+          "xml_line": 16,
+          "attributes": {
+            "id": {
+              "value": "id/controller_axis_right",
+              "resource_attribute": "id"
+            },
+            "paddingLeft": {
+              "value": "20.000000dp",
+              "resource_attribute": "paddingLeft"
+            },
+            "paddingTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "paddingTop"
+            },
+            "paddingRight": {
+              "value": "20.000000dp",
+              "resource_attribute": "paddingRight"
+            },
+            "paddingBottom": {
+              "value": "20.000000dp",
+              "resource_attribute": "paddingBottom"
+            },
+            "layout_width": {
+              "value": "150.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "150.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "150.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "230.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            }
+          }
+        },
+        {
+          "category": "dpad",
+          "xml_line": 17,
+          "attributes": {
+            "id": {
+              "value": "id/controller_dpad",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "150.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "150.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "150.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginBottom": {
+              "value": "230.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 18,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_l3",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "180.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginBottom": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_l3_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_l3_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 19,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_r3",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "180.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_r3_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_r3_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 20,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_pause",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_pause_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_pause_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 21,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_quick_load",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_quick_load_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_quick_load_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 22,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_quick_save",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "75.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_quick_save_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_quick_save_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 23,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_toggle_speed_limit",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "130.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_toggle_speed_limit",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_toggle_speed_limit",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 24,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_toggle_turbo",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "185.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_toggle_turbo",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_toggle_turbo",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 25,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_toggle_slowmo",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "240.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_toggle_slowmo",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_toggle_slowmo",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 26,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_pressure",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "295.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_pressure_modifier",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_pressure_modifier",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 27,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_m1",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "240.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_m1_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_m1_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 28,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_m2",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "185.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_m2_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_m2_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 29,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_m3",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "130.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_m3_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_m3_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 30,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_m4",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "75.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_m4_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_m4_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "resource": "layout/layout_touchscreen_controller_digital",
+      "nodes": [
+        {
+          "category": "container",
+          "xml_line": 2,
+          "attributes": {
+            "orientation": {
+              "value": "1",
+              "resource_attribute": "orientation"
+            },
+            "id": {
+              "value": "id/constraintLayout",
+              "resource_attribute": "id"
+            },
+            "clipChildren": {
+              "value": "false",
+              "resource_attribute": "clipChildren"
+            },
+            "layout_width": {
+              "value": "-1",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "-1",
+              "resource_attribute": "layout_height"
+            }
+          }
+        },
+        {
+          "category": "placeholder",
+          "xml_line": 4,
+          "attributes": {
+            "layout_width": {
+              "value": "-2",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "-2",
+              "resource_attribute": "layout_height"
+            },
+            "translationZ": {
+              "value": "16777206.000000px",
+              "resource_attribute": "translationZ"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 5,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_r2",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "60.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "270.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_r2_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_r2_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 6,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_r1",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "60.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "220.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_r1_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_r1_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 7,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_l1",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "60.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginBottom": {
+              "value": "220.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_l1_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_l1_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 8,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_l2",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "60.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginBottom": {
+              "value": "270.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_l2_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_l2_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "dpad",
+          "xml_line": 9,
+          "attributes": {
+            "id": {
+              "value": "id/controller_dpad",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "150.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "150.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginBottom": {
+              "value": "30.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 10,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_start",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "40.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "25.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "90.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginBottom": {
+              "value": "8.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintHorizontal_bias": {
+              "value": "0.5",
+              "resource_attribute": "attr/layout_constraintHorizontal_bias"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_start_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_start_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 11,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_select",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "40.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "25.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "90.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "8.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintHorizontal_bias": {
+              "value": "0.5",
+              "resource_attribute": "attr/layout_constraintHorizontal_bias"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_select_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_select_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 12,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_analog",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "25.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "25.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginBottom": {
+              "value": "8.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintHorizontal_bias": {
+              "value": "0.5",
+              "resource_attribute": "attr/layout_constraintHorizontal_bias"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_analog_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_analog_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 13,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_cross",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "30.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_cross_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_cross_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 14,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_square",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "120.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "80.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_square_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_square_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 15,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_triangle",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "70.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "130.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_triangle_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_triangle_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 16,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_circle",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "80.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_circle_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_circle_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 17,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_pause",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_pause_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_pause_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 18,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_quick_load",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_quick_load_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_quick_load_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 19,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_quick_save",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "75.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_quick_save_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_quick_save_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 20,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_toggle_speed_limit",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "130.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_toggle_speed_limit",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_toggle_speed_limit",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 21,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_toggle_turbo",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "185.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_toggle_turbo",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_toggle_turbo",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 22,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_toggle_slowmo",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "240.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_toggle_slowmo",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_toggle_slowmo",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 23,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_pressure",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "295.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_pressure_modifier",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_pressure_modifier",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 24,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_m1",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "240.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_m1_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_m1_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 25,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_m2",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "185.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_m2_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_m2_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 26,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_m3",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "130.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_m3_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_m3_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 27,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_m4",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "75.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_m4_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_m4_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "resource": "layout/layout_touchscreen_controller_edit",
+      "nodes": [
+        {
+          "category": "container",
+          "xml_line": 2,
+          "attributes": {
+            "layout_width": {
+              "value": "-1",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "-1",
+              "resource_attribute": "layout_height"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 4,
+          "attributes": {
+            "id": {
+              "value": "id/options",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "-2",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "-2",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "16.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "text": {
+              "value": "string/touchscreen_controller_edit_menu",
+              "resource_attribute": "text"
+            },
+            "layout_constraintEnd_toEndOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintEnd_toEndOf"
+            },
+            "layout_constraintHorizontal_bias": {
+              "value": "0.5",
+              "resource_attribute": "attr/layout_constraintHorizontal_bias"
+            },
+            "layout_constraintStart_toStartOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintStart_toStartOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "resource": "layout/layout_touchscreen_controller_lightgun",
+      "nodes": [
+        {
+          "category": "container",
+          "xml_line": 2,
+          "attributes": {
+            "orientation": {
+              "value": "1",
+              "resource_attribute": "orientation"
+            },
+            "id": {
+              "value": "id/constraintLayout",
+              "resource_attribute": "id"
+            },
+            "clipChildren": {
+              "value": "false",
+              "resource_attribute": "clipChildren"
+            },
+            "layout_width": {
+              "value": "-1",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "-1",
+              "resource_attribute": "layout_height"
+            }
+          }
+        },
+        {
+          "category": "placeholder",
+          "xml_line": 4,
+          "attributes": {
+            "layout_width": {
+              "value": "-2",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "-2",
+              "resource_attribute": "layout_height"
+            },
+            "translationZ": {
+              "value": "16777206.000000px",
+              "resource_attribute": "translationZ"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintStart_toStartOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintStart_toStartOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 5,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_a",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "30.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "30.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_a_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_a_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 6,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_b",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "30.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "100.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_b_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_b_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 7,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_c",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "30.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "170.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_c_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_c_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 8,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_calibration",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "50.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "30.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "240.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_calibrate_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_calibrate_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "dpad",
+          "xml_line": 9,
+          "attributes": {
+            "id": {
+              "value": "id/controller_dpad",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "150.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "150.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginBottom": {
+              "value": "30.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 10,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_start",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "40.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "25.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "90.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginBottom": {
+              "value": "8.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintHorizontal_bias": {
+              "value": "0.5",
+              "resource_attribute": "attr/layout_constraintHorizontal_bias"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_start_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_start_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 11,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_select",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "40.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "25.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginRight": {
+              "value": "90.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_marginBottom": {
+              "value": "8.000000dp",
+              "resource_attribute": "layout_marginBottom"
+            },
+            "layout_constraintBottom_toBottomOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintBottom_toBottomOf"
+            },
+            "layout_constraintHorizontal_bias": {
+              "value": "0.5",
+              "resource_attribute": "attr/layout_constraintHorizontal_bias"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_select_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_select_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 12,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_pause",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_marginRight": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginRight"
+            },
+            "layout_constraintRight_toRightOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintRight_toRightOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_pause_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_pause_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 13,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_quick_load",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_quick_load_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_quick_load_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 14,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_quick_save",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "75.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_quick_save_button",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_quick_save_button",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 15,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_toggle_speed_limit",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "130.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_toggle_speed_limit",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_toggle_speed_limit",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 16,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_toggle_turbo",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "185.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_toggle_turbo",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_toggle_turbo",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        },
+        {
+          "category": "button",
+          "xml_line": 17,
+          "attributes": {
+            "id": {
+              "value": "id/controller_button_toggle_slowmo",
+              "resource_attribute": "id"
+            },
+            "layout_width": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_width"
+            },
+            "layout_height": {
+              "value": "35.000000dp",
+              "resource_attribute": "layout_height"
+            },
+            "layout_marginLeft": {
+              "value": "240.000000dp",
+              "resource_attribute": "layout_marginLeft"
+            },
+            "layout_marginTop": {
+              "value": "20.000000dp",
+              "resource_attribute": "layout_marginTop"
+            },
+            "layout_constraintLeft_toLeftOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintLeft_toLeftOf"
+            },
+            "layout_constraintTop_toTopOf": {
+              "value": "0",
+              "resource_attribute": "attr/layout_constraintTop_toTopOf"
+            },
+            "pressedDrawable": {
+              "value": "drawable/ic_controller_toggle_slowmo",
+              "resource_attribute": "attr/pressedDrawable"
+            },
+            "unpressedDrawable": {
+              "value": "drawable/ic_controller_toggle_slowmo",
+              "resource_attribute": "attr/unpressedDrawable"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "profile_observation": {
+    "sha256": "09b87838df9618d1a3b3cebd9ede1848a9a959fb6b69d461b186bd5b0cde594d",
+    "values": {
+      "TouchscreenController": {
+        "Opacity": "75",
+        "AutoHideTime": "0",
+        "PortIndex": "0",
+        "View": "analog_stick",
+        "AutoHide": "true",
+        "TouchGliding": "false",
+        "HapticFeedback": "false",
+        "BindToRightStick": "false"
+      },
+      "TouchscreenController/digital": {
+        "DPadPortraitVisible": "true",
+        "DPadPortraitXTranslation": "0.0",
+        "DPadPortraitYTranslation": "0.0",
+        "DPadPortraitScale": "1.0",
+        "L1ButtonPortraitVisible": "true",
+        "L1ButtonPortraitXTranslation": "0.0",
+        "L1ButtonPortraitYTranslation": "0.0",
+        "L1ButtonPortraitScale": "1.0",
+        "L2ButtonPortraitVisible": "true",
+        "L2ButtonPortraitXTranslation": "0.0",
+        "L2ButtonPortraitYTranslation": "0.0",
+        "L2ButtonPortraitScale": "1.0",
+        "SelectButtonPortraitVisible": "true",
+        "SelectButtonPortraitXTranslation": "0.0",
+        "SelectButtonPortraitYTranslation": "0.0",
+        "SelectButtonPortraitScale": "1.0",
+        "StartButtonPortraitVisible": "true",
+        "StartButtonPortraitXTranslation": "0.0",
+        "StartButtonPortraitYTranslation": "0.0",
+        "StartButtonPortraitScale": "1.0",
+        "TriangleButtonPortraitVisible": "true",
+        "TriangleButtonPortraitXTranslation": "0.0",
+        "TriangleButtonPortraitYTranslation": "0.0",
+        "TriangleButtonPortraitScale": "1.0",
+        "CircleButtonPortraitVisible": "true",
+        "CircleButtonPortraitXTranslation": "0.0",
+        "CircleButtonPortraitYTranslation": "0.0",
+        "CircleButtonPortraitScale": "1.0",
+        "CrossButtonPortraitVisible": "true",
+        "CrossButtonPortraitXTranslation": "0.0",
+        "CrossButtonPortraitYTranslation": "0.0",
+        "CrossButtonPortraitScale": "1.0",
+        "SquareButtonPortraitVisible": "true",
+        "SquareButtonPortraitXTranslation": "0.0",
+        "SquareButtonPortraitYTranslation": "0.0",
+        "SquareButtonPortraitScale": "1.0",
+        "R1ButtonPortraitVisible": "true",
+        "R1ButtonPortraitXTranslation": "0.0",
+        "R1ButtonPortraitYTranslation": "0.0",
+        "R1ButtonPortraitScale": "1.0",
+        "R2ButtonPortraitVisible": "true",
+        "R2ButtonPortraitXTranslation": "0.0",
+        "R2ButtonPortraitYTranslation": "0.0",
+        "R2ButtonPortraitScale": "1.0",
+        "L3ButtonPortraitVisible": "false",
+        "L3ButtonPortraitXTranslation": "0.0",
+        "L3ButtonPortraitYTranslation": "0.0",
+        "L3ButtonPortraitScale": "1.0",
+        "R3ButtonPortraitVisible": "false",
+        "R3ButtonPortraitXTranslation": "0.0",
+        "R3ButtonPortraitYTranslation": "0.0",
+        "R3ButtonPortraitScale": "1.0",
+        "LeftAxisPortraitVisible": "true",
+        "LeftAxisPortraitXTranslation": "0.0",
+        "LeftAxisPortraitYTranslation": "0.0",
+        "LeftAxisPortraitScale": "1.0",
+        "RightAxisPortraitVisible": "true",
+        "RightAxisPortraitXTranslation": "0.0",
+        "RightAxisPortraitYTranslation": "0.0",
+        "RightAxisPortraitScale": "1.0",
+        "PressurePortraitVisible": "false",
+        "PressurePortraitXTranslation": "0.0",
+        "PressurePortraitYTranslation": "0.0",
+        "PressurePortraitScale": "1.0",
+        "Macro1PortraitVisible": "false",
+        "Macro1PortraitXTranslation": "0.0",
+        "Macro1PortraitYTranslation": "0.0",
+        "Macro1PortraitScale": "1.0",
+        "Macro2PortraitVisible": "false",
+        "Macro2PortraitXTranslation": "0.0",
+        "Macro2PortraitYTranslation": "0.0",
+        "Macro2PortraitScale": "1.0",
+        "Macro3PortraitVisible": "false",
+        "Macro3PortraitXTranslation": "0.0",
+        "Macro3PortraitYTranslation": "0.0",
+        "Macro3PortraitScale": "1.0",
+        "Macro4PortraitVisible": "false",
+        "Macro4PortraitXTranslation": "0.0",
+        "Macro4PortraitYTranslation": "0.0",
+        "Macro4PortraitScale": "1.0",
+        "ToggleFastForwardPortraitVisible": "false",
+        "ToggleFastForwardPortraitXTranslation": "0.0",
+        "ToggleFastForwardPortraitYTranslation": "0.0",
+        "ToggleFastForwardPortraitScale": "1.0",
+        "ToggleTurboPortraitVisible": "false",
+        "ToggleTurboPortraitXTranslation": "0.0",
+        "ToggleTurboPortraitYTranslation": "0.0",
+        "ToggleTurboPortraitScale": "1.0",
+        "ToggleSlowmoPortraitVisible": "false",
+        "ToggleSlowmoPortraitXTranslation": "0.0",
+        "ToggleSlowmoPortraitYTranslation": "0.0",
+        "ToggleSlowmoPortraitScale": "1.0",
+        "AnalogTogglePortraitVisible": "true",
+        "AnalogTogglePortraitXTranslation": "0.0",
+        "AnalogTogglePortraitYTranslation": "0.0",
+        "AnalogTogglePortraitScale": "1.0",
+        "OpenPauseMenuPortraitVisible": "true",
+        "OpenPauseMenuPortraitXTranslation": "0.0",
+        "OpenPauseMenuPortraitYTranslation": "0.0",
+        "OpenPauseMenuPortraitScale": "1.0",
+        "QuickLoadPortraitVisible": "false",
+        "QuickLoadPortraitXTranslation": "0.0",
+        "QuickLoadPortraitYTranslation": "0.0",
+        "QuickLoadPortraitScale": "1.0",
+        "QuickSavePortraitVisible": "false",
+        "QuickSavePortraitXTranslation": "0.0",
+        "QuickSavePortraitYTranslation": "0.0",
+        "QuickSavePortraitScale": "1.0",
+        "DPadLandscapeVisible": "true",
+        "DPadLandscapeXTranslation": "0.0",
+        "DPadLandscapeYTranslation": "0.0",
+        "DPadLandscapeScale": "1.0",
+        "L1ButtonLandscapeVisible": "true",
+        "L1ButtonLandscapeXTranslation": "0.0",
+        "L1ButtonLandscapeYTranslation": "0.0",
+        "L1ButtonLandscapeScale": "1.0",
+        "L2ButtonLandscapeVisible": "true",
+        "L2ButtonLandscapeXTranslation": "0.0",
+        "L2ButtonLandscapeYTranslation": "0.0",
+        "L2ButtonLandscapeScale": "1.0",
+        "SelectButtonLandscapeVisible": "true",
+        "SelectButtonLandscapeXTranslation": "0.0",
+        "SelectButtonLandscapeYTranslation": "0.0",
+        "SelectButtonLandscapeScale": "1.0",
+        "StartButtonLandscapeVisible": "true",
+        "StartButtonLandscapeXTranslation": "0.0",
+        "StartButtonLandscapeYTranslation": "0.0",
+        "StartButtonLandscapeScale": "1.0",
+        "TriangleButtonLandscapeVisible": "true",
+        "TriangleButtonLandscapeXTranslation": "0.0",
+        "TriangleButtonLandscapeYTranslation": "0.0",
+        "TriangleButtonLandscapeScale": "1.0",
+        "CircleButtonLandscapeVisible": "true",
+        "CircleButtonLandscapeXTranslation": "0.0",
+        "CircleButtonLandscapeYTranslation": "0.0",
+        "CircleButtonLandscapeScale": "1.0",
+        "CrossButtonLandscapeVisible": "true",
+        "CrossButtonLandscapeXTranslation": "0.0",
+        "CrossButtonLandscapeYTranslation": "0.0",
+        "CrossButtonLandscapeScale": "1.0",
+        "SquareButtonLandscapeVisible": "true",
+        "SquareButtonLandscapeXTranslation": "0.0",
+        "SquareButtonLandscapeYTranslation": "0.0",
+        "SquareButtonLandscapeScale": "1.0",
+        "R1ButtonLandscapeVisible": "true",
+        "R1ButtonLandscapeXTranslation": "0.0",
+        "R1ButtonLandscapeYTranslation": "0.0",
+        "R1ButtonLandscapeScale": "1.0",
+        "R2ButtonLandscapeVisible": "true",
+        "R2ButtonLandscapeXTranslation": "0.0",
+        "R2ButtonLandscapeYTranslation": "0.0",
+        "R2ButtonLandscapeScale": "1.0",
+        "L3ButtonLandscapeVisible": "false",
+        "L3ButtonLandscapeXTranslation": "0.0",
+        "L3ButtonLandscapeYTranslation": "0.0",
+        "L3ButtonLandscapeScale": "1.0",
+        "R3ButtonLandscapeVisible": "false",
+        "R3ButtonLandscapeXTranslation": "0.0",
+        "R3ButtonLandscapeYTranslation": "0.0",
+        "R3ButtonLandscapeScale": "1.0",
+        "LeftAxisLandscapeVisible": "true",
+        "LeftAxisLandscapeXTranslation": "0.0",
+        "LeftAxisLandscapeYTranslation": "0.0",
+        "LeftAxisLandscapeScale": "1.0",
+        "RightAxisLandscapeVisible": "true",
+        "RightAxisLandscapeXTranslation": "0.0",
+        "RightAxisLandscapeYTranslation": "0.0",
+        "RightAxisLandscapeScale": "1.0",
+        "PressureLandscapeVisible": "false",
+        "PressureLandscapeXTranslation": "0.0",
+        "PressureLandscapeYTranslation": "0.0",
+        "PressureLandscapeScale": "1.0",
+        "Macro1LandscapeVisible": "false",
+        "Macro1LandscapeXTranslation": "0.0",
+        "Macro1LandscapeYTranslation": "0.0",
+        "Macro1LandscapeScale": "1.0",
+        "Macro2LandscapeVisible": "false",
+        "Macro2LandscapeXTranslation": "0.0",
+        "Macro2LandscapeYTranslation": "0.0",
+        "Macro2LandscapeScale": "1.0",
+        "Macro3LandscapeVisible": "false",
+        "Macro3LandscapeXTranslation": "0.0",
+        "Macro3LandscapeYTranslation": "0.0",
+        "Macro3LandscapeScale": "1.0",
+        "Macro4LandscapeVisible": "false",
+        "Macro4LandscapeXTranslation": "0.0",
+        "Macro4LandscapeYTranslation": "0.0",
+        "Macro4LandscapeScale": "1.0",
+        "ToggleFastForwardLandscapeVisible": "false",
+        "ToggleFastForwardLandscapeXTranslation": "0.0",
+        "ToggleFastForwardLandscapeYTranslation": "0.0",
+        "ToggleFastForwardLandscapeScale": "1.0",
+        "ToggleTurboLandscapeVisible": "false",
+        "ToggleTurboLandscapeXTranslation": "0.0",
+        "ToggleTurboLandscapeYTranslation": "0.0",
+        "ToggleTurboLandscapeScale": "1.0",
+        "ToggleSlowmoLandscapeVisible": "false",
+        "ToggleSlowmoLandscapeXTranslation": "0.0",
+        "ToggleSlowmoLandscapeYTranslation": "0.0",
+        "ToggleSlowmoLandscapeScale": "1.0",
+        "AnalogToggleLandscapeVisible": "true",
+        "AnalogToggleLandscapeXTranslation": "0.0",
+        "AnalogToggleLandscapeYTranslation": "0.0",
+        "AnalogToggleLandscapeScale": "1.0",
+        "OpenPauseMenuLandscapeVisible": "true",
+        "OpenPauseMenuLandscapeXTranslation": "0.0",
+        "OpenPauseMenuLandscapeYTranslation": "0.0",
+        "OpenPauseMenuLandscapeScale": "1.0",
+        "QuickLoadLandscapeVisible": "false",
+        "QuickLoadLandscapeXTranslation": "0.0",
+        "QuickLoadLandscapeYTranslation": "0.0",
+        "QuickLoadLandscapeScale": "1.0",
+        "QuickSaveLandscapeVisible": "false",
+        "QuickSaveLandscapeXTranslation": "0.0",
+        "QuickSaveLandscapeYTranslation": "0.0",
+        "QuickSaveLandscapeScale": "1.0",
+        "DPadToggle": "false",
+        "L1ButtonToggle": "false",
+        "L2ButtonToggle": "false",
+        "SelectButtonToggle": "false",
+        "StartButtonToggle": "false",
+        "TriangleButtonToggle": "false",
+        "CircleButtonToggle": "false",
+        "CrossButtonToggle": "false",
+        "SquareButtonToggle": "false",
+        "R1ButtonToggle": "false",
+        "R2ButtonToggle": "false",
+        "L3ButtonToggle": "false",
+        "R3ButtonToggle": "false",
+        "LeftAxisToggle": "false",
+        "RightAxisToggle": "false",
+        "PressureToggle": "false",
+        "Macro1Toggle": "false",
+        "Macro2Toggle": "false",
+        "Macro3Toggle": "false",
+        "Macro4Toggle": "false",
+        "ToggleFastForwardToggle": "false",
+        "ToggleTurboToggle": "false",
+        "ToggleSlowmoToggle": "false",
+        "AnalogToggleToggle": "false",
+        "OpenPauseMenuToggle": "false",
+        "QuickLoadToggle": "false",
+        "QuickSaveToggle": "false"
+      },
+      "TouchscreenController/analog_stick": {
+        "DPadPortraitVisible": "true",
+        "DPadPortraitXTranslation": "0.0",
+        "DPadPortraitYTranslation": "0.0",
+        "DPadPortraitScale": "1.0",
+        "L1ButtonPortraitVisible": "true",
+        "L1ButtonPortraitXTranslation": "0.0",
+        "L1ButtonPortraitYTranslation": "0.0",
+        "L1ButtonPortraitScale": "1.0",
+        "L2ButtonPortraitVisible": "true",
+        "L2ButtonPortraitXTranslation": "0.0",
+        "L2ButtonPortraitYTranslation": "0.0",
+        "L2ButtonPortraitScale": "1.0",
+        "SelectButtonPortraitVisible": "true",
+        "SelectButtonPortraitXTranslation": "0.0",
+        "SelectButtonPortraitYTranslation": "0.0",
+        "SelectButtonPortraitScale": "1.0",
+        "StartButtonPortraitVisible": "true",
+        "StartButtonPortraitXTranslation": "0.0",
+        "StartButtonPortraitYTranslation": "0.0",
+        "StartButtonPortraitScale": "1.0",
+        "TriangleButtonPortraitVisible": "true",
+        "TriangleButtonPortraitXTranslation": "0.0",
+        "TriangleButtonPortraitYTranslation": "0.0",
+        "TriangleButtonPortraitScale": "1.0",
+        "CircleButtonPortraitVisible": "true",
+        "CircleButtonPortraitXTranslation": "0.0",
+        "CircleButtonPortraitYTranslation": "0.0",
+        "CircleButtonPortraitScale": "1.0",
+        "CrossButtonPortraitVisible": "true",
+        "CrossButtonPortraitXTranslation": "0.0",
+        "CrossButtonPortraitYTranslation": "0.0",
+        "CrossButtonPortraitScale": "1.0",
+        "SquareButtonPortraitVisible": "true",
+        "SquareButtonPortraitXTranslation": "0.0",
+        "SquareButtonPortraitYTranslation": "0.0",
+        "SquareButtonPortraitScale": "1.0",
+        "R1ButtonPortraitVisible": "true",
+        "R1ButtonPortraitXTranslation": "0.0",
+        "R1ButtonPortraitYTranslation": "0.0",
+        "R1ButtonPortraitScale": "1.0",
+        "R2ButtonPortraitVisible": "true",
+        "R2ButtonPortraitXTranslation": "0.0",
+        "R2ButtonPortraitYTranslation": "0.0",
+        "R2ButtonPortraitScale": "1.0",
+        "L3ButtonPortraitVisible": "false",
+        "L3ButtonPortraitXTranslation": "0.0",
+        "L3ButtonPortraitYTranslation": "0.0",
+        "L3ButtonPortraitScale": "1.0",
+        "R3ButtonPortraitVisible": "false",
+        "R3ButtonPortraitXTranslation": "0.0",
+        "R3ButtonPortraitYTranslation": "0.0",
+        "R3ButtonPortraitScale": "1.0",
+        "LeftAxisPortraitVisible": "true",
+        "LeftAxisPortraitXTranslation": "0.0",
+        "LeftAxisPortraitYTranslation": "0.0",
+        "LeftAxisPortraitScale": "1.0",
+        "RightAxisPortraitVisible": "true",
+        "RightAxisPortraitXTranslation": "0.0",
+        "RightAxisPortraitYTranslation": "0.0",
+        "RightAxisPortraitScale": "1.0",
+        "PressurePortraitVisible": "false",
+        "PressurePortraitXTranslation": "0.0",
+        "PressurePortraitYTranslation": "0.0",
+        "PressurePortraitScale": "1.0",
+        "Macro1PortraitVisible": "false",
+        "Macro1PortraitXTranslation": "0.0",
+        "Macro1PortraitYTranslation": "0.0",
+        "Macro1PortraitScale": "1.0",
+        "Macro2PortraitVisible": "false",
+        "Macro2PortraitXTranslation": "0.0",
+        "Macro2PortraitYTranslation": "0.0",
+        "Macro2PortraitScale": "1.0",
+        "Macro3PortraitVisible": "false",
+        "Macro3PortraitXTranslation": "0.0",
+        "Macro3PortraitYTranslation": "0.0",
+        "Macro3PortraitScale": "1.0",
+        "Macro4PortraitVisible": "false",
+        "Macro4PortraitXTranslation": "0.0",
+        "Macro4PortraitYTranslation": "0.0",
+        "Macro4PortraitScale": "1.0",
+        "ToggleFastForwardPortraitVisible": "false",
+        "ToggleFastForwardPortraitXTranslation": "0.0",
+        "ToggleFastForwardPortraitYTranslation": "0.0",
+        "ToggleFastForwardPortraitScale": "1.0",
+        "ToggleTurboPortraitVisible": "false",
+        "ToggleTurboPortraitXTranslation": "0.0",
+        "ToggleTurboPortraitYTranslation": "0.0",
+        "ToggleTurboPortraitScale": "1.0",
+        "ToggleSlowmoPortraitVisible": "false",
+        "ToggleSlowmoPortraitXTranslation": "0.0",
+        "ToggleSlowmoPortraitYTranslation": "0.0",
+        "ToggleSlowmoPortraitScale": "1.0",
+        "AnalogTogglePortraitVisible": "true",
+        "AnalogTogglePortraitXTranslation": "0.0",
+        "AnalogTogglePortraitYTranslation": "0.0",
+        "AnalogTogglePortraitScale": "1.0",
+        "OpenPauseMenuPortraitVisible": "true",
+        "OpenPauseMenuPortraitXTranslation": "0.0",
+        "OpenPauseMenuPortraitYTranslation": "0.0",
+        "OpenPauseMenuPortraitScale": "1.0",
+        "QuickLoadPortraitVisible": "false",
+        "QuickLoadPortraitXTranslation": "0.0",
+        "QuickLoadPortraitYTranslation": "0.0",
+        "QuickLoadPortraitScale": "1.0",
+        "QuickSavePortraitVisible": "false",
+        "QuickSavePortraitXTranslation": "0.0",
+        "QuickSavePortraitYTranslation": "0.0",
+        "QuickSavePortraitScale": "1.0",
+        "DPadLandscapeVisible": "true",
+        "DPadLandscapeXTranslation": "0.0",
+        "DPadLandscapeYTranslation": "0.0",
+        "DPadLandscapeScale": "1.0",
+        "L1ButtonLandscapeVisible": "true",
+        "L1ButtonLandscapeXTranslation": "0.0",
+        "L1ButtonLandscapeYTranslation": "0.0",
+        "L1ButtonLandscapeScale": "1.0",
+        "L2ButtonLandscapeVisible": "true",
+        "L2ButtonLandscapeXTranslation": "0.0",
+        "L2ButtonLandscapeYTranslation": "0.0",
+        "L2ButtonLandscapeScale": "1.0",
+        "SelectButtonLandscapeVisible": "true",
+        "SelectButtonLandscapeXTranslation": "0.0",
+        "SelectButtonLandscapeYTranslation": "0.0",
+        "SelectButtonLandscapeScale": "1.0",
+        "StartButtonLandscapeVisible": "true",
+        "StartButtonLandscapeXTranslation": "0.0",
+        "StartButtonLandscapeYTranslation": "0.0",
+        "StartButtonLandscapeScale": "1.0",
+        "TriangleButtonLandscapeVisible": "true",
+        "TriangleButtonLandscapeXTranslation": "0.0",
+        "TriangleButtonLandscapeYTranslation": "0.0",
+        "TriangleButtonLandscapeScale": "1.0",
+        "CircleButtonLandscapeVisible": "true",
+        "CircleButtonLandscapeXTranslation": "0.0",
+        "CircleButtonLandscapeYTranslation": "0.0",
+        "CircleButtonLandscapeScale": "1.0",
+        "CrossButtonLandscapeVisible": "true",
+        "CrossButtonLandscapeXTranslation": "0.0",
+        "CrossButtonLandscapeYTranslation": "0.0",
+        "CrossButtonLandscapeScale": "1.0",
+        "SquareButtonLandscapeVisible": "true",
+        "SquareButtonLandscapeXTranslation": "0.0",
+        "SquareButtonLandscapeYTranslation": "0.0",
+        "SquareButtonLandscapeScale": "1.0",
+        "R1ButtonLandscapeVisible": "true",
+        "R1ButtonLandscapeXTranslation": "0.0",
+        "R1ButtonLandscapeYTranslation": "0.0",
+        "R1ButtonLandscapeScale": "1.0",
+        "R2ButtonLandscapeVisible": "true",
+        "R2ButtonLandscapeXTranslation": "0.0",
+        "R2ButtonLandscapeYTranslation": "0.0",
+        "R2ButtonLandscapeScale": "1.0",
+        "L3ButtonLandscapeVisible": "false",
+        "L3ButtonLandscapeXTranslation": "0.0",
+        "L3ButtonLandscapeYTranslation": "0.0",
+        "L3ButtonLandscapeScale": "1.0",
+        "R3ButtonLandscapeVisible": "false",
+        "R3ButtonLandscapeXTranslation": "0.0",
+        "R3ButtonLandscapeYTranslation": "0.0",
+        "R3ButtonLandscapeScale": "1.0",
+        "LeftAxisLandscapeVisible": "true",
+        "LeftAxisLandscapeXTranslation": "0.0",
+        "LeftAxisLandscapeYTranslation": "0.0",
+        "LeftAxisLandscapeScale": "1.0",
+        "RightAxisLandscapeVisible": "true",
+        "RightAxisLandscapeXTranslation": "0.0",
+        "RightAxisLandscapeYTranslation": "0.0",
+        "RightAxisLandscapeScale": "1.0",
+        "PressureLandscapeVisible": "false",
+        "PressureLandscapeXTranslation": "0.0",
+        "PressureLandscapeYTranslation": "0.0",
+        "PressureLandscapeScale": "1.0",
+        "Macro1LandscapeVisible": "false",
+        "Macro1LandscapeXTranslation": "0.0",
+        "Macro1LandscapeYTranslation": "0.0",
+        "Macro1LandscapeScale": "1.0",
+        "Macro2LandscapeVisible": "false",
+        "Macro2LandscapeXTranslation": "0.0",
+        "Macro2LandscapeYTranslation": "0.0",
+        "Macro2LandscapeScale": "1.0",
+        "Macro3LandscapeVisible": "false",
+        "Macro3LandscapeXTranslation": "0.0",
+        "Macro3LandscapeYTranslation": "0.0",
+        "Macro3LandscapeScale": "1.0",
+        "Macro4LandscapeVisible": "false",
+        "Macro4LandscapeXTranslation": "0.0",
+        "Macro4LandscapeYTranslation": "0.0",
+        "Macro4LandscapeScale": "1.0",
+        "ToggleFastForwardLandscapeVisible": "false",
+        "ToggleFastForwardLandscapeXTranslation": "0.0",
+        "ToggleFastForwardLandscapeYTranslation": "0.0",
+        "ToggleFastForwardLandscapeScale": "1.0",
+        "ToggleTurboLandscapeVisible": "false",
+        "ToggleTurboLandscapeXTranslation": "0.0",
+        "ToggleTurboLandscapeYTranslation": "0.0",
+        "ToggleTurboLandscapeScale": "1.0",
+        "ToggleSlowmoLandscapeVisible": "false",
+        "ToggleSlowmoLandscapeXTranslation": "0.0",
+        "ToggleSlowmoLandscapeYTranslation": "0.0",
+        "ToggleSlowmoLandscapeScale": "1.0",
+        "AnalogToggleLandscapeVisible": "true",
+        "AnalogToggleLandscapeXTranslation": "0.0",
+        "AnalogToggleLandscapeYTranslation": "0.0",
+        "AnalogToggleLandscapeScale": "1.0",
+        "OpenPauseMenuLandscapeVisible": "true",
+        "OpenPauseMenuLandscapeXTranslation": "0.0",
+        "OpenPauseMenuLandscapeYTranslation": "0.0",
+        "OpenPauseMenuLandscapeScale": "1.0",
+        "QuickLoadLandscapeVisible": "false",
+        "QuickLoadLandscapeXTranslation": "0.0",
+        "QuickLoadLandscapeYTranslation": "0.0",
+        "QuickLoadLandscapeScale": "1.0",
+        "QuickSaveLandscapeVisible": "false",
+        "QuickSaveLandscapeXTranslation": "0.0",
+        "QuickSaveLandscapeYTranslation": "0.0",
+        "QuickSaveLandscapeScale": "1.0",
+        "DPadToggle": "false",
+        "L1ButtonToggle": "false",
+        "L2ButtonToggle": "false",
+        "SelectButtonToggle": "false",
+        "StartButtonToggle": "false",
+        "TriangleButtonToggle": "false",
+        "CircleButtonToggle": "false",
+        "CrossButtonToggle": "false",
+        "SquareButtonToggle": "false",
+        "R1ButtonToggle": "false",
+        "R2ButtonToggle": "false",
+        "L3ButtonToggle": "false",
+        "R3ButtonToggle": "false",
+        "LeftAxisToggle": "false",
+        "RightAxisToggle": "false",
+        "PressureToggle": "false",
+        "Macro1Toggle": "false",
+        "Macro2Toggle": "false",
+        "Macro3Toggle": "false",
+        "Macro4Toggle": "false",
+        "ToggleFastForwardToggle": "false",
+        "ToggleTurboToggle": "false",
+        "ToggleSlowmoToggle": "false",
+        "AnalogToggleToggle": "false",
+        "OpenPauseMenuToggle": "false",
+        "QuickLoadToggle": "false",
+        "QuickSaveToggle": "false"
+      },
+      "TouchscreenController/analog_sticks": {
+        "DPadPortraitVisible": "true",
+        "DPadPortraitXTranslation": "0.0",
+        "DPadPortraitYTranslation": "0.0",
+        "DPadPortraitScale": "1.0",
+        "L1ButtonPortraitVisible": "true",
+        "L1ButtonPortraitXTranslation": "0.0",
+        "L1ButtonPortraitYTranslation": "0.0",
+        "L1ButtonPortraitScale": "1.0",
+        "L2ButtonPortraitVisible": "true",
+        "L2ButtonPortraitXTranslation": "0.0",
+        "L2ButtonPortraitYTranslation": "0.0",
+        "L2ButtonPortraitScale": "1.0",
+        "SelectButtonPortraitVisible": "true",
+        "SelectButtonPortraitXTranslation": "0.0",
+        "SelectButtonPortraitYTranslation": "0.0",
+        "SelectButtonPortraitScale": "1.0",
+        "StartButtonPortraitVisible": "true",
+        "StartButtonPortraitXTranslation": "0.0",
+        "StartButtonPortraitYTranslation": "0.0",
+        "StartButtonPortraitScale": "1.0",
+        "TriangleButtonPortraitVisible": "true",
+        "TriangleButtonPortraitXTranslation": "0.0",
+        "TriangleButtonPortraitYTranslation": "0.0",
+        "TriangleButtonPortraitScale": "1.0",
+        "CircleButtonPortraitVisible": "true",
+        "CircleButtonPortraitXTranslation": "0.0",
+        "CircleButtonPortraitYTranslation": "0.0",
+        "CircleButtonPortraitScale": "1.0",
+        "CrossButtonPortraitVisible": "true",
+        "CrossButtonPortraitXTranslation": "0.0",
+        "CrossButtonPortraitYTranslation": "0.0",
+        "CrossButtonPortraitScale": "1.0",
+        "SquareButtonPortraitVisible": "true",
+        "SquareButtonPortraitXTranslation": "0.0",
+        "SquareButtonPortraitYTranslation": "0.0",
+        "SquareButtonPortraitScale": "1.0",
+        "R1ButtonPortraitVisible": "true",
+        "R1ButtonPortraitXTranslation": "0.0",
+        "R1ButtonPortraitYTranslation": "0.0",
+        "R1ButtonPortraitScale": "1.0",
+        "R2ButtonPortraitVisible": "true",
+        "R2ButtonPortraitXTranslation": "0.0",
+        "R2ButtonPortraitYTranslation": "0.0",
+        "R2ButtonPortraitScale": "1.0",
+        "L3ButtonPortraitVisible": "false",
+        "L3ButtonPortraitXTranslation": "0.0",
+        "L3ButtonPortraitYTranslation": "0.0",
+        "L3ButtonPortraitScale": "1.0",
+        "R3ButtonPortraitVisible": "false",
+        "R3ButtonPortraitXTranslation": "0.0",
+        "R3ButtonPortraitYTranslation": "0.0",
+        "R3ButtonPortraitScale": "1.0",
+        "LeftAxisPortraitVisible": "true",
+        "LeftAxisPortraitXTranslation": "0.0",
+        "LeftAxisPortraitYTranslation": "0.0",
+        "LeftAxisPortraitScale": "1.0",
+        "RightAxisPortraitVisible": "true",
+        "RightAxisPortraitXTranslation": "0.0",
+        "RightAxisPortraitYTranslation": "0.0",
+        "RightAxisPortraitScale": "1.0",
+        "PressurePortraitVisible": "false",
+        "PressurePortraitXTranslation": "0.0",
+        "PressurePortraitYTranslation": "0.0",
+        "PressurePortraitScale": "1.0",
+        "Macro1PortraitVisible": "false",
+        "Macro1PortraitXTranslation": "0.0",
+        "Macro1PortraitYTranslation": "0.0",
+        "Macro1PortraitScale": "1.0",
+        "Macro2PortraitVisible": "false",
+        "Macro2PortraitXTranslation": "0.0",
+        "Macro2PortraitYTranslation": "0.0",
+        "Macro2PortraitScale": "1.0",
+        "Macro3PortraitVisible": "false",
+        "Macro3PortraitXTranslation": "0.0",
+        "Macro3PortraitYTranslation": "0.0",
+        "Macro3PortraitScale": "1.0",
+        "Macro4PortraitVisible": "false",
+        "Macro4PortraitXTranslation": "0.0",
+        "Macro4PortraitYTranslation": "0.0",
+        "Macro4PortraitScale": "1.0",
+        "ToggleFastForwardPortraitVisible": "false",
+        "ToggleFastForwardPortraitXTranslation": "0.0",
+        "ToggleFastForwardPortraitYTranslation": "0.0",
+        "ToggleFastForwardPortraitScale": "1.0",
+        "ToggleTurboPortraitVisible": "false",
+        "ToggleTurboPortraitXTranslation": "0.0",
+        "ToggleTurboPortraitYTranslation": "0.0",
+        "ToggleTurboPortraitScale": "1.0",
+        "ToggleSlowmoPortraitVisible": "false",
+        "ToggleSlowmoPortraitXTranslation": "0.0",
+        "ToggleSlowmoPortraitYTranslation": "0.0",
+        "ToggleSlowmoPortraitScale": "1.0",
+        "AnalogTogglePortraitVisible": "true",
+        "AnalogTogglePortraitXTranslation": "0.0",
+        "AnalogTogglePortraitYTranslation": "0.0",
+        "AnalogTogglePortraitScale": "1.0",
+        "OpenPauseMenuPortraitVisible": "true",
+        "OpenPauseMenuPortraitXTranslation": "0.0",
+        "OpenPauseMenuPortraitYTranslation": "0.0",
+        "OpenPauseMenuPortraitScale": "1.0",
+        "QuickLoadPortraitVisible": "false",
+        "QuickLoadPortraitXTranslation": "0.0",
+        "QuickLoadPortraitYTranslation": "0.0",
+        "QuickLoadPortraitScale": "1.0",
+        "QuickSavePortraitVisible": "false",
+        "QuickSavePortraitXTranslation": "0.0",
+        "QuickSavePortraitYTranslation": "0.0",
+        "QuickSavePortraitScale": "1.0",
+        "DPadLandscapeVisible": "true",
+        "DPadLandscapeXTranslation": "0.0",
+        "DPadLandscapeYTranslation": "0.0",
+        "DPadLandscapeScale": "1.0",
+        "L1ButtonLandscapeVisible": "true",
+        "L1ButtonLandscapeXTranslation": "0.0",
+        "L1ButtonLandscapeYTranslation": "0.0",
+        "L1ButtonLandscapeScale": "1.0",
+        "L2ButtonLandscapeVisible": "true",
+        "L2ButtonLandscapeXTranslation": "0.0",
+        "L2ButtonLandscapeYTranslation": "0.0",
+        "L2ButtonLandscapeScale": "1.0",
+        "SelectButtonLandscapeVisible": "true",
+        "SelectButtonLandscapeXTranslation": "0.0",
+        "SelectButtonLandscapeYTranslation": "0.0",
+        "SelectButtonLandscapeScale": "1.0",
+        "StartButtonLandscapeVisible": "true",
+        "StartButtonLandscapeXTranslation": "0.0",
+        "StartButtonLandscapeYTranslation": "0.0",
+        "StartButtonLandscapeScale": "1.0",
+        "TriangleButtonLandscapeVisible": "true",
+        "TriangleButtonLandscapeXTranslation": "0.0",
+        "TriangleButtonLandscapeYTranslation": "0.0",
+        "TriangleButtonLandscapeScale": "1.0",
+        "CircleButtonLandscapeVisible": "true",
+        "CircleButtonLandscapeXTranslation": "0.0",
+        "CircleButtonLandscapeYTranslation": "0.0",
+        "CircleButtonLandscapeScale": "1.0",
+        "CrossButtonLandscapeVisible": "true",
+        "CrossButtonLandscapeXTranslation": "0.0",
+        "CrossButtonLandscapeYTranslation": "0.0",
+        "CrossButtonLandscapeScale": "1.0",
+        "SquareButtonLandscapeVisible": "true",
+        "SquareButtonLandscapeXTranslation": "0.0",
+        "SquareButtonLandscapeYTranslation": "0.0",
+        "SquareButtonLandscapeScale": "1.0",
+        "R1ButtonLandscapeVisible": "true",
+        "R1ButtonLandscapeXTranslation": "0.0",
+        "R1ButtonLandscapeYTranslation": "0.0",
+        "R1ButtonLandscapeScale": "1.0",
+        "R2ButtonLandscapeVisible": "true",
+        "R2ButtonLandscapeXTranslation": "0.0",
+        "R2ButtonLandscapeYTranslation": "0.0",
+        "R2ButtonLandscapeScale": "1.0",
+        "L3ButtonLandscapeVisible": "false",
+        "L3ButtonLandscapeXTranslation": "0.0",
+        "L3ButtonLandscapeYTranslation": "0.0",
+        "L3ButtonLandscapeScale": "1.0",
+        "R3ButtonLandscapeVisible": "false",
+        "R3ButtonLandscapeXTranslation": "0.0",
+        "R3ButtonLandscapeYTranslation": "0.0",
+        "R3ButtonLandscapeScale": "1.0",
+        "LeftAxisLandscapeVisible": "true",
+        "LeftAxisLandscapeXTranslation": "0.0",
+        "LeftAxisLandscapeYTranslation": "0.0",
+        "LeftAxisLandscapeScale": "1.0",
+        "RightAxisLandscapeVisible": "true",
+        "RightAxisLandscapeXTranslation": "0.0",
+        "RightAxisLandscapeYTranslation": "0.0",
+        "RightAxisLandscapeScale": "1.0",
+        "PressureLandscapeVisible": "false",
+        "PressureLandscapeXTranslation": "0.0",
+        "PressureLandscapeYTranslation": "0.0",
+        "PressureLandscapeScale": "1.0",
+        "Macro1LandscapeVisible": "false",
+        "Macro1LandscapeXTranslation": "0.0",
+        "Macro1LandscapeYTranslation": "0.0",
+        "Macro1LandscapeScale": "1.0",
+        "Macro2LandscapeVisible": "false",
+        "Macro2LandscapeXTranslation": "0.0",
+        "Macro2LandscapeYTranslation": "0.0",
+        "Macro2LandscapeScale": "1.0",
+        "Macro3LandscapeVisible": "false",
+        "Macro3LandscapeXTranslation": "0.0",
+        "Macro3LandscapeYTranslation": "0.0",
+        "Macro3LandscapeScale": "1.0",
+        "Macro4LandscapeVisible": "false",
+        "Macro4LandscapeXTranslation": "0.0",
+        "Macro4LandscapeYTranslation": "0.0",
+        "Macro4LandscapeScale": "1.0",
+        "ToggleFastForwardLandscapeVisible": "false",
+        "ToggleFastForwardLandscapeXTranslation": "0.0",
+        "ToggleFastForwardLandscapeYTranslation": "0.0",
+        "ToggleFastForwardLandscapeScale": "1.0",
+        "ToggleTurboLandscapeVisible": "false",
+        "ToggleTurboLandscapeXTranslation": "0.0",
+        "ToggleTurboLandscapeYTranslation": "0.0",
+        "ToggleTurboLandscapeScale": "1.0",
+        "ToggleSlowmoLandscapeVisible": "false",
+        "ToggleSlowmoLandscapeXTranslation": "0.0",
+        "ToggleSlowmoLandscapeYTranslation": "0.0",
+        "ToggleSlowmoLandscapeScale": "1.0",
+        "AnalogToggleLandscapeVisible": "true",
+        "AnalogToggleLandscapeXTranslation": "0.0",
+        "AnalogToggleLandscapeYTranslation": "0.0",
+        "AnalogToggleLandscapeScale": "1.0",
+        "OpenPauseMenuLandscapeVisible": "true",
+        "OpenPauseMenuLandscapeXTranslation": "0.0",
+        "OpenPauseMenuLandscapeYTranslation": "0.0",
+        "OpenPauseMenuLandscapeScale": "1.0",
+        "QuickLoadLandscapeVisible": "false",
+        "QuickLoadLandscapeXTranslation": "0.0",
+        "QuickLoadLandscapeYTranslation": "0.0",
+        "QuickLoadLandscapeScale": "1.0",
+        "QuickSaveLandscapeVisible": "false",
+        "QuickSaveLandscapeXTranslation": "0.0",
+        "QuickSaveLandscapeYTranslation": "0.0",
+        "QuickSaveLandscapeScale": "1.0",
+        "DPadToggle": "false",
+        "L1ButtonToggle": "false",
+        "L2ButtonToggle": "false",
+        "SelectButtonToggle": "false",
+        "StartButtonToggle": "false",
+        "TriangleButtonToggle": "false",
+        "CircleButtonToggle": "false",
+        "CrossButtonToggle": "false",
+        "SquareButtonToggle": "false",
+        "R1ButtonToggle": "false",
+        "R2ButtonToggle": "false",
+        "L3ButtonToggle": "false",
+        "R3ButtonToggle": "false",
+        "LeftAxisToggle": "false",
+        "RightAxisToggle": "false",
+        "PressureToggle": "false",
+        "Macro1Toggle": "false",
+        "Macro2Toggle": "false",
+        "Macro3Toggle": "false",
+        "Macro4Toggle": "false",
+        "ToggleFastForwardToggle": "false",
+        "ToggleTurboToggle": "false",
+        "ToggleSlowmoToggle": "false",
+        "AnalogToggleToggle": "false",
+        "OpenPauseMenuToggle": "false",
+        "QuickLoadToggle": "false",
+        "QuickSaveToggle": "false"
+      },
+      "TouchscreenController/lightgun": {
+        "DPadPortraitVisible": "true",
+        "DPadPortraitXTranslation": "0.0",
+        "DPadPortraitYTranslation": "0.0",
+        "DPadPortraitScale": "1.0",
+        "L1ButtonPortraitVisible": "true",
+        "L1ButtonPortraitXTranslation": "0.0",
+        "L1ButtonPortraitYTranslation": "0.0",
+        "L1ButtonPortraitScale": "1.0",
+        "L2ButtonPortraitVisible": "true",
+        "L2ButtonPortraitXTranslation": "0.0",
+        "L2ButtonPortraitYTranslation": "0.0",
+        "L2ButtonPortraitScale": "1.0",
+        "SelectButtonPortraitVisible": "true",
+        "SelectButtonPortraitXTranslation": "0.0",
+        "SelectButtonPortraitYTranslation": "0.0",
+        "SelectButtonPortraitScale": "1.0",
+        "StartButtonPortraitVisible": "true",
+        "StartButtonPortraitXTranslation": "0.0",
+        "StartButtonPortraitYTranslation": "0.0",
+        "StartButtonPortraitScale": "1.0",
+        "TriangleButtonPortraitVisible": "true",
+        "TriangleButtonPortraitXTranslation": "0.0",
+        "TriangleButtonPortraitYTranslation": "0.0",
+        "TriangleButtonPortraitScale": "1.0",
+        "CircleButtonPortraitVisible": "true",
+        "CircleButtonPortraitXTranslation": "0.0",
+        "CircleButtonPortraitYTranslation": "0.0",
+        "CircleButtonPortraitScale": "1.0",
+        "CrossButtonPortraitVisible": "true",
+        "CrossButtonPortraitXTranslation": "0.0",
+        "CrossButtonPortraitYTranslation": "0.0",
+        "CrossButtonPortraitScale": "1.0",
+        "SquareButtonPortraitVisible": "true",
+        "SquareButtonPortraitXTranslation": "0.0",
+        "SquareButtonPortraitYTranslation": "0.0",
+        "SquareButtonPortraitScale": "1.0",
+        "R1ButtonPortraitVisible": "true",
+        "R1ButtonPortraitXTranslation": "0.0",
+        "R1ButtonPortraitYTranslation": "0.0",
+        "R1ButtonPortraitScale": "1.0",
+        "R2ButtonPortraitVisible": "true",
+        "R2ButtonPortraitXTranslation": "0.0",
+        "R2ButtonPortraitYTranslation": "0.0",
+        "R2ButtonPortraitScale": "1.0",
+        "L3ButtonPortraitVisible": "false",
+        "L3ButtonPortraitXTranslation": "0.0",
+        "L3ButtonPortraitYTranslation": "0.0",
+        "L3ButtonPortraitScale": "1.0",
+        "R3ButtonPortraitVisible": "false",
+        "R3ButtonPortraitXTranslation": "0.0",
+        "R3ButtonPortraitYTranslation": "0.0",
+        "R3ButtonPortraitScale": "1.0",
+        "LeftAxisPortraitVisible": "true",
+        "LeftAxisPortraitXTranslation": "0.0",
+        "LeftAxisPortraitYTranslation": "0.0",
+        "LeftAxisPortraitScale": "1.0",
+        "RightAxisPortraitVisible": "true",
+        "RightAxisPortraitXTranslation": "0.0",
+        "RightAxisPortraitYTranslation": "0.0",
+        "RightAxisPortraitScale": "1.0",
+        "PressurePortraitVisible": "false",
+        "PressurePortraitXTranslation": "0.0",
+        "PressurePortraitYTranslation": "0.0",
+        "PressurePortraitScale": "1.0",
+        "Macro1PortraitVisible": "false",
+        "Macro1PortraitXTranslation": "0.0",
+        "Macro1PortraitYTranslation": "0.0",
+        "Macro1PortraitScale": "1.0",
+        "Macro2PortraitVisible": "false",
+        "Macro2PortraitXTranslation": "0.0",
+        "Macro2PortraitYTranslation": "0.0",
+        "Macro2PortraitScale": "1.0",
+        "Macro3PortraitVisible": "false",
+        "Macro3PortraitXTranslation": "0.0",
+        "Macro3PortraitYTranslation": "0.0",
+        "Macro3PortraitScale": "1.0",
+        "Macro4PortraitVisible": "false",
+        "Macro4PortraitXTranslation": "0.0",
+        "Macro4PortraitYTranslation": "0.0",
+        "Macro4PortraitScale": "1.0",
+        "ToggleFastForwardPortraitVisible": "false",
+        "ToggleFastForwardPortraitXTranslation": "0.0",
+        "ToggleFastForwardPortraitYTranslation": "0.0",
+        "ToggleFastForwardPortraitScale": "1.0",
+        "ToggleTurboPortraitVisible": "false",
+        "ToggleTurboPortraitXTranslation": "0.0",
+        "ToggleTurboPortraitYTranslation": "0.0",
+        "ToggleTurboPortraitScale": "1.0",
+        "ToggleSlowmoPortraitVisible": "false",
+        "ToggleSlowmoPortraitXTranslation": "0.0",
+        "ToggleSlowmoPortraitYTranslation": "0.0",
+        "ToggleSlowmoPortraitScale": "1.0",
+        "AnalogTogglePortraitVisible": "true",
+        "AnalogTogglePortraitXTranslation": "0.0",
+        "AnalogTogglePortraitYTranslation": "0.0",
+        "AnalogTogglePortraitScale": "1.0",
+        "OpenPauseMenuPortraitVisible": "true",
+        "OpenPauseMenuPortraitXTranslation": "0.0",
+        "OpenPauseMenuPortraitYTranslation": "0.0",
+        "OpenPauseMenuPortraitScale": "1.0",
+        "QuickLoadPortraitVisible": "false",
+        "QuickLoadPortraitXTranslation": "0.0",
+        "QuickLoadPortraitYTranslation": "0.0",
+        "QuickLoadPortraitScale": "1.0",
+        "QuickSavePortraitVisible": "false",
+        "QuickSavePortraitXTranslation": "0.0",
+        "QuickSavePortraitYTranslation": "0.0",
+        "QuickSavePortraitScale": "1.0",
+        "DPadLandscapeVisible": "true",
+        "DPadLandscapeXTranslation": "0.0",
+        "DPadLandscapeYTranslation": "0.0",
+        "DPadLandscapeScale": "1.0",
+        "L1ButtonLandscapeVisible": "true",
+        "L1ButtonLandscapeXTranslation": "0.0",
+        "L1ButtonLandscapeYTranslation": "0.0",
+        "L1ButtonLandscapeScale": "1.0",
+        "L2ButtonLandscapeVisible": "true",
+        "L2ButtonLandscapeXTranslation": "0.0",
+        "L2ButtonLandscapeYTranslation": "0.0",
+        "L2ButtonLandscapeScale": "1.0",
+        "SelectButtonLandscapeVisible": "true",
+        "SelectButtonLandscapeXTranslation": "0.0",
+        "SelectButtonLandscapeYTranslation": "0.0",
+        "SelectButtonLandscapeScale": "1.0",
+        "StartButtonLandscapeVisible": "true",
+        "StartButtonLandscapeXTranslation": "0.0",
+        "StartButtonLandscapeYTranslation": "0.0",
+        "StartButtonLandscapeScale": "1.0",
+        "TriangleButtonLandscapeVisible": "true",
+        "TriangleButtonLandscapeXTranslation": "0.0",
+        "TriangleButtonLandscapeYTranslation": "0.0",
+        "TriangleButtonLandscapeScale": "1.0",
+        "CircleButtonLandscapeVisible": "true",
+        "CircleButtonLandscapeXTranslation": "0.0",
+        "CircleButtonLandscapeYTranslation": "0.0",
+        "CircleButtonLandscapeScale": "1.0",
+        "CrossButtonLandscapeVisible": "true",
+        "CrossButtonLandscapeXTranslation": "0.0",
+        "CrossButtonLandscapeYTranslation": "0.0",
+        "CrossButtonLandscapeScale": "1.0",
+        "SquareButtonLandscapeVisible": "true",
+        "SquareButtonLandscapeXTranslation": "0.0",
+        "SquareButtonLandscapeYTranslation": "0.0",
+        "SquareButtonLandscapeScale": "1.0",
+        "R1ButtonLandscapeVisible": "true",
+        "R1ButtonLandscapeXTranslation": "0.0",
+        "R1ButtonLandscapeYTranslation": "0.0",
+        "R1ButtonLandscapeScale": "1.0",
+        "R2ButtonLandscapeVisible": "true",
+        "R2ButtonLandscapeXTranslation": "0.0",
+        "R2ButtonLandscapeYTranslation": "0.0",
+        "R2ButtonLandscapeScale": "1.0",
+        "L3ButtonLandscapeVisible": "false",
+        "L3ButtonLandscapeXTranslation": "0.0",
+        "L3ButtonLandscapeYTranslation": "0.0",
+        "L3ButtonLandscapeScale": "1.0",
+        "R3ButtonLandscapeVisible": "false",
+        "R3ButtonLandscapeXTranslation": "0.0",
+        "R3ButtonLandscapeYTranslation": "0.0",
+        "R3ButtonLandscapeScale": "1.0",
+        "LeftAxisLandscapeVisible": "true",
+        "LeftAxisLandscapeXTranslation": "0.0",
+        "LeftAxisLandscapeYTranslation": "0.0",
+        "LeftAxisLandscapeScale": "1.0",
+        "RightAxisLandscapeVisible": "true",
+        "RightAxisLandscapeXTranslation": "0.0",
+        "RightAxisLandscapeYTranslation": "0.0",
+        "RightAxisLandscapeScale": "1.0",
+        "PressureLandscapeVisible": "false",
+        "PressureLandscapeXTranslation": "0.0",
+        "PressureLandscapeYTranslation": "0.0",
+        "PressureLandscapeScale": "1.0",
+        "Macro1LandscapeVisible": "false",
+        "Macro1LandscapeXTranslation": "0.0",
+        "Macro1LandscapeYTranslation": "0.0",
+        "Macro1LandscapeScale": "1.0",
+        "Macro2LandscapeVisible": "false",
+        "Macro2LandscapeXTranslation": "0.0",
+        "Macro2LandscapeYTranslation": "0.0",
+        "Macro2LandscapeScale": "1.0",
+        "Macro3LandscapeVisible": "false",
+        "Macro3LandscapeXTranslation": "0.0",
+        "Macro3LandscapeYTranslation": "0.0",
+        "Macro3LandscapeScale": "1.0",
+        "Macro4LandscapeVisible": "false",
+        "Macro4LandscapeXTranslation": "0.0",
+        "Macro4LandscapeYTranslation": "0.0",
+        "Macro4LandscapeScale": "1.0",
+        "ToggleFastForwardLandscapeVisible": "false",
+        "ToggleFastForwardLandscapeXTranslation": "0.0",
+        "ToggleFastForwardLandscapeYTranslation": "0.0",
+        "ToggleFastForwardLandscapeScale": "1.0",
+        "ToggleTurboLandscapeVisible": "false",
+        "ToggleTurboLandscapeXTranslation": "0.0",
+        "ToggleTurboLandscapeYTranslation": "0.0",
+        "ToggleTurboLandscapeScale": "1.0",
+        "ToggleSlowmoLandscapeVisible": "false",
+        "ToggleSlowmoLandscapeXTranslation": "0.0",
+        "ToggleSlowmoLandscapeYTranslation": "0.0",
+        "ToggleSlowmoLandscapeScale": "1.0",
+        "AnalogToggleLandscapeVisible": "true",
+        "AnalogToggleLandscapeXTranslation": "0.0",
+        "AnalogToggleLandscapeYTranslation": "0.0",
+        "AnalogToggleLandscapeScale": "1.0",
+        "OpenPauseMenuLandscapeVisible": "true",
+        "OpenPauseMenuLandscapeXTranslation": "0.0",
+        "OpenPauseMenuLandscapeYTranslation": "0.0",
+        "OpenPauseMenuLandscapeScale": "1.0",
+        "QuickLoadLandscapeVisible": "false",
+        "QuickLoadLandscapeXTranslation": "0.0",
+        "QuickLoadLandscapeYTranslation": "0.0",
+        "QuickLoadLandscapeScale": "1.0",
+        "QuickSaveLandscapeVisible": "false",
+        "QuickSaveLandscapeXTranslation": "0.0",
+        "QuickSaveLandscapeYTranslation": "0.0",
+        "QuickSaveLandscapeScale": "1.0",
+        "DPadToggle": "false",
+        "L1ButtonToggle": "false",
+        "L2ButtonToggle": "false",
+        "SelectButtonToggle": "false",
+        "StartButtonToggle": "false",
+        "TriangleButtonToggle": "false",
+        "CircleButtonToggle": "false",
+        "CrossButtonToggle": "false",
+        "SquareButtonToggle": "false",
+        "R1ButtonToggle": "false",
+        "R2ButtonToggle": "false",
+        "L3ButtonToggle": "false",
+        "R3ButtonToggle": "false",
+        "LeftAxisToggle": "false",
+        "RightAxisToggle": "false",
+        "PressureToggle": "false",
+        "Macro1Toggle": "false",
+        "Macro2Toggle": "false",
+        "Macro3Toggle": "false",
+        "Macro4Toggle": "false",
+        "ToggleFastForwardToggle": "false",
+        "ToggleTurboToggle": "false",
+        "ToggleSlowmoToggle": "false",
+        "AnalogToggleToggle": "false",
+        "OpenPauseMenuToggle": "false",
+        "QuickLoadToggle": "false",
+        "QuickSaveToggle": "false"
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "installed_version": "v2.7-1-g44e4c7b50",
+  "version_code": 3302,
+  "target_sdk": 35,
+  "selected_owned_emulator": "Emu.FLYCAST",
+  "view_manifest_schemes": [
+    "file"
+  ],
+  "content_uri_implicit_view_resolves": false,
+  "file_uri_chd_view_resolves": true,
+  "launcher_alias_exists": true,
+  "actual_launcher_target_exported": true,
+  "required_action": "android.intent.action.VIEW",
+  "required_data_scheme": "content",
+  "preserve_named_uri": true,
+  "grant_selected_package_read_before_start": true,
+  "provider_exported": false
+}

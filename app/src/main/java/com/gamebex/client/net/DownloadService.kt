@@ -128,7 +128,6 @@ class DownloadService : Service() {
         private const val NOTIF_ID = 41
 
         fun ensureChannel(ctx: Context) {
-            if (Build.VERSION.SDK_INT < 26) return
             val mgr = ctx.getSystemService(NotificationManager::class.java) ?: return
             if (mgr.getNotificationChannel(CHANNEL_ID) == null) {
                 mgr.createNotificationChannel(
@@ -146,11 +145,7 @@ class DownloadService : Service() {
                 if (active) {
                     stopRequested = false
                     val intent = Intent(ctx.applicationContext, DownloadService::class.java)
-                    if (Build.VERSION.SDK_INT >= 26) {
-                        ctx.applicationContext.startForegroundService(intent)
-                    } else {
-                        ctx.applicationContext.startService(intent)
-                    }
+                    ctx.applicationContext.startForegroundService(intent)
                 } else if (promoted) {
                     ctx.applicationContext.stopService(Intent(ctx.applicationContext, DownloadService::class.java))
                 } else {

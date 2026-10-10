@@ -24,6 +24,8 @@ data class InstalledSnapshot(
 )
 
 class EmulatorsViewModel(appContext: Context) : ViewModel() {
+    // Only the process-wide application context is retained.
+    @android.annotation.SuppressLint("StaticFieldLeak")
     private val app = appContext.applicationContext
     val installer: EmuInstaller = (app as GameBexApp).installer
     private val _snaps = MutableStateFlow<Map<String, InstalledSnapshot>>(emptyMap())

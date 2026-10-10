@@ -1,5 +1,7 @@
 package com.gamebex.client.ui.home
 
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
@@ -154,7 +156,7 @@ fun HomeRoot(
     // the picked game leads the TV, not the previously selected card.
     var lastKeys by remember { mutableStateOf(model.cards.map { it.key }) }
     var lastMode by remember { mutableStateOf(model.mode) }
-    var lastToken by remember { mutableStateOf(model.selectionToken) }
+    var lastToken by remember { mutableLongStateOf(model.selectionToken) }
     LaunchedEffect(model) {
         val next = when {
             !restored && state.selected == null && model.cards.isNotEmpty() ->
@@ -307,7 +309,7 @@ fun HomeRoot(
     // visible and readable; the grid scrolls inside the strip.
     val view = LocalView.current
     val imeBottomPx = WindowInsets.ime.getBottom(density)
-    var canvasTopPx by remember { mutableStateOf(0f) }
+    var canvasTopPx by remember { mutableFloatStateOf(0f) }
     val visibleDp = with(density) { (view.height - imeBottomPx).toDp() } -
         with(density) { canvasTopPx.toDp() }
 
@@ -417,7 +419,7 @@ fun HomeRoot(
             // 6 px down, so the first card starts at y 128).
             model.sections.forEachIndexed { sectionIndex, section ->
                 item(key = "label:${section.group.name}", span = { GridItemSpan(2) }) {
-                    Box(labelRowModifier(g, first = sectionIndex == 0)) {
+                    Box(Modifier.labelRowModifier(g, first = sectionIndex == 0)) {
                         GroupLabel(section)
                     }
                 }
@@ -552,8 +554,8 @@ private fun Modifier.enterSubmitsWhileEditing(
  * itself keeps its 36 px box, bottom-aligned 8 px above the row floor — the
  * mockup's `.gl` padding — shifted up out of the row's bounds.
  */
-private fun labelRowModifier(g: ConsoleGeometry, first: Boolean): Modifier =
-    Modifier
+private fun Modifier.labelRowModifier(g: ConsoleGeometry, first: Boolean): Modifier =
+    this
         .then(if (first) Modifier.padding(top = g.x(6)) else Modifier)
         .size(width = g.x(848), height = g.x(26))
         .layout { measurable, constraints ->

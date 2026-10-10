@@ -36,7 +36,9 @@ class TogetherHubModelTest {
             game(8, "gb"),
         )
         val listed = hostableGames(games)
-        assertEquals(setOf(1L, 3L, 5L, 8L), listed.map { it.id }.toSet())
+        // The gba game and the bsnes-overridden snes game offer STREAM,
+        // so only the unavailable/deleted rows stay unlisted.
+        assertEquals(setOf(1L, 2L, 3L, 4L, 5L, 8L), listed.map { it.id }.toSet())
         for (row in listed) assertEquals(TogetherSupport.modeFor(games.first { it.id == row.id }), row.mode)
     }
 

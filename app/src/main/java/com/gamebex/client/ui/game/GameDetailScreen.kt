@@ -1180,10 +1180,14 @@ private fun metaLine(ent: GameEntity): String = buildString {
 }
 
 private fun emuLabelFor(ent: GameEntity): String {
+    val platform = PlatformRegistry.byFolder[ent.folder]
     ent.emulatorOverride?.let { pkg ->
+        if (pkg == Emu.RETROARCH.pkg) {
+            platform?.altRetroCore?.let { return "RetroArch · ${com.gamebex.client.data.CoreNames.display(ent.coreOverride ?: it)}" }
+        }
         Emu.entries.firstOrNull { it.pkg == pkg }?.let { return it.label }
     }
-    return when (val route = PlatformRegistry.byFolder[ent.folder]?.route) {
+    return when (val route = platform?.route) {
         is Route.RetroCore -> "RetroArch · ${com.gamebex.client.data.CoreNames.display(ent.coreOverride ?: route.core)}"
         is Route.Standalone -> route.emu.label
         is Route.GuidedInstall -> "${route.emu.label} (guided)"

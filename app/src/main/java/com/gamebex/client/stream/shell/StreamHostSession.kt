@@ -45,7 +45,7 @@ class StreamHostSession(
         if (!validGuest(config.guestAddress)) return fail(StreamError.BAD_CONFIG, "bad guest address")
         val effectiveConfig = config.copy(level = com.gamebex.client.stream.StreamDebug.int("start_level", config.level, 0..3))
         val level = StreamCaps.LEVELS.getOrNull(effectiveConfig.level) ?: return fail(StreamError.BAD_CONFIG, "bad level")
-        val openedPad = components.openPad() ?: return fail(StreamError.UHID, "no pad backend")
+        val openedPad = components.openPad(effectiveConfig) ?: return fail(StreamError.UHID, "no pad backend")
         pad = openedPad
         try {
             val channel = components.mediaChannel(effectiveConfig)
@@ -138,6 +138,11 @@ class StreamHostSession(
 
     fun gameLaunched() {
         if (!stopping.get()) audio?.gameLaunched()
+    }
+
+    /** Re-pins the video crop to the landscape viewport (no-op once stopped). */
+    fun updateCropViewport(viewport: String) {
+        if (!stopping.get()) video?.updateCropViewport(viewport)
     }
 
     fun stop() {

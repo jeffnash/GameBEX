@@ -5,7 +5,12 @@ import java.util.Locale
 
 /** Stats overlay lines: plain numbers, no judgement words. */
 object StreamStatsText {
-    fun lines(s: LatencyStats.Snapshot, audioOrigin: String = "capture", flagsLine: String? = null): List<String> {
+    fun lines(
+        s: LatencyStats.Snapshot,
+        audioOrigin: String = "capture",
+        flagsLine: String? = null,
+        overlayLine: String? = null,
+    ): List<String> {
         val m = LatencyStats.Metric.VIDEO
         val audioLabel = if (audioOrigin == "bridge-arrival") "Bridge arrival → output" else "Audio"
         val invalid = s.invalid.values.sum()
@@ -17,7 +22,7 @@ object StreamStatsText {
             "Input ${ms(s.p50Ms[LatencyStats.Metric.INPUT])} ms (p95 ${ms(s.p95Ms[LatencyStats.Metric.INPUT])})",
             "$audioLabel ${ms(s.p50Ms[LatencyStats.Metric.AUDIO])} ms · buffer ${s.audioBufferMs} ms · ${s.audioUnderruns} gaps · ${s.trackUnderruns} track underruns",
             "Wi-Fi round trip ${ms(s.rttMs)} ms · ${s.framesDropped} frames dropped",
-        ) + validity + listOfNotNull(flagsLine)
+        ) + validity + listOfNotNull(flagsLine, overlayLine)
     }
 
     fun runLogLines(lines: List<String>): List<String> = lines.flatMap { line ->

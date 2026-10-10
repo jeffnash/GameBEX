@@ -1,5 +1,6 @@
 package com.gamebex.client.ui.sources
 
+import androidx.compose.runtime.mutableIntStateOf
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -148,7 +149,7 @@ fun SourcesScreen(
     val focus = rememberScreenFocus()
 
     val dialogOpen = importState !is ImportState.Idle || impact != null || message != null
-    var dialogChoice by remember(dialogOpen) { mutableStateOf(0) }
+    var dialogChoice by remember(dialogOpen) { mutableIntStateOf(0) }
 
     fun activate(item: FocusItem?): Boolean {
         when (item) {

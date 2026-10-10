@@ -589,6 +589,26 @@ class HostEngineTest {
     }
 
     @Test
+    fun streamInstallCoreFetchesTheRetroArchCore() = runTest {
+        val game = sampleGame().copy(folder = "gba", fileName = "sample.gba", relPath = "sample.gba", ext = "gba")
+        val h = coreInstallHarness(this, modes = listOf(TogetherMode.STREAM), game = game)
+        h.emulators.readinessValue = Readiness.NeedsCore("mgba")
+        h.engine.hostGame(1)
+        advanceUntilIdle()
+        assertEquals(TogetherAction.INSTALL_CORE, h.engine.view.value?.problem?.action)
+
+        h.engine.act(TogetherAction.INSTALL_CORE)
+        runCurrent()
+        assertEquals("mgba", h.engine.view.value?.coreInstall?.core)
+        assertEquals(listOf("mgba"), h.emulators.coreArgs)
+
+        h.emulators.calls.single().result.complete(CoreResult.Started)
+        h.emulators.readinessValue = Readiness.Ready
+        advanceUntilIdle()
+        assertEquals(HostStep.WAITING, h.engine.view.value?.step)
+    }
+
+    @Test
     fun installCorePublishesSpinnerBeforeAnyBackendProgressAndRepeatsReshowIt() = runTest {
         val h = coreInstallHarness(this)
         h.engine.hostGame(1)
@@ -1233,10 +1253,12 @@ class HostEngineTest {
     private fun coreInstallHarness(
         scope: kotlinx.coroutines.CoroutineScope,
         platform: TogetherPlatform = FakePlatform(),
+        modes: List<TogetherMode> = listOf(TogetherMode.RA_NETPLAY),
+        game: com.gamebex.client.data.local.GameEntity =
+            sampleGame().copy(folder = "snes", fileName = "sample.sfc", relPath = "sample.sfc", ext = "sfc"),
     ): CoreInstallHarness {
         val engineScope = scope.engineTestScope()
         val emulators = ControlledCoreInstallEmulators()
-        val game = sampleGame().copy(folder = "snes", fileName = "sample.sfc", relPath = "sample.sfc", ext = "sfc")
         val engine = HostEngine(
             FakeLinkTransport(),
             emulators,
@@ -1246,7 +1268,7 @@ class HostEngineTest {
             TogetherTiming(helloMs = 50, byeMs = 50),
             engineScope,
             engineScope.coroutineContext[ContinuationInterceptor] as CoroutineDispatcher,
-            modesFor = { listOf(TogetherMode.RA_NETPLAY) },
+            modesFor = { modes },
         )
         return CoreInstallHarness(engine, emulators)
     }
@@ -1318,6 +1340,7 @@ private class ControlledCoreInstallEmulators : TogetherEmulators by FakeEmulator
     var keepFirstAlive = false
     var onFetch: (() -> Unit)? = null
     val calls = mutableListOf<Call>()
+    val coreArgs = mutableListOf<String>()
 
     class Call(val progress: (Long, Long) -> Unit) {
         val result = CompletableDeferred<CoreResult>()
@@ -1341,6 +1364,7 @@ private class ControlledCoreInstallEmulators : TogetherEmulators by FakeEmulator
     ): CoreResult {
         val call = Call(onProgress)
         calls += call
+        coreArgs += core
         onFetch?.invoke()
         try {
             return if (keepFirstAlive && calls.size == 1) {

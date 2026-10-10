@@ -64,7 +64,8 @@ class SaveIndexTest {
         File(root, "dolphin-emu/$name.png").writeText("png")
         File(root, "dolphin-emu/$name").setLastModified(5_000L)
 
-        val info = RetroArchSaveIndex(root).lookup(game())!!
+        // GC defaults to the Dolphin app; the RA alternate still indexes.
+        val info = RetroArchSaveIndex(root).lookup(game(emulatorOverride = Emu.RETROARCH.pkg))!!
 
         assertEquals(1, info.count)
         assertEquals(5_000L, info.newestMs)
@@ -226,7 +227,7 @@ class SaveIndexTest {
     @Test fun lookupWithoutStatesIsNull() {
         val root = tmp.newFolder("states")
         states(root, "dolphin-emu", "Other Game (USA).state.auto")
-        assertNull(RetroArchSaveIndex(root).lookup(game()))
+        assertNull(RetroArchSaveIndex(root).lookup(game(emulatorOverride = Emu.RETROARCH.pkg)))
     }
 
     @Test fun lookupUsesLaunchRelPathBaseWhenSet() {
@@ -246,28 +247,44 @@ class SaveIndexTest {
         states(root, "LRPS2", "Gran Turismo 4 (USA).state.auto")
         // ps2 routes to NetherSX2, not RetroArch.
         assertNull(RetroArchSaveIndex(root).lookup(game(folder = "ps2", fileName = "Gran Turismo 4 (USA).iso")))
-        // A RetroCore platform with a standalone emulator override: same.
+        // A Standalone platform with its app default or a non-RA override: same.
         states(root, "dolphin-emu", "Crazy Taxi (Europe).state.auto")
+        assertNull(RetroArchSaveIndex(root).lookup(game(fileName = "Crazy Taxi (Europe).rvz")))
         assertNull(
             RetroArchSaveIndex(root).lookup(
                 game(fileName = "Crazy Taxi (Europe).rvz", emulatorOverride = Emu.DOLPHIN.pkg),
             ),
         )
-        // The same game without the override still resolves.
-        assertEquals(1, RetroArchSaveIndex(root).lookup(game(fileName = "Crazy Taxi (Europe).rvz"))!!.count)
+        // The same game with the RetroArch alternate still resolves.
+        assertEquals(
+            1,
+            RetroArchSaveIndex(root)
+                .lookup(game(fileName = "Crazy Taxi (Europe).rvz", emulatorOverride = Emu.RETROARCH.pkg))!!
+                .count,
+        )
+        // PSP defaults to the PPSSPP app: no RA index without the override.
+        states(root, "PPSSPP", "Ridge Racers (USA).state.auto")
+        assertNull(RetroArchSaveIndex(root).lookup(game(folder = "psp", fileName = "Ridge Racers (USA).iso")))
+        assertEquals(
+            1,
+            RetroArchSaveIndex(root)
+                .lookup(game(folder = "psp", fileName = "Ridge Racers (USA).iso", emulatorOverride = Emu.RETROARCH.pkg))!!
+                .count,
+        )
     }
 
     @Test fun cacheHoldsUntilInvalidate() {
         val root = tmp.newFolder("states")
         val index = RetroArchSaveIndex(root)
         states(root, "dolphin-emu", "Crazy Taxi (Europe).state.auto")
-        assertEquals(1, index.lookup(game(fileName = "Crazy Taxi (Europe).rvz"))!!.count)
+        val game = game(fileName = "Crazy Taxi (Europe).rvz", emulatorOverride = Emu.RETROARCH.pkg)
+        assertEquals(1, index.lookup(game)!!.count)
 
         states(root, "dolphin-emu", "Crazy Taxi (Europe).state1", "Crazy Taxi (Europe).state2")
-        assertEquals(1, index.lookup(game(fileName = "Crazy Taxi (Europe).rvz"))!!.count)
+        assertEquals(1, index.lookup(game)!!.count)
 
         index.invalidate()
-        assertEquals(3, index.lookup(game(fileName = "Crazy Taxi (Europe).rvz"))!!.count)
+        assertEquals(3, index.lookup(game)!!.count)
     }
 
     @Test fun stateMatchingIsExactNotPrefix() {

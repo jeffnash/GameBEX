@@ -1,0 +1,126 @@
+{
+  "observed_densities": [
+    280,
+    306
+  ],
+  "observed_unscaled_growth_px": [
+    17,
+    19
+  ],
+  "model": "floor(10*densityDpi/160), applied before the configured centered scale/translation",
+  "samples": [
+    {
+      "resource_id": "xyz.aethersx2.android:id/controller_button_l2",
+      "rest_view_bounds": [
+        115,
+        1021,
+        249,
+        1088
+      ],
+      "changed_bounds": [
+        96,
+        1002,
+        268,
+        1107
+      ],
+      "density_dpi": 306
+    },
+    {
+      "resource_id": "xyz.aethersx2.android:id/controller_button_l1",
+      "rest_view_bounds": [
+        115,
+        1116,
+        249,
+        1183
+      ],
+      "changed_bounds": [
+        96,
+        1097,
+        268,
+        1202
+      ],
+      "density_dpi": 306
+    },
+    {
+      "resource_id": "xyz.aethersx2.android:id/controller_button_triangle",
+      "rest_view_bounds": [
+        490,
+        1259,
+        586,
+        1355
+      ],
+      "changed_bounds": [
+        471,
+        1240,
+        605,
+        1374
+      ],
+      "density_dpi": 306
+    },
+    {
+      "resource_id": "xyz.aethersx2.android:id/controller_button_square",
+      "rest_view_bounds": [
+        394,
+        1355,
+        490,
+        1451
+      ],
+      "changed_bounds": [
+        375,
+        1336,
+        509,
+        1470
+      ],
+      "density_dpi": 306
+    },
+    {
+      "resource_id": "xyz.aethersx2.android:id/controller_button_circle",
+      "rest_view_bounds": [
+        586,
+        1355,
+        682,
+        1451
+      ],
+      "changed_bounds": [
+        567,
+        1336,
+        701,
+        1470
+      ],
+      "density_dpi": 306
+    },
+    {
+      "resource_id": "xyz.aethersx2.android:id/controller_button_start",
+      "rest_view_bounds": [
+        408,
+        1541,
+        485,
+        1589
+      ],
+      "changed_bounds": [
+        389,
+        1522,
+        502,
+        1604
+      ],
+      "density_dpi": 306
+    },
+    {
+      "resource_id": "xyz.aethersx2.android:id/controller_button_cross",
+      "rest_view_bounds": [
+        490,
+        1451,
+        586,
+        1547
+      ],
+      "changed_bounds": [
+        471,
+        1432,
+        605,
+        1566
+      ],
+      "density_dpi": 306
+    }
+  ],
+  "clipping": "Start held image reaches screen bottom; its nonzero visible x right may exclude triangular transparency, so image box is not the nominal full control box"
+}

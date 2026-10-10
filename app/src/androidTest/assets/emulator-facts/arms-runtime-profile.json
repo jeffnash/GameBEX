@@ -1,0 +1,245 @@
+{
+  "sha256": "ac8f9928e65a1603b7dd581a67c3664109bd575659ddba387b42371cbaaf60fc",
+  "runtime_read_required": true,
+  "profile": {
+    "name": "Default",
+    "layout": {
+      "buttons": [
+        {
+          "id": "DPAD",
+          "x": 0.10000000149011612,
+          "y": 0.550000011920929,
+          "size": 150,
+          "on": true,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "TRIANGLE",
+          "x": 0.8600000143051147,
+          "y": 0.44999998807907104,
+          "size": 58,
+          "on": true,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "SQUARE",
+          "x": 0.800000011920929,
+          "y": 0.550000011920929,
+          "size": 58,
+          "on": true,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "CIRCLE",
+          "x": 0.9200000166893005,
+          "y": 0.550000011920929,
+          "size": 58,
+          "on": true,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "CROSS",
+          "x": 0.8600000143051147,
+          "y": 0.6499999761581421,
+          "size": 58,
+          "on": true,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "L2",
+          "x": 0.07999999821186066,
+          "y": 0.10000000149011612,
+          "size": 56,
+          "on": true,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "L1",
+          "x": 0.07999999821186066,
+          "y": 0.23000000417232513,
+          "size": 56,
+          "on": true,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "R2",
+          "x": 0.9200000166893005,
+          "y": 0.10000000149011612,
+          "size": 56,
+          "on": true,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "R1",
+          "x": 0.9200000166893005,
+          "y": 0.23000000417232513,
+          "size": 56,
+          "on": true,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "SELECT",
+          "x": 0.44999998807907104,
+          "y": 0.9200000166893005,
+          "size": 48,
+          "on": true,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "START",
+          "x": 0.550000011920929,
+          "y": 0.9200000166893005,
+          "size": 48,
+          "on": true,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "FAST_FORWARD",
+          "x": 0.30000001192092896,
+          "y": 0.4000000059604645,
+          "size": 44,
+          "on": false,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "MACRO1",
+          "x": 0.4000000059604645,
+          "y": 0.4000000059604645,
+          "size": 42,
+          "on": false,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "MACRO2",
+          "x": 0.47999998927116394,
+          "y": 0.4000000059604645,
+          "size": 42,
+          "on": false,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "MACRO3",
+          "x": 0.5600000023841858,
+          "y": 0.4000000059604645,
+          "size": 42,
+          "on": false,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "MACRO4",
+          "x": 0.6399999856948853,
+          "y": 0.4000000059604645,
+          "size": 42,
+          "on": false,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "SAVE_STATE",
+          "x": 0.30000001192092896,
+          "y": 0.5400000214576721,
+          "size": 44,
+          "on": false,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "LOAD_STATE",
+          "x": 0.3799999952316284,
+          "y": 0.5400000214576721,
+          "size": 44,
+          "on": false,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "SCREENSHOT",
+          "x": 0.46000000834465027,
+          "y": 0.5400000214576721,
+          "size": 44,
+          "on": false,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "ANALOG_EXTRA",
+          "x": 0.10000000149011612,
+          "y": 0.3400000035762787,
+          "size": 48,
+          "on": true,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "L_STICK",
+          "x": 0.2800000011920929,
+          "y": 0.800000011920929,
+          "size": 130,
+          "on": true,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "R_STICK",
+          "x": 0.7200000286102295,
+          "y": 0.800000011920929,
+          "size": 130,
+          "on": true,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "L3",
+          "x": 0.18000000715255737,
+          "y": 0.9300000071525574,
+          "size": 42,
+          "on": true,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "R3",
+          "x": 0.8199999928474426,
+          "y": 0.9300000071525574,
+          "size": 42,
+          "on": true,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "PAUSE",
+          "x": 0.8299999833106995,
+          "y": 0.054999999701976776,
+          "size": 48,
+          "on": true,
+          "hold": false,
+          "turbo": 0
+        },
+        {
+          "id": "PRESSURE",
+          "x": 0.10000000149011612,
+          "y": 0.7799999713897705,
+          "size": 44,
+          "on": false,
+          "hold": false,
+          "turbo": 0
+        }
+      ]
+    }
+  }
+}

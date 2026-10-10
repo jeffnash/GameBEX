@@ -1,5 +1,6 @@
 package com.gamebex.client
 
+import androidx.compose.runtime.mutableLongStateOf
 import android.view.KeyEvent
 import com.gamebex.client.ui.console.ControllerPrefs
 import com.gamebex.client.ui.console.remapGamepadKey
@@ -93,7 +94,7 @@ class MainActivity : ComponentActivity() {
      * launcher. AppNav returns to `library` and HomeRoot resets (query,
      * Surprise, selection) when it changes.
      */
-    val homePressToken = mutableStateOf(0L)
+    val homePressToken = mutableLongStateOf(0L)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -112,8 +113,8 @@ class MainActivity : ComponentActivity() {
         // The notch lands on the dark rail, never on focusable content.
         // API-gated: the field doesn't exist below 28 (minSdk 26).
         if (android.os.Build.VERSION.SDK_INT >= 28) {
-            window.attributes.layoutInDisplayCutoutMode =
-                android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            window.attributes.layoutInDisplayCutoutMode = if (android.os.Build.VERSION.SDK_INT >= 30)
+                android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS else android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
         // Handheld stays awake only while a download is active or a launch
         // is in progress — as the home app, the phone must
@@ -121,7 +122,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             GameBexTheme {
                 Box(Modifier.fillMaxSize().background(ConsoleColors.Background)) {
-                    AppNav(homePressToken = homePressToken.value)
+                    AppNav(homePressToken = homePressToken.longValue)
                     com.gamebex.client.ui.system.ControllerGuideHost()
                 }
             }
@@ -154,7 +155,7 @@ class MainActivity : ComponentActivity() {
         // launcher returns to `library` fresh (clears search, exits
         // Surprise, resets the selection) — never a route deep link.
         if (isHomePressIntent(intent)) {
-            homePressToken.value += 1
+            homePressToken.longValue += 1
             return
         }
         (application as GameBexApp).pendingRoute.value = consumeRouteIntent(this, intent)

@@ -1,5 +1,6 @@
 package com.gamebex.client.stream
 
+import com.gamebex.client.stream.p2.P2SlotMode
 import java.security.SecureRandom
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -30,6 +31,17 @@ data class StreamConfig(
     val keyframesOnRequest: Boolean = false,
     val crop: Boolean = false,
     val cropAspect: String = "4:3",
+    /**
+     * Overlay viewport in display px ("vx,vy,vw,vh,dw,dh", the same
+     * value the host stamps in its overlay sends): the game centers in the
+     * emulator window, not the display. Empty centers on the display.
+     */
+    val cropViewport: String = "",
+    /**
+     * P2 slot workaround ([P2SlotMode.wire]): "off", "placeholder" or
+     * "gate-realpad". Resolved in-app; unknown values stay off.
+     */
+    val p2SlotMode: String = P2SlotMode.OFF.wire,
 )
 
 /** Result of IStreamShell.start. Ports are the ones really bound (the preferred ones may be taken). */

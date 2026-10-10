@@ -23,7 +23,11 @@ import java.io.File
  *   one-time controller card says the same), so the first Stream shows a
  *   one-time guide; NetherSX2 keeps the port-2 mapping afterwards
  *   ([StreamCaps.NETHER_MAPPING_PERSISTS]).
- * - Anything else: a guide naming the emulator.
+ * - Flycast: no port setting exists (first-use order), so a one-time
+ *   guide explains host-on-controller-first.
+ * - PPSSPP, melonDS, Azahar, Vita3K, ScummVM, J2ME Loader: no
+ *   second-controller concept on one phone, so nothing to set up.
+ * - Anything else (ARMSX2, MAME4droid): a guide naming the emulator.
  */
 class StreamPlayer2Impl(
     private val externalBase: () -> File,
@@ -41,7 +45,7 @@ class StreamPlayer2Impl(
 ) : StreamPlayer2 {
     private var raSnapshot: RaExperimentOptions? = null
 
-    override suspend fun prepare(game: GameEntity, emu: Emu, rsoundReady: Boolean): P2Prep = when (emu) {
+    override suspend fun prepare(game: GameEntity, emu: Emu, rsoundReady: Boolean, p2SlotMode: P2SlotMode): P2Prep = when (emu) {
         Emu.RETROARCH -> {
             if (!rsoundReady || raSnapshot == null) raSnapshot = raExperiments()
             val overlayPath = if (overlay26b()) {
@@ -50,7 +54,7 @@ class StreamPlayer2Impl(
             } else null
             StreamRaConfig.write(externalBase(), rsoundReady, hasRealHostPad = hostPads().isNotEmpty(),
                 experiments = checkNotNull(raSnapshot), retroArchVersionCode = raVersionCode(),
-                overlayCfgPath = overlayPath)
+                overlayCfgPath = overlayPath, p2SlotMode = p2SlotMode)
                 ?.let { P2Prep.RetroArchConfig(it) } ?: P2Prep.Failed(TogetherCopy.configUnwritable)
         }
         Emu.DOLPHIN -> when (val r = dolphin.apply()) {
@@ -62,6 +66,12 @@ class StreamPlayer2Impl(
         } else {
             P2Prep.Written
         }
+        Emu.FLYCAST -> if (firstTime("flycast")) {
+            P2Prep.Guide(listOf(TogetherCopy.flycastPlayer2))
+        } else {
+            P2Prep.Written
+        }
+        Emu.PPSSPP, Emu.MELONDS, Emu.AZAHAR, Emu.VITA3K, Emu.SCUMMVM, Emu.J2MELOADER -> P2Prep.NoSecondPad
         else -> P2Prep.Guide(listOf(TogetherCopy.streamPlayer2Other(emu.label)))
     }
 

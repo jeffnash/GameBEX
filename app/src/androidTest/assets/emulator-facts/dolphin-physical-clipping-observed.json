@@ -1,0 +1,53 @@
+{
+  "host_display": [
+    1604,
+    720
+  ],
+  "host_viewport": [
+    70,
+    0,
+    1534,
+    720
+  ],
+  "controls": [
+    {
+      "id": "L",
+      "absolute_rect": [
+        20,
+        237,
+        162,
+        162
+      ],
+      "viewport_relative_rect": [
+        -50,
+        237,
+        162,
+        162
+      ]
+    },
+    {
+      "id": "STICK_MAIN",
+      "absolute_rect": [
+        27,
+        446,
+        198,
+        198
+      ],
+      "viewport_relative_rect": [
+        -43,
+        446,
+        198,
+        198
+      ]
+    }
+  ],
+  "measured_candidate": {
+    "legacy_pixel_percent": 94.508,
+    "strict_pixel_percent": 87.42594696275667,
+    "bbox_edge_worst_px": 1,
+    "pixels_global_x0_70": 7349,
+    "matched_global_x0_70_percent": 0.0,
+    "matched_global_x70_357_percent": 95.87338372001159,
+    "matched_global_x1317_1604_percent": 96.2293063346559
+  }
+}

@@ -6,7 +6,7 @@ import com.gamebex.client.data.Route
 import com.gamebex.client.data.local.GameEntity
 import com.gamebex.client.launch.RetroCoreFetcher
 import com.gamebex.client.launch.ShizukuFiles
-import com.gamebex.client.stream.StreamCaps
+import com.gamebex.client.stream.StreamEmus
 
 /** Which games support which mode. */
 object TogetherSupport {
@@ -15,24 +15,23 @@ object TogetherSupport {
     private val CORE_NAME = Regex("^[a-z0-9_]+$")
     private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
 
- /**
- * Every mode [game] can be played in, best first: [nativeModeFor], then hardware-verified native modes
- * for its folder ([TogetherCaps.VERIFIED_NATIVE]), then STREAM. Empty when the game can't be offered.
- */
+    /**
+     * Every mode [game] can be played in, best first: [nativeModeFor], then hardware-verified native modes
+     * for its folder ([TogetherCaps.VERIFIED_NATIVE]), then STREAM. Empty when the game can't be offered.
+     */
     fun modesFor(game: GameEntity): List<TogetherMode> {
         if (!game.available || game.deletedAtMs > 0) return emptyList()
         if (PlatformRegistry.byFolder[game.folder] == null) return emptyList()
         val out = LinkedHashSet<TogetherMode>()
         nativeModeFor(game)?.let { out += it }
         TogetherCaps.VERIFIED_NATIVE[game.folder]?.let { out += it }
-        if (game.folder in StreamCaps.FOLDERS) out += TogetherMode.STREAM
+        // Native modes stay the default; Stream is the "Use Stream instead" alternate.
+        if (StreamEmus.emuFor(game) != null) out += TogetherMode.STREAM
         return out.toList()
     }
 
- /** The default mode: the first of [modesFor], or null. */
     fun modeFor(game: GameEntity): TogetherMode? = modesFor(game).firstOrNull()
 
- /** The native two-phone mode proven before Stream existed, or null. */
     fun nativeModeFor(game: GameEntity): TogetherMode? {
         if (!game.available || game.deletedAtMs > 0) return null
         val platform = PlatformRegistry.byFolder[game.folder] ?: return null
@@ -43,17 +42,17 @@ object TogetherSupport {
         return if (core in TogetherCaps.RA_NETPLAY_CORES) TogetherMode.RA_NETPLAY else null
     }
 
- /**
- * Whether RetroArch has [core]. The probe decides when it answers. When it can't (null), only a core
- * GameBEX verified in its ledger counts, so a session never boots RetroArch on an unconfirmed core file.
- */
+    /**
+     * Whether RetroArch has [core]. The probe decides when it answers. When it can't (null), only a core
+     * GameBEX verified in its ledger counts, so a session never boots RetroArch on an unconfirmed core file.
+     */
     fun coreConfirmed(core: String, probed: Collection<String>?, ledgerVerified: () -> Boolean): Boolean =
         if (probed != null) probed.any { it.equals(core, ignoreCase = true) } else ledgerVerified()
 
- /**
- * The RetroArch modes need Shizuku running and allowed so a session launch can really restart RetroArch.
- * Null when it may go on (or for PSP, whose Shizuku gate is its own).
- */
+    /**
+     * The RetroArch modes need Shizuku running and allowed so a session launch can really restart RetroArch.
+     * Null when it may go on (or for PSP, whose Shizuku gate is its own).
+     */
     fun raShizukuGate(mode: TogetherMode, state: ShizukuFiles.State): Readiness? {
         if (mode == TogetherMode.PSP_ADHOC || !TogetherCaps.RA_RESTART_NEEDS_SHIZUKU) return null
         return when (state) {
@@ -64,10 +63,10 @@ object TogetherSupport {
         }
     }
 
- /**
- * RA_NETPLAY/GB_LINK readiness after the install and Shizuku gates: RetroArch's first run,
- * then preflight ([preflightStop] is its text), then the core ([coreConfirmed]).
- */
+    /**
+     * RA_NETPLAY/GB_LINK readiness after the install and Shizuku gates: RetroArch's first run,
+     * then preflight ([preflightStop] is its text), then the core ([coreConfirmed]).
+     */
     fun retroArchReadiness(
         needsFirstRun: Boolean,
         preflightStop: String?,
@@ -79,12 +78,12 @@ object TogetherSupport {
         needsFirstRun -> Readiness.NeedsOpenOnce(Emu.RETROARCH)
         preflightStop != null -> Readiness.Blocked(preflightStop)
         core != null && !coreConfirmed(core, probed, ledgerVerified) -> Readiness.NeedsCore(core)
- // The probe can't say which build is installed; only the ledger can.
+        // The probe can't say which build is installed; only the ledger can.
         core != null && knownBuildRequired && !ledgerVerified() -> Readiness.NeedsCore(core)
         else -> Readiness.Ready
     }
 
- /** Null when [mode] may go on with this RetroArch [versionCode] (null = unknown). */
+    /** Null when [mode] may go on with this RetroArch [versionCode] (null = unknown). */
     fun raNetplayBuildGate(mode: TogetherMode, versionCode: Long?): Readiness? =
         if (mode == TogetherMode.RA_NETPLAY && versionCode != null && versionCode < TogetherCaps.RA_NETPLAY_MIN_VERSION_CODE) {
             Readiness.NeedsUpdate(Emu.RETROARCH)
@@ -92,16 +91,20 @@ object TogetherSupport {
             null
         }
 
- /** The RetroArch core this phone's copy of [game] runs in [mode]; null for PSP_ADHOC. */
+    /** The RetroArch core this phone's copy of [game] runs in [mode]; null for PSP_ADHOC. */
     fun coreFor(game: GameEntity, mode: TogetherMode): String? = when (mode) {
- // STREAM guests never run the game, so the offer carries no core.
+        // STREAM guests never run the game, so the offer carries no core.
         TogetherMode.PSP_ADHOC, TogetherMode.STREAM -> null
         TogetherMode.GB_LINK -> "gambatte"
         TogetherMode.RA_NETPLAY ->
-            game.coreOverride ?: (PlatformRegistry.byFolder[game.folder]?.route as? Route.RetroCore)?.core
+            game.coreOverride ?: run {
+                val platform = PlatformRegistry.byFolder[game.folder]
+                (platform?.route as? Route.RetroCore)?.core
+                    ?: platform?.altRetroCore?.takeIf { game.emulatorOverride == Emu.RETROARCH.pkg }
+            }
     }
 
- /** Folders whose games can be the guest's copy of a [folder] game in [mode]. */
+    /** Folders whose games can be the guest's copy of a [folder] game in [mode]. */
     fun matchFolders(mode: TogetherMode, folder: String): Set<String> = when (mode) {
         TogetherMode.PSP_ADHOC -> setOf(PSP_FOLDER)
         TogetherMode.STREAM -> setOf(folder)
@@ -115,10 +118,10 @@ object TogetherSupport {
         }
     }
 
- /**
- * A core build received over the link is used only when its name is a plain core id equal to
- * [expectedCore], its hash is 64 lower-case hex, and its size is 1..MAX_CORE_ZIP_BYTES. It guards file paths.
- */
+    /**
+     * A core build received over the link is used only when its name is a plain core id equal to
+     * [expectedCore], its hash is 64 lower-case hex, and its size is 1..MAX_CORE_ZIP_BYTES. It guards file paths.
+     */
     fun isSafeCoreBuild(b: CoreBuild, expectedCore: String): Boolean =
         b.core == expectedCore && CORE_NAME.matches(b.core) && SHA256_HEX.matches(b.sha256) &&
             b.sizeBytes in 1..RetroCoreFetcher.MAX_CORE_ZIP_BYTES

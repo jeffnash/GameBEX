@@ -1,0 +1,38 @@
+{
+  "externalKey": "L1ButtonToggle",
+  "section": "TouchscreenController/digital",
+  "samples": [
+    {
+      "event": "first-down",
+      "point": [
+        236,
+        305
+      ],
+      "l1_pressure": 255
+    },
+    {
+      "event": "first-up",
+      "point": [
+        236,
+        305
+      ],
+      "l1_pressure": 255
+    },
+    {
+      "event": "second-down",
+      "point": [
+        236,
+        305
+      ],
+      "l1_pressure": 0
+    },
+    {
+      "event": "second-up",
+      "point": [
+        236,
+        305
+      ],
+      "l1_pressure": 0
+    }
+  ]
+}

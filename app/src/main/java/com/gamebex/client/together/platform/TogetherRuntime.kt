@@ -10,7 +10,10 @@ import com.gamebex.client.together.session.TogetherEngine
 import com.gamebex.client.together.net.LiveProbesImpl
 import com.gamebex.client.together.proto.SocketTransport
 import com.gamebex.client.together.session.TogetherLibraryImpl
+import com.gamebex.client.together.HostViewport
+import com.gamebex.client.together.HostViewportInfo
 import com.gamebex.client.together.TogetherController
+import com.gamebex.client.together.defaultCutoutViewport
 import com.gamebex.client.stream.host.StreamShellClient
 import com.gamebex.client.stream.p2.StreamPlayer2Impl
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,6 +67,37 @@ object TogetherRuntime {
                     java.io.File(android.os.Environment.getExternalStorageDirectory(), "RetroArch"),
                 )
             },
+            hostViewportInfo = {
+                runCatching {
+                    val wm = app.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
+                    if (android.os.Build.VERSION.SDK_INT >= 30) {
+                        val display = wm.maximumWindowMetrics.bounds
+                        // GameBEX runs full-bleed, so its window coords are
+                        // display coords; a default-cutout-mode emulator on
+                        // the same display letterboxes off any cutout edge.
+                        val cutouts = wm.currentWindowMetrics.windowInsets.displayCutout
+                            ?.boundingRects.orEmpty()
+                            .map { HostViewport(it.left, it.top, it.width(), it.height()) }
+                        val vp = defaultCutoutViewport(display.width(), display.height(), cutouts)
+                        HostViewportInfo(vp, display.width(), display.height())
+                    } else {
+                        @Suppress("DEPRECATION")
+                        val size = android.graphics.Point()
+                        wm.defaultDisplay.getRealSize(size)
+                        HostViewportInfo(HostViewport(0, 0, size.x, size.y), size.x, size.y)
+                    }
+                }.getOrNull() ?: HostViewportInfo.UNKNOWN
+            },
+            appContext = { app },
+            emuOverlayFiles = {
+                // Shizuku shell-uid reads other apps' Android/data on 11+;
+                // without it the readers still get PM resources/APK art.
+                when (val p = com.gamebex.client.launch.ShizukuFiles.privileged(app)) {
+                    is com.gamebex.client.launch.Privileged.Ready -> p.files
+                    else -> com.gamebex.client.launch.DirectFiles
+                }
+            },
+            hostDensityDpi = { app.resources.displayMetrics.densityDpi },
         )
     }
 }

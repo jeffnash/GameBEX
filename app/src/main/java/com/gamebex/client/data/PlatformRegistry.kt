@@ -34,13 +34,19 @@ data class Platform(
     val display: String,
     val extensions: Set<String>,
     val route: Route,
-    /** Verified per-game alternates (P2 probes) offered by the detail screen. */
+    /** Per-game alternate emulators offered by the detail screen. */
     val altEmus: List<Emu> = emptyList(),
+    /**
+     * RetroArch core an [Emu.RETROARCH] per-game override boots on a
+     * Standalone platform (GC/Wii/PSP: the core freezes, so the app is the
+     * default and the core is the alternate). Null = no RA alternate.
+     */
+    val altRetroCore: String? = null,
 )
 
 /**
- * All 81 console slugs: folder, display name, accepted extensions
- * (from ES-DE's es_systems.xml, inspected) and launch route.
+ * Every console slug: folder, display name, accepted extensions
+ * (from ES-DE's es_systems.xml) and launch route.
  * Extension sets always include zip/7z; preparation decides extraction later.
  */
 object PlatformRegistry {
@@ -76,7 +82,7 @@ object PlatformRegistry {
         Platform("game-boy", "gb", "Game Boy", setOf("7z", "bs", "cgb", "dmg", "gb", "gbc", "gbx", "sfc", "sgb", "smc", "zip"), Route.RetroCore("gambatte")),
         Platform("game-boy-advance", "gba", "Game Boy Advance", setOf("7z", "agb", "bin", "cgb", "dmg", "gb", "gba", "gbc", "gbx", "sgb", "zip"), Route.RetroCore("mgba")),
         Platform("game-boy-color", "gbc", "Game Boy Color", setOf("7z", "bs", "cgb", "dmg", "gb", "gbc", "gbx", "sfc", "sgb", "smc", "zip"), Route.RetroCore("gambatte")),
-        Platform("gamecube", "gc", "GameCube", setOf("7z", "ciso", "dff", "dol", "elf", "gcm", "gcz", "iso", "json", "m3u", "rvz", "tgc", "wad", "wbfs", "wia", "zip"), Route.RetroCore("dolphin"), altEmus = listOf(Emu.DOLPHIN)),
+        Platform("gamecube", "gc", "GameCube", setOf("7z", "ciso", "dff", "dol", "elf", "gcm", "gcz", "iso", "json", "m3u", "rvz", "tgc", "wad", "wbfs", "wia", "zip"), Route.Standalone(Emu.DOLPHIN), altEmus = listOf(Emu.RETROARCH), altRetroCore = "dolphin"),
         Platform("gamepark-gp32", "gp32", "GamePark GP32", setOf("7z", "bin", "fxe", "smd", "zip"), Route.Blocked("GeePee32 route unverified")),
         Platform("j2me", "j2me", "J2ME", setOf("7z", "jar", "zip"), Route.Standalone(Emu.J2MELOADER)),
         Platform("lindbergh", "lindbergh", "Sega Lindbergh", setOf("7z", "zip"), Route.Blocked("no Android route (PC-based arcade)")),
@@ -98,7 +104,7 @@ object PlatformRegistry {
         Platform("nintendo-pokemon-mini", "pokemini", "Pokemon Mini", setOf("7z", "min", "zip"), Route.RetroCore("pokemini")),
         Platform("nintendo-satellaview", "satellaview", "Satellaview", setOf("7z", "bml", "bs", "fig", "sfc", "smc", "st", "swc", "zip"), Route.RetroCore("snes9x")),
         Platform("nintendo-virtual-boy", "virtualboy", "Virtual Boy", setOf("7z", "bin", "vb", "vboy", "zip"), Route.RetroCore("mednafen_vb")),
-        Platform("nintendo-wii", "wii", "Wii", setOf("7z", "ciso", "dff", "dol", "elf", "gcm", "gcz", "iso", "json", "m3u", "rvz", "tgc", "wad", "wbfs", "wia", "zip"), Route.RetroCore("dolphin"), altEmus = listOf(Emu.DOLPHIN)),
+        Platform("nintendo-wii", "wii", "Wii", setOf("7z", "ciso", "dff", "dol", "elf", "gcm", "gcz", "iso", "json", "m3u", "rvz", "tgc", "wad", "wbfs", "wia", "zip"), Route.Standalone(Emu.DOLPHIN), altEmus = listOf(Emu.RETROARCH), altRetroCore = "dolphin"),
         Platform("nokia-n-gage", "ngage", "N-Gage", setOf("7z", "zip"), Route.Blocked("no validated Android route")),
         Platform("nuon", "nuon", "Nuon", setOf("7z", "iso", "zip"), Route.Blocked("no Android route")),
         Platform("openbor", "openbor", "OpenBOR", setOf("7z", "openbor", "zip"), Route.Blocked("Android port unverified")),
@@ -111,7 +117,7 @@ object PlatformRegistry {
         // content and with a valid ISO + BIOS. NetherSX2 opens for a manual pick (no direct-boot API).
         Platform("playstation-2", "ps2", "PlayStation 2", setOf("7z", "bin", "chd", "ciso", "cso", "dump", "elf", "gz", "img", "iso", "isz", "m3u", "mdf", "ngr", "nrg", "zip"), Route.Standalone(Emu.NETHER), altEmus = listOf(Emu.ARMSX2)),
         Platform("playstation-4", "ps4", "PlayStation 4", setOf("7z", "ps4", "zip"), Route.Blocked("no validated Android emulator (never PSX emu)")),
-        Platform("playstation-portable", "psp", "PSP", setOf("7z", "chd", "cso", "elf", "iso", "pbp", "prx", "zip"), Route.RetroCore("ppsspp"), altEmus = listOf(Emu.PPSSPP)),
+        Platform("playstation-portable", "psp", "PSP", setOf("7z", "chd", "cso", "elf", "iso", "pbp", "prx", "zip"), Route.Standalone(Emu.PPSSPP), altEmus = listOf(Emu.RETROARCH), altRetroCore = "ppsspp"),
         Platform("ps-vita", "psvita", "PS Vita", setOf("7z", "psvita", "zip"), Route.GuidedInstall(Emu.VITA3K)),
         Platform("ps3", "ps3", "PlayStation 3", setOf("7z", "iso", "ps3", "zip"), Route.Blocked("no validated Android emulator")),
         Platform("scummvm", "scummvm", "ScummVM", setOf("7z", "scummvm", "svm", "zip"), Route.Standalone(Emu.SCUMMVM)),

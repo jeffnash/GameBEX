@@ -1,0 +1,392 @@
+{
+  "cases": [
+    {
+      "name": "A-nether-boot",
+      "input": {},
+      "controls": [
+        {
+          "resource": "controller_button_pause",
+          "bounds": [
+            1508,
+            35,
+            1569,
+            96
+          ]
+        },
+        {
+          "resource": "controller_button_l2",
+          "bounds": [
+            175,
+            186,
+            298,
+            247
+          ]
+        },
+        {
+          "resource": "controller_button_r2",
+          "bounds": [
+            1376,
+            186,
+            1499,
+            247
+          ]
+        },
+        {
+          "resource": "controller_button_l1",
+          "bounds": [
+            175,
+            274,
+            298,
+            335
+          ]
+        },
+        {
+          "resource": "controller_button_r1",
+          "bounds": [
+            1376,
+            274,
+            1499,
+            335
+          ]
+        },
+        {
+          "resource": "controller_axis_left",
+          "bounds": [
+            105,
+            404,
+            368,
+            667
+          ]
+        },
+        {
+          "resource": "controller_button_triangle",
+          "bounds": [
+            1393,
+            404,
+            1481,
+            492
+          ]
+        },
+        {
+          "resource": "controller_button_square",
+          "bounds": [
+            1306,
+            492,
+            1394,
+            580
+          ]
+        },
+        {
+          "resource": "controller_button_circle",
+          "bounds": [
+            1481,
+            492,
+            1569,
+            580
+          ]
+        },
+        {
+          "resource": "controller_button_select",
+          "bounds": [
+            723,
+            662,
+            793,
+            706
+          ]
+        },
+        {
+          "resource": "controller_button_analog",
+          "bounds": [
+            815,
+            662,
+            859,
+            706
+          ]
+        },
+        {
+          "resource": "controller_button_start",
+          "bounds": [
+            881,
+            662,
+            951,
+            706
+          ]
+        },
+        {
+          "resource": "controller_button_cross",
+          "bounds": [
+            1393,
+            579,
+            1481,
+            667
+          ]
+        }
+      ],
+      "sha256": "896cb5af5ef59a5baa1b08df976c4365ecd1ee91eb80d8bb68468f9134bf1e0b"
+    },
+    {
+      "name": "A-nether-scale075",
+      "input": {
+        "TouchscreenController/analog_stick": {
+          "CrossButtonLandscapeScale": "0.75"
+        }
+      },
+      "controls": [
+        {
+          "resource": "controller_button_pause",
+          "bounds": [
+            1508,
+            35,
+            1569,
+            96
+          ]
+        },
+        {
+          "resource": "controller_button_l2",
+          "bounds": [
+            175,
+            186,
+            298,
+            247
+          ]
+        },
+        {
+          "resource": "controller_button_r2",
+          "bounds": [
+            1376,
+            186,
+            1499,
+            247
+          ]
+        },
+        {
+          "resource": "controller_button_l1",
+          "bounds": [
+            175,
+            274,
+            298,
+            335
+          ]
+        },
+        {
+          "resource": "controller_button_r1",
+          "bounds": [
+            1376,
+            274,
+            1499,
+            335
+          ]
+        },
+        {
+          "resource": "controller_axis_left",
+          "bounds": [
+            105,
+            404,
+            368,
+            667
+          ]
+        },
+        {
+          "resource": "controller_button_triangle",
+          "bounds": [
+            1393,
+            404,
+            1481,
+            492
+          ]
+        },
+        {
+          "resource": "controller_button_square",
+          "bounds": [
+            1306,
+            492,
+            1394,
+            580
+          ]
+        },
+        {
+          "resource": "controller_button_circle",
+          "bounds": [
+            1481,
+            492,
+            1569,
+            580
+          ]
+        },
+        {
+          "resource": "controller_button_select",
+          "bounds": [
+            723,
+            662,
+            793,
+            706
+          ]
+        },
+        {
+          "resource": "controller_button_analog",
+          "bounds": [
+            815,
+            662,
+            859,
+            706
+          ]
+        },
+        {
+          "resource": "controller_button_start",
+          "bounds": [
+            881,
+            662,
+            951,
+            706
+          ]
+        },
+        {
+          "resource": "controller_button_cross",
+          "bounds": [
+            1404,
+            590,
+            1470,
+            656
+          ]
+        }
+      ],
+      "sha256": "7ad3f56fffcdcc1e0acb9c0c86ddc0beb2b45ee3dc194cab6aab98b9d13aecbc"
+    },
+    {
+      "name": "A-nether-scale125-offset",
+      "input": {
+        "TouchscreenController/analog_stick": {
+          "L1ButtonLandscapeXTranslation": "20.0",
+          "L1ButtonLandscapeYTranslation": "-10.0",
+          "L1ButtonLandscapeScale": "1.25",
+          "CrossButtonLandscapeXTranslation": "20.0",
+          "CrossButtonLandscapeYTranslation": "-10.0",
+          "CrossButtonLandscapeScale": "1.25",
+          "LeftAxisLandscapeXTranslation": "20.0",
+          "LeftAxisLandscapeYTranslation": "-10.0",
+          "LeftAxisLandscapeScale": "1.25"
+        }
+      },
+      "controls": [
+        {
+          "resource": "controller_button_pause",
+          "bounds": [
+            1508,
+            35,
+            1569,
+            96
+          ]
+        },
+        {
+          "resource": "controller_button_l2",
+          "bounds": [
+            175,
+            186,
+            298,
+            247
+          ]
+        },
+        {
+          "resource": "controller_button_r2",
+          "bounds": [
+            1376,
+            186,
+            1499,
+            247
+          ]
+        },
+        {
+          "resource": "controller_button_l1",
+          "bounds": [
+            180,
+            256,
+            333,
+            333
+          ]
+        },
+        {
+          "resource": "controller_button_r1",
+          "bounds": [
+            1376,
+            274,
+            1499,
+            335
+          ]
+        },
+        {
+          "resource": "controller_axis_left",
+          "bounds": [
+            92,
+            361,
+            421,
+            690
+          ]
+        },
+        {
+          "resource": "controller_button_triangle",
+          "bounds": [
+            1393,
+            404,
+            1481,
+            492
+          ]
+        },
+        {
+          "resource": "controller_button_square",
+          "bounds": [
+            1306,
+            492,
+            1394,
+            580
+          ]
+        },
+        {
+          "resource": "controller_button_circle",
+          "bounds": [
+            1481,
+            492,
+            1569,
+            580
+          ]
+        },
+        {
+          "resource": "controller_button_select",
+          "bounds": [
+            723,
+            662,
+            793,
+            706
+          ]
+        },
+        {
+          "resource": "controller_button_analog",
+          "bounds": [
+            815,
+            662,
+            859,
+            706
+          ]
+        },
+        {
+          "resource": "controller_button_start",
+          "bounds": [
+            881,
+            662,
+            951,
+            706
+          ]
+        },
+        {
+          "resource": "controller_button_cross",
+          "bounds": [
+            1402,
+            558,
+            1512,
+            668
+          ]
+        }
+      ],
+      "sha256": "ee6a5f1e93f3cb94876085c7c237fedb2cc4eeed4e6dffaaf5cd4f66c21daa4a"
+    }
+  ]
+}

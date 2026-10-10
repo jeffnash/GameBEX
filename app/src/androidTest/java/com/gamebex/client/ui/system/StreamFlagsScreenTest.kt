@@ -128,8 +128,10 @@ class StreamFlagsScreenTest {
         // First row is the audio-lead choice: A steps 512 -> 768.
         rule.onRoot().performKeyInput { pressKey(Key.ButtonA) }
         rule.onNodeWithTag("flag-value-audio_lead_frames", useUnmergedTree = true).assertTextEquals("768 (legacy)")
-        // Down past the two on-by-default toggles to the start-size
-        // choice, A steps default -> 1600x720.
+        // Down past the two on-by-default toggles and the P2 slot
+        // workaround choice to the start-size choice,
+        // A steps default -> 1600x720.
+        rule.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
         rule.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
         rule.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
         rule.onRoot().performKeyInput { pressKey(Key.DirectionDown) }

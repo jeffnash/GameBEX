@@ -1,0 +1,166 @@
+{
+  "cases": [
+    {
+      "touch_gliding": false,
+      "scenario": "cross-square",
+      "down": [
+        1437,
+        623
+      ],
+      "move": null,
+      "expected_pressed_buttons": [
+        "Cross"
+      ]
+    },
+    {
+      "touch_gliding": false,
+      "scenario": "cross-square",
+      "down": [
+        1437,
+        623
+      ],
+      "move": [
+        1350,
+        536
+      ],
+      "expected_pressed_buttons": [
+        "Square"
+      ]
+    },
+    {
+      "touch_gliding": false,
+      "scenario": "square-outside",
+      "down": [
+        1350,
+        536
+      ],
+      "move": null,
+      "expected_pressed_buttons": [
+        "Square"
+      ]
+    },
+    {
+      "touch_gliding": false,
+      "scenario": "square-outside",
+      "down": [
+        1350,
+        536
+      ],
+      "move": [
+        1230,
+        536
+      ],
+      "expected_pressed_buttons": []
+    },
+    {
+      "touch_gliding": false,
+      "scenario": "l1-outside",
+      "down": [
+        236,
+        304
+      ],
+      "move": null,
+      "expected_pressed_buttons": [
+        "L1"
+      ]
+    },
+    {
+      "touch_gliding": false,
+      "scenario": "l1-outside",
+      "down": [
+        236,
+        304
+      ],
+      "move": [
+        350,
+        304
+      ],
+      "expected_pressed_buttons": []
+    },
+    {
+      "touch_gliding": false,
+      "scenario": "outside-cross",
+      "down": [
+        1230,
+        623
+      ],
+      "move": null,
+      "expected_pressed_buttons": []
+    },
+    {
+      "touch_gliding": false,
+      "scenario": "outside-cross",
+      "down": [
+        1230,
+        623
+      ],
+      "move": [
+        1437,
+        623
+      ],
+      "expected_pressed_buttons": [
+        "Cross"
+      ]
+    },
+    {
+      "touch_gliding": true,
+      "scenario": "down",
+      "down": [
+        1437,
+        623
+      ],
+      "move": null,
+      "expected_pressed_buttons": [
+        "Cross"
+      ]
+    },
+    {
+      "touch_gliding": true,
+      "scenario": "square",
+      "down": [
+        1437,
+        623
+      ],
+      "move": [
+        1350,
+        536
+      ],
+      "expected_pressed_buttons": [
+        "Cross",
+        "Square"
+      ]
+    },
+    {
+      "touch_gliding": true,
+      "scenario": "circle",
+      "down": [
+        1437,
+        623
+      ],
+      "move": [
+        1525,
+        536
+      ],
+      "expected_pressed_buttons": [
+        "Cross",
+        "Circle"
+      ]
+    },
+    {
+      "touch_gliding": true,
+      "scenario": "outside",
+      "down": [
+        1437,
+        623
+      ],
+      "move": [
+        1230,
+        536
+      ],
+      "expected_pressed_buttons": [
+        "Cross"
+      ]
+    }
+  ],
+  "on_up": "all momentary buttons release"
+}

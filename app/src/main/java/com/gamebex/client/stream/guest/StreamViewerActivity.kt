@@ -99,6 +99,13 @@ class StreamViewerActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         configureDisplay()
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // Full-bleed under the camera cutout: the default mode letterboxes
+        // landscape, which shrinks the overlay canvas and breaks host/guest
+        // 1:1 (same-model phones share the notch, so drawing under it stays 1:1).
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            window.attributes.layoutInDisplayCutoutMode = if (android.os.Build.VERSION.SDK_INT >= 30)
+                android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS else android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
         WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -293,6 +300,18 @@ class StreamViewerActivity : ComponentActivity() {
         controllerObserver?.rescan()
         configureUnbufferedInput()
         logActualDisplay()
+        // Window bounds + display size, once per resume.
+        if (com.gamebex.client.stream.StreamDebug.flag("overlay_boxes")) {
+            runCatching {
+                val dm = resources.displayMetrics
+                val win = if (android.os.Build.VERSION.SDK_INT >= 30) {
+                    windowManager.currentWindowMetrics.bounds.let { "${it.width()}x${it.height()}" }
+                } else {
+                    "${dm.widthPixels}x${dm.heightPixels}"
+                }
+                Log.i(TAG, "OVERLAY_BOX window=$win display=${dm.widthPixels}x${dm.heightPixels} density=${dm.density}")
+            }
+        }
         if (wifiLock == null) wifiLock = createWifiLock()
         runCatching { wifiLock?.acquire() }.onFailure { Log.w(TAG, "wifi lock", it) }
     }
@@ -380,6 +399,8 @@ internal fun selectViewerDisplayMode(modes: List<ViewerDisplayMode>, width: Int,
 internal fun unbufferedJoystickSources(sdk: Int, enabled: Boolean): Int =
     if (sdk >= 30 && enabled) InputDevice.SOURCE_CLASS_JOYSTICK else InputDevice.SOURCE_CLASS_NONE
 
+// The injectable SDK value gates both Surface callbacks and makes the API branches testable on the JVM.
+@android.annotation.SuppressLint("InlinedApi")
 internal fun applyViewerFrameRate(
     sdk: Int,
     options: ViewerOptions,

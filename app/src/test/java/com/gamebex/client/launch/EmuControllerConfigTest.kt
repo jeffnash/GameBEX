@@ -48,6 +48,20 @@ class EmuControllerConfigTest {
         assertEquals("[General]\nISOPaths = 1\n[Android]\nShowInputOverlay = False\n", out)
     }
 
+    @Test fun dolphinStreamIniFlipsOverlayOffToOnOnly() {
+        val off = fixture("dolphin_Dolphin.ini")
+        val out = EmuControllerConfig.dolphinStreamIni(off)
+        assertEquals(listOf("ShowInputOverlay = False" to "ShowInputOverlay = True"), diff(off, out))
+        assertSame(out, EmuControllerConfig.dolphinStreamIni(out))
+    }
+
+    @Test fun dolphinStreamIniMissingKeyInsertedInsideAndroidSection() {
+        val noKey = fixture("dolphin_Dolphin.ini").replace("ShowInputOverlay = False\n", "")
+        val out = EmuControllerConfig.dolphinStreamIni(noKey)
+        assertEquals("True", IniText.get(out, "Android", "ShowInputOverlay"))
+        assertEquals(noKey.lines().size + 1, out.lines().size)
+    }
+
     @Test fun vita3kRealConfigHasNoOverlayKeySoNothingChanges() {
         val real = fixture("vita3k_config.yml")
         assertSame(real, EmuControllerConfig.vita3kYaml(real))

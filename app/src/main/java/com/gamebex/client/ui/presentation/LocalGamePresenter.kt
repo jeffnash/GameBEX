@@ -84,6 +84,8 @@ object LocalGamePresenter {
     }
 
     /** Launch-time space probe: the ROM volume needs headroom for saves/states. */
+// The launch guard measures available bytes without reclaiming unrelated application caches.
+@android.annotation.SuppressLint("UsableSpace")
     private fun hasLaunchSpace(ctx: Context, g: GameEntity): Boolean {
         val dir = RomStore.resolveFile(ctx, g.volumeId, g.relPath)?.parentFile ?: return true
         return runCatching { dir.usableSpace }.getOrDefault(Long.MAX_VALUE) > 64L * 1024 * 1024

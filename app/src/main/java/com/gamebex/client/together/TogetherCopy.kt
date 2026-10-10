@@ -56,7 +56,10 @@ object TogetherCopy {
         GuestPhase.PLAYING -> "Playing"
         null -> ""
     }
-    fun hostInstructions(mode: TogetherMode?): List<String> = when (mode) {
+    /** Shown while player 2's first report waits for the host pad's first input. */
+    const val pressControllerPrompt = "When the game starts, press any button on your controller once."
+
+    fun hostInstructions(mode: TogetherMode?, p2SlotPrompt: Boolean = false): List<String> = when (mode) {
         TogetherMode.RA_NETPLAY -> listOf(
             "When the game starts, hold SELECT and press R1 to open the room. The game restarts once.",
             "Pressing SELECT and R1 again closes the room.",
@@ -76,7 +79,7 @@ object TogetherCopy {
             "The game runs on this phone. The other phone shows your screen and plays its sound.",
             "Player 2 uses the other phone's controller. On this phone it's called $streamPadName.",
             "End stops the stream and removes player 2's controller.",
-        )
+        ) + if (p2SlotPrompt) listOf(pressControllerPrompt) else emptyList()
         null -> emptyList()
     }
     /** [menuButton]: the printed label of the pad button RetroArch's menu uses (keycode 100). */
@@ -278,6 +281,8 @@ object TogetherCopy {
     fun hostStreamLine(guest: String, fps: Int, bitrate: Int) = "Streaming to $guest · $fps fps · ${mbps(bitrate)} Mbps"
     fun mbps(bps: Int): String = String.format(java.util.Locale.US, "%.1f", bps / 1_000_000.0)
     const val netherPlayer2 = "One time only: in NetherSX2 open Settings, Controllers, Controller Port 2. Choose DualShock 2, then Automatic Mapping, and pick GameBEX Player 2."
+    /** Flycast assigns controllers to ports in first-use order (InputDeviceManager.createDevice); no setting reassigns them. */
+    const val flycastPlayer2 = "One time only: Flycast gives player 1 to the first controller used. Play on a controller on this phone first and GameBEX Player 2 becomes player 2. On touch alone, the guest shares player 1."
     fun streamPlayer2Other(emu: String) = "In $emu, set controller port 2 to $streamPadName. GameBEX can't set it for you."
     fun streamStartFailed(error: StreamError?): String = when (error) {
         StreamError.OLD_ANDROID -> streamNeedsAndroid13

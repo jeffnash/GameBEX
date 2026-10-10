@@ -9,7 +9,11 @@ import java.nio.charset.StandardCharsets
 object Frames {
     const val KIND_JSON: Int = 0x4A
     const val KIND_BLOB: Int = 0x42
-    const val MAX_JSON: Int = 65_536
+    /**
+     * Fits one whole overlay image (HostOverlayBundle.MAX_IMAGE_BYTES as base64 plus envelope; arcade
+     * buttons are ~217 KB base64), since parts never split an image. Must stay within MAX_FRAME_LENGTH.
+     */
+    const val MAX_JSON: Int = 262_144
     const val MAX_CHUNK: Int = 262_144
 
     private const val MAX_FRAME_LENGTH: Int = MAX_CHUNK + 5

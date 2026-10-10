@@ -30,8 +30,15 @@ object StreamRaConfig {
         hasRealHostPad: Boolean = false,
         experiments: RaExperimentOptions = RaExperimentOptions.sample(),
         retroArchVersionCode: Long = 0,
-        /** Seeded per-core overlay cfg ([OverlaySeed]); the host shows it and 26b shares it. */
+        /** Seeded per-core overlay cfg ([OverlaySeed]); the host shows it and shares it with the guest. */
         overlayCfgPath: String? = null,
+        /**
+         * PLACEHOLDER unbinds user 1, so the placeholder's registering SELECT
+         * blip stays silent even with stale host-pad binds. The player-2
+         * reservation stays in every mode: buttons follow slots alone, but the
+         * reservation still carries hat/analog.
+         */
+        p2SlotMode: P2SlotMode = P2SlotMode.OFF,
     ): LinkedHashMap<String, String> = LinkedHashMap<String, String>().apply {
         if (diagnostics) {
             put("log_verbosity", "true")
@@ -51,6 +58,26 @@ object StreamRaConfig {
         if (!overlayCfgPath.isNullOrBlank()) put("input_overlay", overlayCfgPath)
         put("input_player2_reserved_device", StreamCaps.PAD_NAME)
         put("input_player2_device_reservation_type", "2")
+        if (p2SlotMode == P2SlotMode.PLACEHOLDER) {
+            // Touch host: player 1 plays the overlay, so unbound user 1
+            // keeps the placeholder's registering SELECT blip silent.
+            put("input_player1_a_btn", "nul")
+            put("input_player1_b_btn", "nul")
+            put("input_player1_x_btn", "nul")
+            put("input_player1_y_btn", "nul")
+            put("input_player1_l_btn", "nul")
+            put("input_player1_r_btn", "nul")
+            put("input_player1_l2_btn", "nul")
+            put("input_player1_r2_btn", "nul")
+            put("input_player1_l3_btn", "nul")
+            put("input_player1_r3_btn", "nul")
+            put("input_player1_start_btn", "nul")
+            put("input_player1_select_btn", "nul")
+            put("input_player1_up_btn", "nul")
+            put("input_player1_down_btn", "nul")
+            put("input_player1_left_btn", "nul")
+            put("input_player1_right_btn", "nul")
+        }
         put("input_player2_a_btn", "97")
         put("input_player2_b_btn", "96")
         put("input_player2_x_btn", "100")
@@ -97,9 +124,10 @@ object StreamRaConfig {
         experiments: RaExperimentOptions = RaExperimentOptions.sample(),
         retroArchVersionCode: Long = 0,
         overlayCfgPath: String? = null,
+        p2SlotMode: P2SlotMode = P2SlotMode.OFF,
     ): String {
         val base = GraphicsTuner.retroArchConfigText(sharedRoot, resume = true).trimEnd('\n').split('\n')
-        val (merged, _) = RetroArchTuner.mergeConfig(base, overrides(rsoundReady, hasRealHostPad = hasRealHostPad, experiments = experiments, retroArchVersionCode = retroArchVersionCode, overlayCfgPath = overlayCfgPath))
+        val (merged, _) = RetroArchTuner.mergeConfig(base, overrides(rsoundReady, hasRealHostPad = hasRealHostPad, experiments = experiments, retroArchVersionCode = retroArchVersionCode, overlayCfgPath = overlayCfgPath, p2SlotMode = p2SlotMode))
         return merged.joinToString("\n") + "\n"
     }
 
@@ -113,11 +141,12 @@ object StreamRaConfig {
         experiments: RaExperimentOptions = RaExperimentOptions.sample(),
         retroArchVersionCode: Long = 0,
         overlayCfgPath: String? = null,
+        p2SlotMode: P2SlotMode = P2SlotMode.OFF,
     ): File? = try {
         val file = fileUnder(base)
         val dir = file.parentFile ?: throw IOException("no parent for $file")
         if (!dir.isDirectory && !dir.mkdirs() && !dir.isDirectory) throw IOException("Couldn't create $dir")
-        file.writeText(cfgText(base.absolutePath, rsoundReady, hasRealHostPad, experiments, retroArchVersionCode, overlayCfgPath))
+        file.writeText(cfgText(base.absolutePath, rsoundReady, hasRealHostPad, experiments, retroArchVersionCode, overlayCfgPath, p2SlotMode))
         file
     } catch (_: IOException) {
         null

@@ -1,0 +1,322 @@
+{
+  "viewport_origin": [
+    70,
+    0
+  ],
+  "outer_rect": [
+    27,
+    446,
+    198,
+    198
+  ],
+  "density_dpi": 280,
+  "opacity_byte": 165,
+  "knob_nominal_side_px": 144,
+  "down_display_point": [
+    126,
+    545
+  ],
+  "move_display_point": [
+    175,
+    545
+  ],
+  "captures": {
+    "A-pressed-03-STICK_MAIN.png": "c57b43c55637066cdc2829aadd4dec6806cba924b3aff7cd0214c6bc33af4601",
+    "B-pressed-03-STICK_MAIN.png": "80339eedc79046d2c94c4e77f17d93c724ee9e73ad411c25155773e31d31e9a7"
+  },
+  "samples": [
+    {
+      "display_point": [
+        166,
+        473
+      ],
+      "native_rgb": [
+        54,
+        54,
+        54
+      ],
+      "candidate_rgb": [
+        44,
+        44,
+        44
+      ]
+    },
+    {
+      "display_point": [
+        172,
+        480
+      ],
+      "native_rgb": [
+        45,
+        45,
+        45
+      ],
+      "candidate_rgb": [
+        19,
+        19,
+        19
+      ]
+    },
+    {
+      "display_point": [
+        189,
+        485
+      ],
+      "native_rgb": [
+        58,
+        58,
+        58
+      ],
+      "candidate_rgb": [
+        24,
+        24,
+        24
+      ]
+    },
+    {
+      "display_point": [
+        186,
+        495
+      ],
+      "native_rgb": [
+        43,
+        43,
+        43
+      ],
+      "candidate_rgb": [
+        18,
+        18,
+        18
+      ]
+    },
+    {
+      "display_point": [
+        142,
+        503
+      ],
+      "native_rgb": [
+        76,
+        76,
+        76
+      ],
+      "candidate_rgb": [
+        165,
+        165,
+        165
+      ]
+    },
+    {
+      "display_point": [
+        134,
+        510
+      ],
+      "native_rgb": [
+        151,
+        151,
+        151
+      ],
+      "candidate_rgb": [
+        165,
+        165,
+        165
+      ]
+    },
+    {
+      "display_point": [
+        215,
+        516
+      ],
+      "native_rgb": [
+        16,
+        16,
+        16
+      ],
+      "candidate_rgb": [
+        7,
+        7,
+        7
+      ]
+    },
+    {
+      "display_point": [
+        186,
+        531
+      ],
+      "native_rgb": [
+        15,
+        15,
+        15
+      ],
+      "candidate_rgb": [
+        6,
+        6,
+        6
+      ]
+    },
+    {
+      "display_point": [
+        116,
+        545
+      ],
+      "native_rgb": [
+        165,
+        165,
+        165
+      ],
+      "candidate_rgb": [
+        28,
+        28,
+        28
+      ]
+    },
+    {
+      "display_point": [
+        226,
+        551
+      ],
+      "native_rgb": [
+        165,
+        165,
+        165
+      ],
+      "candidate_rgb": [
+        36,
+        36,
+        36
+      ]
+    },
+    {
+      "display_point": [
+        225,
+        558
+      ],
+      "native_rgb": [
+        165,
+        165,
+        165
+      ],
+      "candidate_rgb": [
+        82,
+        82,
+        82
+      ]
+    },
+    {
+      "display_point": [
+        229,
+        565
+      ],
+      "native_rgb": [
+        0,
+        0,
+        0
+      ],
+      "candidate_rgb": [
+        86,
+        86,
+        86
+      ]
+    },
+    {
+      "display_point": [
+        225,
+        572
+      ],
+      "native_rgb": [
+        51,
+        51,
+        51
+      ],
+      "candidate_rgb": [
+        164,
+        164,
+        164
+      ]
+    },
+    {
+      "display_point": [
+        207,
+        579
+      ],
+      "native_rgb": [
+        59,
+        59,
+        59
+      ],
+      "candidate_rgb": [
+        25,
+        25,
+        25
+      ]
+    },
+    {
+      "display_point": [
+        204,
+        586
+      ],
+      "native_rgb": [
+        60,
+        60,
+        60
+      ],
+      "candidate_rgb": [
+        25,
+        25,
+        25
+      ]
+    },
+    {
+      "display_point": [
+        158,
+        594
+      ],
+      "native_rgb": [
+        37,
+        37,
+        37
+      ],
+      "candidate_rgb": [
+        73,
+        73,
+        73
+      ]
+    },
+    {
+      "display_point": [
+        148,
+        604
+      ],
+      "native_rgb": [
+        17,
+        17,
+        17
+      ],
+      "candidate_rgb": [
+        7,
+        7,
+        7
+      ]
+    },
+    {
+      "display_point": [
+        173,
+        616
+      ],
+      "native_rgb": [
+        61,
+        61,
+        61
+      ],
+      "candidate_rgb": [
+        39,
+        39,
+        39
+      ]
+    }
+  ],
+  "preserve_normal_acceptance": {
+    "legacy_pixels_percent": 99.997,
+    "strict_pixels_percent": 99.99755701320434,
+    "max_independent_edge_error_px": 1
+  }
+}

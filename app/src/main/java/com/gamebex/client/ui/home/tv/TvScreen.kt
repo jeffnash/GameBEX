@@ -48,8 +48,8 @@ fun TvScreen(
     channel: Int,
     reducedMotion: Boolean,
     onTap: () -> Unit,
-    selectionKey: String = channel.toString(),
     modifier: Modifier = Modifier,
+    selectionKey: String = channel.toString(),
 ) {
     val g = LocalConsoleGeometry.current
     val currentOnTap by rememberUpdatedState(onTap)
@@ -123,7 +123,7 @@ private fun TvContentLayer(
     modifier: Modifier = Modifier,
 ) {
     val g = LocalConsoleGeometry.current
-    Box(modifier.graphicsLayer { alpha = if (incoming) swap.newAlpha.value else swap.oldAlpha }) {
+    Box(modifier.graphicsLayer { alpha = if (incoming) swap.newAlpha.floatValue else swap.oldAlpha }) {
         TvContentView(content, Modifier.fillMaxSize())
         (content as? TvContent.Picture)?.progress?.let { progress ->
             val centerY =

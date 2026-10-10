@@ -19,6 +19,8 @@ import com.gamebex.client.stream.StreamCaps
  * hidden. Android 13+ only. Apps that opted out of playback capture are not
  * captured; the stream then has no sound from them.
  */
+// Shell-uid playback capture requires AudioPolicy reflection; unsupported APIs fail through existing error handling.
+@android.annotation.SuppressLint("PrivateApi")
 class PlaybackAudioSource(private val context: Context) : AudioSource {
     private val lock = Any()
     private var record: AudioRecord? = null

@@ -199,7 +199,7 @@ internal fun CardBox(
     val borderWidth = if (borderless) 0.dp else g.x(CardChrome.borderWidthPx(focused))
     val borderColor = CardChrome.borderColor(focused, selected)
     val fillColor = CardChrome.fill(focused, selected, fill)
-    Box(modifier = modifier.offset(x = shift, y = shift)) {
+    Box(modifier = modifier.offset { androidx.compose.ui.unit.IntOffset(shift.roundToPx(), shift.roundToPx()) }) {
         Box(
             modifier = Modifier
                 .fillMaxSize()

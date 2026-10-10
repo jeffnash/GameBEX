@@ -9,13 +9,13 @@ import org.junit.Test
 
 class TogetherJsonTest {
     @Test
-    fun resumeUsesTogetherThreeWithoutCapabilityNegotiation() {
-        assertEquals(3, TOGETHER_PROTO)
+    fun resumeUsesTogetherFourWithoutCapabilityNegotiation() {
+        assertEquals(4, TOGETHER_PROTO)
         val request = StreamResume("room", 3, "00112233445566778899aabbccddeeff", "00000000-0000-4000-8000-000000000001")
         val hello = LinkMsg.Hello(TOGETHER_PROTO, Role.GUEST, "device", "Sam", "2", streamProto = StreamWire.VERSION, streamResume = request)
         val encoded = LinkJson.encode(hello)
         assertEquals(hello, LinkJson.decode(encoded))
-        assertTrue(encoded.contains("\"proto\":3"))
+        assertTrue(encoded.contains("\"proto\":4"))
         assertTrue(encoded.contains("\"streamResume\""))
         assertFalse(encoded.contains("Supported"))
     }

@@ -89,6 +89,7 @@ class StreamResumeTest {
             stream, pad, { listOf(TogetherMode.STREAM) }, { null },
             controlOptions = { hostReads += 1; options }, controlLog = { logs += it },
             monotonicNs = { clockNs?.invoke() ?: (scope.testScheduler.currentTime * 1_000_000L) },
+            attachStableMs = { 0 },
         )
         val transport = object : LinkTransport {
             override suspend fun listen(preferredPort: Int) = error("guest does not listen")

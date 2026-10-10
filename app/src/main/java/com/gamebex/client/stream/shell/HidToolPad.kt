@@ -58,8 +58,8 @@ class HidToolPad private constructor(private val process: Process) : VirtualPad 
 
         fun available(): Boolean = File(PATH).canExecute()
 
-        fun registerCommand(): String =
-            "{\"id\":$DEVICE_ID,\"command\":\"register\",\"name\":\"${StreamCaps.PAD_NAME}\"," +
+        fun registerCommand(name: String = StreamCaps.PAD_NAME): String =
+            "{\"id\":$DEVICE_ID,\"command\":\"register\",\"name\":\"$name\"," +
                 "\"vid\":${StreamCaps.PAD_VENDOR},\"pid\":${StreamCaps.PAD_PRODUCT},\"bus\":\"usb\"," +
                 "\"descriptor\":${jsonArray(PadHid.DESCRIPTOR)}}"
 
@@ -69,7 +69,7 @@ class HidToolPad private constructor(private val process: Process) : VirtualPad 
         /** Unsigned byte values, as the hid tool's JSON parser expects. */
         fun jsonArray(bytes: ByteArray): String = bytes.joinToString(",", "[", "]") { (it.toInt() and 0xFF).toString() }
 
-        fun open(): HidToolPad? {
+        fun open(name: String = StreamCaps.PAD_NAME): HidToolPad? {
             if (!available()) return null
             val process = try {
                 ProcessBuilder(PATH, "-").redirectErrorStream(true).start()
@@ -80,7 +80,7 @@ class HidToolPad private constructor(private val process: Process) : VirtualPad 
             val pad = HidToolPad(process)
             // The tool logs to stdout; drain it so it never blocks on a full pipe.
             Thread({ runCatching { process.inputStream.copyTo(NullSink) } }, "gbx-hid-out").apply { isDaemon = true }.start()
-            if (!pad.send(registerCommand())) {
+            if (!pad.send(registerCommand(name))) {
                 pad.close()
                 return null
             }

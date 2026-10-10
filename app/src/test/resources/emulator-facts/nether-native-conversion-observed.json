@@ -1,0 +1,44 @@
+{
+  "cases": [
+    {
+      "wire_left_axes": [
+        32,
+        0
+      ],
+      "observed_console_left_axes": [
+        170,
+        127
+      ]
+    },
+    {
+      "wire_left_axes": [
+        64,
+        0
+      ],
+      "observed_console_left_axes": [
+        212,
+        127
+      ]
+    },
+    {
+      "wire_left_axes": [
+        64,
+        64
+      ],
+      "observed_console_left_axes": [
+        212,
+        212
+      ]
+    },
+    {
+      "wire_left_axes": [
+        95,
+        0
+      ],
+      "observed_console_left_axes": [
+        254,
+        127
+      ]
+    }
+  ]
+}

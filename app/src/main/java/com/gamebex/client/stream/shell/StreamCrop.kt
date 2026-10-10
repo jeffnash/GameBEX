@@ -28,7 +28,13 @@ import java.nio.FloatBuffer
  * failure disables the crop for that open (logged) instead of killing the
  * stream.
  */
-data class StreamCropOptions(val enabled: Boolean = false, val aspectNum: Int = 4, val aspectDen: Int = 3) {
+data class StreamCropOptions(
+    val enabled: Boolean = false,
+    val aspectNum: Int = 4,
+    val aspectDen: Int = 3,
+    /** Overlay viewport + display ("vx,vy,vw,vh,dw,dh", display px); "" = legacy display center. */
+    val viewport: String = "",
+) {
     companion object {
         fun sample(
             debug: Boolean = com.gamebex.client.BuildConfig.DEBUG,
@@ -37,54 +43,224 @@ data class StreamCropOptions(val enabled: Boolean = false, val aspectNum: Int = 
             if (!debug) return StreamCropOptions()
             if (prop("stream_crop") != "1") return StreamCropOptions()
             val (num, den) = aspectOf(prop("stream_crop_aspect"))
-            return StreamCropOptions(true, num, den)
+            return StreamCropOptions(true, num, den, prop("stream_crop_viewport") ?: "")
         }
 
         /** Shell entry: StreamConfig value with the adb override on debug builds. */
         fun resolve(config: StreamConfig?): StreamCropOptions {
             val enabled = shellFlag("stream_crop", config?.crop ?: false)
             if (!enabled) return StreamCropOptions()
-            val (num, den) = aspectOf(shellString("stream_crop_aspect", config?.cropAspect ?: "4:3", setOf("4:3", "16:9")))
-            return StreamCropOptions(true, num, den)
+            val propAspect = if (com.gamebex.client.BuildConfig.DEBUG) StreamDebug.prop("stream_crop_aspect") else null
+            val (num, den) = (aspectOrNull(propAspect) ?: aspectOrNull(config?.cropAspect) ?: intArrayOf(4, 3))
+                .let { it[0] to it[1] }
+            val vpProp = if (com.gamebex.client.BuildConfig.DEBUG) StreamDebug.prop("stream_crop_viewport") else null
+            val vp = if (vpProp != null && parseViewport(vpProp) != null) vpProp else (config?.cropViewport ?: "")
+            return StreamCropOptions(true, num, den, vp)
         }
 
-        private fun aspectOf(value: String?): IntArray = when (value) {
-            "16:9" -> intArrayOf(16, 9)
-            else -> intArrayOf(4, 3)
+        /** Resolves the crop aspect the way the shell does (default 4:3). Internal: the host stamps the same rect on the Together link. */
+        internal fun aspectOf(value: String?): IntArray = aspectOrNull(value) ?: intArrayOf(4, 3)
+
+        /** Parses a crop aspect ("N:D", small positive ints) or null when it is missing/malformed. */
+        internal fun aspectOrNull(value: String?): IntArray? {
+            val parts = (value ?: return null).split(":")
+            if (parts.size != 2) return null
+            val num = parts[0].toIntOrNull() ?: return null
+            val den = parts[1].toIntOrNull() ?: return null
+            if (num < 1 || den < 1 || num > 32 || den > 32) return null
+            return intArrayOf(num, den)
         }
     }
 }
 
 data class CropRect(val left: Int, val top: Int, val width: Int, val height: Int)
 
-/** Largest centered even rect of [num]:[den] inside [srcW]x[srcH]. */
-internal fun streamCropRect(srcW: Int, srcH: Int, num: Int, den: Int): CropRect {
+/**
+ * Largest even rect of [num]:[den] centered in the overlay viewport.
+ * With a landscape [viewport] ("vx,vy,vw,vh,dw,dh" in display px) the
+ * rect is display-px: the capture runs display-native (no 1604→1600
+ * resampling smear) and the GL pass crops it 1:1 into the encoder.
+ * The origin is exact (odd allowed: the GL pass UV-crops,
+ * only the encoder output must align); sizes stay even. A portrait or
+ * missing viewport falls back to the legacy behavior (largest even
+ * rect centered in [srcW]x[srcH], even origin): the game centers in
+ * the emulator window, not the display — centering in the 1604 display
+ * on the lab phones shifts the crop 35px right of the 1534 window's
+ * game picture, until the landscape re-pin corrects it.
+ */
+internal fun streamCropRect(srcW: Int, srcH: Int, num: Int, den: Int, viewport: String = ""): CropRect {
     require(srcW > 0 && srcH > 0 && num > 0 && den > 0)
-    var w = (srcH.toLong() * num / den).toInt()
-    var h = srcH
-    if (w > srcW) {
-        w = srcW
-        h = (srcW.toLong() * den / num).toInt()
+    val vp = parseViewport(viewport)?.takeIf { it[4] >= it[5] }
+    if (vp == null) {
+        var w = (srcH.toLong() * num / den).toInt()
+        var h = srcH
+        if (w > srcW) {
+            w = srcW
+            h = (srcW.toLong() * den / num).toInt()
+        }
+        w -= w % 2
+        h -= h % 2
+        if (w < 2 || h < 2) return CropRect(0, 0, srcW - srcW % 2, srcH - srcH % 2)
+        val left = ((srcW - w) / 2) and 1.inv()
+        val top = ((srcH - h) / 2) and 1.inv()
+        return CropRect(left, top, w, h)
+    }
+    // Native path: the viewport string carries the display size; the
+    // rect is display-px and the capture runs at the display size.
+    val dw = vp[4]
+    val dh = vp[5]
+    var w = (dh.toLong() * num / den).toInt()
+    var h = dh
+    if (w > dw) {
+        w = dw
+        h = (dw.toLong() * den / num).toInt()
     }
     w -= w % 2
     h -= h % 2
-    if (w < 2 || h < 2) return CropRect(0, 0, srcW - srcW % 2, srcH - srcH % 2)
-    val left = ((srcW - w) / 2) and 1.inv()
-    val top = ((srcH - h) / 2) and 1.inv()
+    if (w < 2 || h < 2) return CropRect(0, 0, dw - dw % 2, dh - dh % 2)
+    val cx = vp[0] + vp[2] / 2.0
+    val cy = vp[1] + vp[3] / 2.0
+    val left = (cx - w / 2.0).toInt().coerceIn(0, dw - w)
+    val top = (cy - h / 2.0).toInt().coerceIn(0, dh - h)
     return CropRect(left, top, w, h)
+}
+
+/**
+ * The capture size for [options]: the viewport's display size when a
+ * landscape viewport is present (native capture, no resampling smear),
+ * else the level size (legacy). Pure: tests drive this.
+ */
+internal fun streamCropCaptureSize(level: VideoLevel, options: StreamCropOptions): Pair<Int, Int> {
+    val vp = parseViewport(options.viewport)?.takeIf { it[4] >= it[5] }
+    if (options.enabled && vp != null) return vp[4] to vp[5]
+    return level.width to level.height
+}
+
+/**
+ * The window a default-cutout-mode app gets on a [displayW]x[displayH]
+ * display with [cutouts] bounding rects (display coords, each
+ * [left, top, right, bottom]), as [x, y, w, h]. Shell-side mirror of
+ * the host's `defaultCutoutViewport` (stream.shell must not import
+ * together): the system letterboxes the window off any display edge a
+ * cutout touches; floating hole-punches letterbox nothing. Pure: tests
+ * drive this.
+ */
+internal fun shellCutoutViewport(
+    displayW: Int,
+    displayH: Int,
+    cutouts: List<IntArray>,
+): IntArray {
+    var x = 0
+    var y = 0
+    var w = displayW
+    var h = displayH
+    cutouts.forEach { r ->
+        val (left, top, right, bottom) = r
+        if (left <= 0 && right - left > 0) {
+            val nx = right.coerceIn(0, displayW)
+            if (nx > x) {
+                w -= nx - x
+                x = nx
+            }
+        } else if (right >= displayW && right - left > 0) {
+            w = minOf(w, left - x)
+        }
+        if (top <= 0 && bottom - top > 0) {
+            val ny = bottom.coerceIn(0, displayH)
+            if (ny > y) {
+                h -= ny - y
+                y = ny
+            }
+        } else if (bottom >= displayH && bottom - top > 0) {
+            h = minOf(h, top - y)
+        }
+    }
+    if (w <= 0 || h <= 0) return intArrayOf(0, 0, displayW, displayH)
+    return intArrayOf(x, y, w, h)
+}
+
+/**
+ * Samples the display + cutout in the CURRENT rotation as a
+ * crop-viewport string ("vx,vy,vw,vh,dw,dh"), or "" when unreadable.
+ * The stream starts while the phone is portrait (lobby) but the
+ * emulator runs landscape with a letterboxed window, so the config's
+ * portrait-time viewport centers the crop like legacy; the shell
+ * re-samples after the game launches (see `gameLaunched`).
+ */
+internal fun currentCropViewport(context: android.content.Context?): String {
+    if (context == null) return ""
+    return runCatching {
+        val wm = context.getSystemService(android.content.Context.WINDOW_SERVICE) as? android.view.WindowManager
+            ?: return ""
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            val display = wm.maximumWindowMetrics.bounds
+            val cutouts = wm.currentWindowMetrics.windowInsets.displayCutout?.boundingRects.orEmpty()
+                .map { intArrayOf(it.left, it.top, it.right, it.bottom) }
+            val vp = shellCutoutViewport(display.width(), display.height(), cutouts)
+            "${vp[0]},${vp[1]},${vp[2]},${vp[3]},${display.width()},${display.height()}"
+        } else {
+            @Suppress("DEPRECATION")
+            val size = android.graphics.Point()
+            @Suppress("DEPRECATION")
+            wm.defaultDisplay.getRealSize(size)
+            "0,0,${size.x},${size.y},${size.x},${size.y}"
+        }
+    }.getOrNull() ?: ""
+}
+
+/**
+ * True once the display reports a landscape rotation, polling [pollMs]
+ * until [timeoutMs] (the emulator takes seconds to rotate after
+ * launch). Injectable [rotation] for tests.
+ */
+internal fun waitForLandscapeRotation(
+    context: android.content.Context?,
+    timeoutMs: Long = 15_000L,
+    pollMs: Long = 250L,
+    rotation: () -> Int? = {
+        runCatching {
+            val wm = context?.getSystemService(android.content.Context.WINDOW_SERVICE) as? android.view.WindowManager
+            @Suppress("DEPRECATION")
+            wm?.defaultDisplay?.rotation
+        }.getOrNull()
+    },
+): Boolean {
+    val endNs = System.nanoTime() + timeoutMs * 1_000_000L
+    do {
+        when (runCatching { rotation() }.getOrNull()) {
+            android.view.Surface.ROTATION_90, android.view.Surface.ROTATION_270 -> return true
+        }
+        if (System.nanoTime() >= endNs) return false
+        runCatching { Thread.sleep(pollMs) }
+    } while (true)
+}
+
+/** Parses "vx,vy,vw,vh,dw,dh" (all ints, sane sizes) or null. */
+internal fun parseViewport(viewport: String): IntArray? {
+    if (viewport.isBlank()) return null
+    val p = viewport.split(",").map { it.toIntOrNull() ?: return null }
+    if (p.size != 6 || p[2] <= 0 || p[3] <= 0 || p[4] <= 0 || p[5] <= 0) return null
+    if (p[0] < 0 || p[1] < 0 || p[0] + p[2] > p[4] || p[1] + p[3] > p[5]) return null
+    return p.toIntArray()
 }
 
 /** Encoder size for [rect]: 16-aligned (AVC-friendly), at least 16px. */
 internal fun streamCropEncodeSize(rect: CropRect): Pair<Int, Int> =
     maxOf(16, rect.width - rect.width % 16) to maxOf(16, rect.height - rect.height % 16)
 
-/** The level to configure the encoder at when cropping, or [level] unchanged. */
+/**
+ * The level to configure the encoder at when cropping, or [level]
+ * unchanged. The rect is display-px on the native path (a landscape
+ * viewport is present) and level-px on the legacy path; the full-frame
+ * checks run against the matching source size.
+ */
 internal fun streamCropEncodeLevel(level: VideoLevel, options: StreamCropOptions): Pair<VideoLevel, CropRect?> {
     if (!options.enabled) return level to null
-    val rect = streamCropRect(level.width, level.height, options.aspectNum, options.aspectDen)
-    if (rect.width >= level.width && rect.height >= level.height) return level to null
+    val (srcW, srcH) = streamCropCaptureSize(level, options)
+    val rect = streamCropRect(srcW, srcH, options.aspectNum, options.aspectDen, options.viewport)
+    if (rect.width >= srcW && rect.height >= srcH) return level to null
     val (w, h) = streamCropEncodeSize(rect)
-    if (w >= level.width && h >= level.height) return level to null
+    if (w >= srcW && h >= srcH) return level to null
     return level.copy(width = w, height = h) to rect
 }
 

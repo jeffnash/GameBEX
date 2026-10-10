@@ -70,8 +70,8 @@ fun artImageRequest(context: Context, file: File, revision: Any?): ImageRequest 
 fun BoxScope.GameEnvironment(
     model: GameEnvironmentModel,
     region: GameEnvRegion,
-    reducedMotion: Boolean = isSystemReducedMotion(),
     modifier: Modifier = Modifier,
+    reducedMotion: Boolean = isSystemReducedMotion(),
     /**
      * True when the caller paints one continuous page scrim (Home):
      * skip the directional mask, feather the hero's left 80px and

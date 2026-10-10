@@ -1,0 +1,31 @@
+{
+  "point": [
+    1350,
+    536
+  ],
+  "gesture": "stationary drag, 3000 ms; screenshot during active gesture",
+  "rows": [
+    {
+      "image": "nether-square-held.png",
+      "colored_art_bounds": [
+        1313,
+        499,
+        1387,
+        573
+      ],
+      "pixels": 1464,
+      "method": "pink-square color separation; original screenshot pixel measurement"
+    },
+    {
+      "image": "nether-square-released.png",
+      "colored_art_bounds": [
+        1323,
+        510,
+        1377,
+        562
+      ],
+      "pixels": 634,
+      "method": "pink-square color separation; original screenshot pixel measurement"
+    }
+  ]
+}

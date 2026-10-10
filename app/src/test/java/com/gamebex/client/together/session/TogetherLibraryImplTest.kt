@@ -60,9 +60,11 @@ class TogetherLibraryImplTest {
         assertNull(lib.offer(1))
         dao.games[1] = game(1, "No file")
         assertNull(lib.offer(1))
- // Wii has a mode now (Stream); Game Boy Advance still has none.
+        // Game Boy Advance has a mode now (Stream); a Blocked folder still has none.
         dao.games[1] = game(1, "GBA", folder = "gba")
         val file = File.createTempFile("gba", ".gba")
+        assertEquals("gba", library(dao, launchFile = { file }).offer(1)?.folder)
+        dao.games[1] = game(1, "Switch", folder = "switch")
         assertNull(library(dao, launchFile = { file }).offer(1))
         file.delete()
     }

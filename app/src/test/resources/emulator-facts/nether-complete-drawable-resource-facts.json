@@ -1,0 +1,1435 @@
+{
+  "apk_sha256": "2029e30dcc1ba1ecb8d73313f18b429b40e6044c7785c52af08b948ef94b3ddf",
+  "resource_table_sha256": "4269bcb6940850ad64b8c6777bad510531943d665ede95653b0566d6286031ff",
+  "drawables": [
+    {
+      "resource_id": "0x7f080000",
+      "name": "$avd_hide_password__0",
+      "resource_key": "drawable/$avd_hide_password__0",
+      "resource_path": "res/drawable/$avd_hide_password__0.xml"
+    },
+    {
+      "resource_id": "0x7f080001",
+      "name": "$avd_hide_password__1",
+      "resource_key": "drawable/$avd_hide_password__1",
+      "resource_path": "res/drawable/$avd_hide_password__1.xml"
+    },
+    {
+      "resource_id": "0x7f080002",
+      "name": "$avd_hide_password__2",
+      "resource_key": "drawable/$avd_hide_password__2",
+      "resource_path": "res/drawable/$avd_hide_password__2.xml"
+    },
+    {
+      "resource_id": "0x7f080003",
+      "name": "$avd_show_password__0",
+      "resource_key": "drawable/$avd_show_password__0",
+      "resource_path": "res/drawable/$avd_show_password__0.xml"
+    },
+    {
+      "resource_id": "0x7f080004",
+      "name": "$avd_show_password__1",
+      "resource_key": "drawable/$avd_show_password__1",
+      "resource_path": "res/drawable/$avd_show_password__1.xml"
+    },
+    {
+      "resource_id": "0x7f080005",
+      "name": "$avd_show_password__2",
+      "resource_key": "drawable/$avd_show_password__2",
+      "resource_path": "res/drawable/$avd_show_password__2.xml"
+    },
+    {
+      "resource_id": "0x7f080006",
+      "name": "$flag_eu__0",
+      "resource_key": "drawable/$flag_eu__0",
+      "resource_path": "res/drawable/$flag_eu__0.xml"
+    },
+    {
+      "resource_id": "0x7f080007",
+      "name": "$flag_eu__1",
+      "resource_key": "drawable/$flag_eu__1",
+      "resource_path": "res/drawable/$flag_eu__1.xml"
+    },
+    {
+      "resource_id": "0x7f080008",
+      "name": "$flag_eu__2",
+      "resource_key": "drawable/$flag_eu__2",
+      "resource_path": "res/drawable/$flag_eu__2.xml"
+    },
+    {
+      "resource_id": "0x7f080009",
+      "name": "$flag_jp__0",
+      "resource_key": "drawable/$flag_jp__0",
+      "resource_path": "res/drawable/$flag_jp__0.xml"
+    },
+    {
+      "resource_id": "0x7f08000a",
+      "name": "$flag_jp__1",
+      "resource_key": "drawable/$flag_jp__1",
+      "resource_path": "res/drawable/$flag_jp__1.xml"
+    },
+    {
+      "resource_id": "0x7f08000c",
+      "name": "abc_action_bar_item_background_material",
+      "resource_key": "drawable/abc_action_bar_item_background_material",
+      "resource_path": "res/drawable/abc_action_bar_item_background_material.xml"
+    },
+    {
+      "resource_id": "0x7f08000d",
+      "name": "abc_btn_borderless_material",
+      "resource_key": "drawable/abc_btn_borderless_material",
+      "resource_path": "res/drawable/abc_btn_borderless_material.xml"
+    },
+    {
+      "resource_id": "0x7f08000e",
+      "name": "abc_btn_check_material",
+      "resource_key": "drawable/abc_btn_check_material",
+      "resource_path": "res/drawable/abc_btn_check_material.xml"
+    },
+    {
+      "resource_id": "0x7f08000f",
+      "name": "abc_btn_check_material_anim",
+      "resource_key": "drawable/abc_btn_check_material_anim",
+      "resource_path": "res/drawable/abc_btn_check_material_anim.xml"
+    },
+    {
+      "resource_id": "0x7f080012",
+      "name": "abc_btn_colored_material",
+      "resource_key": "drawable/abc_btn_colored_material",
+      "resource_path": "res/drawable/abc_btn_colored_material.xml"
+    },
+    {
+      "resource_id": "0x7f080013",
+      "name": "abc_btn_default_mtrl_shape",
+      "resource_key": "drawable/abc_btn_default_mtrl_shape",
+      "resource_path": "res/drawable/abc_btn_default_mtrl_shape.xml"
+    },
+    {
+      "resource_id": "0x7f080014",
+      "name": "abc_btn_radio_material",
+      "resource_key": "drawable/abc_btn_radio_material",
+      "resource_path": "res/drawable/abc_btn_radio_material.xml"
+    },
+    {
+      "resource_id": "0x7f080015",
+      "name": "abc_btn_radio_material_anim",
+      "resource_key": "drawable/abc_btn_radio_material_anim",
+      "resource_path": "res/drawable/abc_btn_radio_material_anim.xml"
+    },
+    {
+      "resource_id": "0x7f08001a",
+      "name": "abc_cab_background_internal_bg",
+      "resource_key": "drawable/abc_cab_background_internal_bg",
+      "resource_path": "res/drawable/abc_cab_background_internal_bg.xml"
+    },
+    {
+      "resource_id": "0x7f08001b",
+      "name": "abc_cab_background_top_material",
+      "resource_key": "drawable/abc_cab_background_top_material",
+      "resource_path": "res/drawable/abc_cab_background_top_material.xml"
+    },
+    {
+      "resource_id": "0x7f08001d",
+      "name": "abc_control_background_material",
+      "resource_key": "drawable/abc_control_background_material",
+      "resource_path": "res/drawable/abc_control_background_material.xml"
+    },
+    {
+      "resource_id": "0x7f08001e",
+      "name": "abc_dialog_material_background",
+      "resource_key": "drawable/abc_dialog_material_background",
+      "resource_path": "res/drawable/abc_dialog_material_background.xml"
+    },
+    {
+      "resource_id": "0x7f08001f",
+      "name": "abc_edit_text_material",
+      "resource_key": "drawable/abc_edit_text_material",
+      "resource_path": "res/drawable/abc_edit_text_material.xml"
+    },
+    {
+      "resource_id": "0x7f080020",
+      "name": "abc_ic_ab_back_material",
+      "resource_key": "drawable/abc_ic_ab_back_material",
+      "resource_path": "res/drawable/abc_ic_ab_back_material.xml"
+    },
+    {
+      "resource_id": "0x7f080021",
+      "name": "abc_ic_arrow_drop_right_black_24dp",
+      "resource_key": "drawable/abc_ic_arrow_drop_right_black_24dp",
+      "resource_path": "res/drawable/abc_ic_arrow_drop_right_black_24dp.xml"
+    },
+    {
+      "resource_id": "0x7f080022",
+      "name": "abc_ic_clear_material",
+      "resource_key": "drawable/abc_ic_clear_material",
+      "resource_path": "res/drawable/abc_ic_clear_material.xml"
+    },
+    {
+      "resource_id": "0x7f080024",
+      "name": "abc_ic_go_search_api_material",
+      "resource_key": "drawable/abc_ic_go_search_api_material",
+      "resource_path": "res/drawable/abc_ic_go_search_api_material.xml"
+    },
+    {
+      "resource_id": "0x7f080025",
+      "name": "abc_ic_menu_copy_mtrl_am_alpha",
+      "resource_key": "drawable/abc_ic_menu_copy_mtrl_am_alpha",
+      "resource_path": "res/drawable/abc_ic_menu_copy_mtrl_am_alpha.xml"
+    },
+    {
+      "resource_id": "0x7f080026",
+      "name": "abc_ic_menu_cut_mtrl_alpha",
+      "resource_key": "drawable/abc_ic_menu_cut_mtrl_alpha",
+      "resource_path": "res/drawable/abc_ic_menu_cut_mtrl_alpha.xml"
+    },
+    {
+      "resource_id": "0x7f080027",
+      "name": "abc_ic_menu_overflow_material",
+      "resource_key": "drawable/abc_ic_menu_overflow_material",
+      "resource_path": "res/drawable/abc_ic_menu_overflow_material.xml"
+    },
+    {
+      "resource_id": "0x7f080028",
+      "name": "abc_ic_menu_paste_mtrl_am_alpha",
+      "resource_key": "drawable/abc_ic_menu_paste_mtrl_am_alpha",
+      "resource_path": "res/drawable/abc_ic_menu_paste_mtrl_am_alpha.xml"
+    },
+    {
+      "resource_id": "0x7f080029",
+      "name": "abc_ic_menu_selectall_mtrl_alpha",
+      "resource_key": "drawable/abc_ic_menu_selectall_mtrl_alpha",
+      "resource_path": "res/drawable/abc_ic_menu_selectall_mtrl_alpha.xml"
+    },
+    {
+      "resource_id": "0x7f08002a",
+      "name": "abc_ic_menu_share_mtrl_alpha",
+      "resource_key": "drawable/abc_ic_menu_share_mtrl_alpha",
+      "resource_path": "res/drawable/abc_ic_menu_share_mtrl_alpha.xml"
+    },
+    {
+      "resource_id": "0x7f08002b",
+      "name": "abc_ic_search_api_material",
+      "resource_key": "drawable/abc_ic_search_api_material",
+      "resource_path": "res/drawable/abc_ic_search_api_material.xml"
+    },
+    {
+      "resource_id": "0x7f08002c",
+      "name": "abc_ic_voice_search_api_material",
+      "resource_key": "drawable/abc_ic_voice_search_api_material",
+      "resource_path": "res/drawable/abc_ic_voice_search_api_material.xml"
+    },
+    {
+      "resource_id": "0x7f08002d",
+      "name": "abc_item_background_holo_dark",
+      "resource_key": "drawable/abc_item_background_holo_dark",
+      "resource_path": "res/drawable/abc_item_background_holo_dark.xml"
+    },
+    {
+      "resource_id": "0x7f08002e",
+      "name": "abc_item_background_holo_light",
+      "resource_key": "drawable/abc_item_background_holo_light",
+      "resource_path": "res/drawable/abc_item_background_holo_light.xml"
+    },
+    {
+      "resource_id": "0x7f08002f",
+      "name": "abc_list_divider_material",
+      "resource_key": "drawable/abc_list_divider_material",
+      "resource_path": "res/drawable/abc_list_divider_material.xml"
+    },
+    {
+      "resource_id": "0x7f080035",
+      "name": "abc_list_selector_background_transition_holo_dark",
+      "resource_key": "drawable/abc_list_selector_background_transition_holo_dark",
+      "resource_path": "res/drawable/abc_list_selector_background_transition_holo_dark.xml"
+    },
+    {
+      "resource_id": "0x7f080036",
+      "name": "abc_list_selector_background_transition_holo_light",
+      "resource_key": "drawable/abc_list_selector_background_transition_holo_light",
+      "resource_path": "res/drawable/abc_list_selector_background_transition_holo_light.xml"
+    },
+    {
+      "resource_id": "0x7f080039",
+      "name": "abc_list_selector_holo_dark",
+      "resource_key": "drawable/abc_list_selector_holo_dark",
+      "resource_path": "res/drawable/abc_list_selector_holo_dark.xml"
+    },
+    {
+      "resource_id": "0x7f08003a",
+      "name": "abc_list_selector_holo_light",
+      "resource_key": "drawable/abc_list_selector_holo_light",
+      "resource_path": "res/drawable/abc_list_selector_holo_light.xml"
+    },
+    {
+      "resource_id": "0x7f08003d",
+      "name": "abc_ratingbar_indicator_material",
+      "resource_key": "drawable/abc_ratingbar_indicator_material",
+      "resource_path": "res/drawable/abc_ratingbar_indicator_material.xml"
+    },
+    {
+      "resource_id": "0x7f08003e",
+      "name": "abc_ratingbar_material",
+      "resource_key": "drawable/abc_ratingbar_material",
+      "resource_path": "res/drawable/abc_ratingbar_material.xml"
+    },
+    {
+      "resource_id": "0x7f08003f",
+      "name": "abc_ratingbar_small_material",
+      "resource_key": "drawable/abc_ratingbar_small_material",
+      "resource_path": "res/drawable/abc_ratingbar_small_material.xml"
+    },
+    {
+      "resource_id": "0x7f080045",
+      "name": "abc_seekbar_thumb_material",
+      "resource_key": "drawable/abc_seekbar_thumb_material",
+      "resource_path": "res/drawable/abc_seekbar_thumb_material.xml"
+    },
+    {
+      "resource_id": "0x7f080046",
+      "name": "abc_seekbar_tick_mark_material",
+      "resource_key": "drawable/abc_seekbar_tick_mark_material",
+      "resource_path": "res/drawable/abc_seekbar_tick_mark_material.xml"
+    },
+    {
+      "resource_id": "0x7f080047",
+      "name": "abc_seekbar_track_material",
+      "resource_key": "drawable/abc_seekbar_track_material",
+      "resource_path": "res/drawable/abc_seekbar_track_material.xml"
+    },
+    {
+      "resource_id": "0x7f080049",
+      "name": "abc_spinner_textfield_background_material",
+      "resource_key": "drawable/abc_spinner_textfield_background_material",
+      "resource_path": "res/drawable/abc_spinner_textfield_background_material.xml"
+    },
+    {
+      "resource_id": "0x7f08004a",
+      "name": "abc_star_black_48dp",
+      "resource_key": "drawable/abc_star_black_48dp",
+      "resource_path": "res/drawable/abc_star_black_48dp.xml"
+    },
+    {
+      "resource_id": "0x7f08004b",
+      "name": "abc_star_half_black_48dp",
+      "resource_key": "drawable/abc_star_half_black_48dp",
+      "resource_path": "res/drawable/abc_star_half_black_48dp.xml"
+    },
+    {
+      "resource_id": "0x7f08004c",
+      "name": "abc_switch_thumb_material",
+      "resource_key": "drawable/abc_switch_thumb_material",
+      "resource_path": "res/drawable/abc_switch_thumb_material.xml"
+    },
+    {
+      "resource_id": "0x7f08004e",
+      "name": "abc_tab_indicator_material",
+      "resource_key": "drawable/abc_tab_indicator_material",
+      "resource_path": "res/drawable/abc_tab_indicator_material.xml"
+    },
+    {
+      "resource_id": "0x7f080050",
+      "name": "abc_text_cursor_material",
+      "resource_key": "drawable/abc_text_cursor_material",
+      "resource_path": "res/drawable/abc_text_cursor_material.xml"
+    },
+    {
+      "resource_id": "0x7f080058",
+      "name": "abc_textfield_search_material",
+      "resource_key": "drawable/abc_textfield_search_material",
+      "resource_path": "res/drawable/abc_textfield_search_material.xml"
+    },
+    {
+      "resource_id": "0x7f080059",
+      "name": "abc_vector_test",
+      "resource_key": "drawable/abc_vector_test",
+      "resource_path": "res/drawable/abc_vector_test.xml"
+    },
+    {
+      "resource_id": "0x7f08005a",
+      "name": "admob_close_button_black_circle_white_cross",
+      "resource_key": "drawable/admob_close_button_black_circle_white_cross",
+      "resource_path": "res/drawable/admob_close_button_black_circle_white_cross.xml"
+    },
+    {
+      "resource_id": "0x7f08005b",
+      "name": "admob_close_button_white_circle_black_cross",
+      "resource_key": "drawable/admob_close_button_white_circle_black_cross",
+      "resource_path": "res/drawable/admob_close_button_white_circle_black_cross.xml"
+    },
+    {
+      "resource_id": "0x7f08005c",
+      "name": "avd_hide_password",
+      "resource_key": "drawable/avd_hide_password",
+      "resource_path": "res/drawable/avd_hide_password.xml"
+    },
+    {
+      "resource_id": "0x7f08005d",
+      "name": "avd_show_password",
+      "resource_key": "drawable/avd_show_password",
+      "resource_path": "res/drawable/avd_show_password.xml"
+    },
+    {
+      "resource_id": "0x7f08005e",
+      "name": "btn_checkbox_checked_mtrl",
+      "resource_key": "drawable/btn_checkbox_checked_mtrl",
+      "resource_path": "res/drawable/btn_checkbox_checked_mtrl.xml"
+    },
+    {
+      "resource_id": "0x7f08005f",
+      "name": "btn_checkbox_checked_to_unchecked_mtrl_animation",
+      "resource_key": "drawable/btn_checkbox_checked_to_unchecked_mtrl_animation",
+      "resource_path": "res/drawable/btn_checkbox_checked_to_unchecked_mtrl_animation.xml"
+    },
+    {
+      "resource_id": "0x7f080060",
+      "name": "btn_checkbox_unchecked_mtrl",
+      "resource_key": "drawable/btn_checkbox_unchecked_mtrl",
+      "resource_path": "res/drawable/btn_checkbox_unchecked_mtrl.xml"
+    },
+    {
+      "resource_id": "0x7f080061",
+      "name": "btn_checkbox_unchecked_to_checked_mtrl_animation",
+      "resource_key": "drawable/btn_checkbox_unchecked_to_checked_mtrl_animation",
+      "resource_path": "res/drawable/btn_checkbox_unchecked_to_checked_mtrl_animation.xml"
+    },
+    {
+      "resource_id": "0x7f080062",
+      "name": "btn_radio_off_mtrl",
+      "resource_key": "drawable/btn_radio_off_mtrl",
+      "resource_path": "res/drawable/btn_radio_off_mtrl.xml"
+    },
+    {
+      "resource_id": "0x7f080063",
+      "name": "btn_radio_off_to_on_mtrl_animation",
+      "resource_key": "drawable/btn_radio_off_to_on_mtrl_animation",
+      "resource_path": "res/drawable/btn_radio_off_to_on_mtrl_animation.xml"
+    },
+    {
+      "resource_id": "0x7f080064",
+      "name": "btn_radio_on_mtrl",
+      "resource_key": "drawable/btn_radio_on_mtrl",
+      "resource_path": "res/drawable/btn_radio_on_mtrl.xml"
+    },
+    {
+      "resource_id": "0x7f080065",
+      "name": "btn_radio_on_to_off_mtrl_animation",
+      "resource_key": "drawable/btn_radio_on_to_off_mtrl_animation",
+      "resource_path": "res/drawable/btn_radio_on_to_off_mtrl_animation.xml"
+    },
+    {
+      "resource_id": "0x7f080067",
+      "name": "common_google_signin_btn_icon_dark",
+      "resource_key": "drawable/common_google_signin_btn_icon_dark",
+      "resource_path": "res/drawable/common_google_signin_btn_icon_dark.xml"
+    },
+    {
+      "resource_id": "0x7f080068",
+      "name": "common_google_signin_btn_icon_dark_focused",
+      "resource_key": "drawable/common_google_signin_btn_icon_dark_focused",
+      "resource_path": "res/drawable/common_google_signin_btn_icon_dark_focused.xml"
+    },
+    {
+      "resource_id": "0x7f080069",
+      "name": "common_google_signin_btn_icon_dark_normal",
+      "resource_key": "drawable/common_google_signin_btn_icon_dark_normal",
+      "resource_path": "res/drawable/common_google_signin_btn_icon_dark_normal.xml"
+    },
+    {
+      "resource_id": "0x7f08006b",
+      "name": "common_google_signin_btn_icon_disabled",
+      "resource_key": "drawable/common_google_signin_btn_icon_disabled",
+      "resource_path": "res/drawable/common_google_signin_btn_icon_disabled.xml"
+    },
+    {
+      "resource_id": "0x7f08006c",
+      "name": "common_google_signin_btn_icon_light",
+      "resource_key": "drawable/common_google_signin_btn_icon_light",
+      "resource_path": "res/drawable/common_google_signin_btn_icon_light.xml"
+    },
+    {
+      "resource_id": "0x7f08006d",
+      "name": "common_google_signin_btn_icon_light_focused",
+      "resource_key": "drawable/common_google_signin_btn_icon_light_focused",
+      "resource_path": "res/drawable/common_google_signin_btn_icon_light_focused.xml"
+    },
+    {
+      "resource_id": "0x7f08006e",
+      "name": "common_google_signin_btn_icon_light_normal",
+      "resource_key": "drawable/common_google_signin_btn_icon_light_normal",
+      "resource_path": "res/drawable/common_google_signin_btn_icon_light_normal.xml"
+    },
+    {
+      "resource_id": "0x7f080070",
+      "name": "common_google_signin_btn_text_dark",
+      "resource_key": "drawable/common_google_signin_btn_text_dark",
+      "resource_path": "res/drawable/common_google_signin_btn_text_dark.xml"
+    },
+    {
+      "resource_id": "0x7f080071",
+      "name": "common_google_signin_btn_text_dark_focused",
+      "resource_key": "drawable/common_google_signin_btn_text_dark_focused",
+      "resource_path": "res/drawable/common_google_signin_btn_text_dark_focused.xml"
+    },
+    {
+      "resource_id": "0x7f080072",
+      "name": "common_google_signin_btn_text_dark_normal",
+      "resource_key": "drawable/common_google_signin_btn_text_dark_normal",
+      "resource_path": "res/drawable/common_google_signin_btn_text_dark_normal.xml"
+    },
+    {
+      "resource_id": "0x7f080074",
+      "name": "common_google_signin_btn_text_disabled",
+      "resource_key": "drawable/common_google_signin_btn_text_disabled",
+      "resource_path": "res/drawable/common_google_signin_btn_text_disabled.xml"
+    },
+    {
+      "resource_id": "0x7f080075",
+      "name": "common_google_signin_btn_text_light",
+      "resource_key": "drawable/common_google_signin_btn_text_light",
+      "resource_path": "res/drawable/common_google_signin_btn_text_light.xml"
+    },
+    {
+      "resource_id": "0x7f080076",
+      "name": "common_google_signin_btn_text_light_focused",
+      "resource_key": "drawable/common_google_signin_btn_text_light_focused",
+      "resource_path": "res/drawable/common_google_signin_btn_text_light_focused.xml"
+    },
+    {
+      "resource_id": "0x7f080077",
+      "name": "common_google_signin_btn_text_light_normal",
+      "resource_key": "drawable/common_google_signin_btn_text_light_normal",
+      "resource_path": "res/drawable/common_google_signin_btn_text_light_normal.xml"
+    },
+    {
+      "resource_id": "0x7f080079",
+      "name": "design_fab_background",
+      "resource_key": "drawable/design_fab_background",
+      "resource_path": "res/drawable/design_fab_background.xml"
+    },
+    {
+      "resource_id": "0x7f08007a",
+      "name": "design_ic_visibility",
+      "resource_key": "drawable/design_ic_visibility",
+      "resource_path": "res/drawable/design_ic_visibility.xml"
+    },
+    {
+      "resource_id": "0x7f08007b",
+      "name": "design_ic_visibility_off",
+      "resource_key": "drawable/design_ic_visibility_off",
+      "resource_path": "res/drawable/design_ic_visibility_off.xml"
+    },
+    {
+      "resource_id": "0x7f08007c",
+      "name": "design_password_eye",
+      "resource_key": "drawable/design_password_eye",
+      "resource_path": "res/drawable/design_password_eye.xml"
+    },
+    {
+      "resource_id": "0x7f08007d",
+      "name": "design_snackbar_background",
+      "resource_key": "drawable/design_snackbar_background",
+      "resource_path": "res/drawable/design_snackbar_background.xml"
+    },
+    {
+      "resource_id": "0x7f08007e",
+      "name": "flag_eu",
+      "resource_key": "drawable/flag_eu",
+      "resource_path": "res/drawable/flag_eu.xml"
+    },
+    {
+      "resource_id": "0x7f08007f",
+      "name": "flag_jp",
+      "resource_key": "drawable/flag_jp",
+      "resource_path": "res/drawable/flag_jp.xml"
+    },
+    {
+      "resource_id": "0x7f080080",
+      "name": "flag_us",
+      "resource_key": "drawable/flag_us",
+      "resource_path": "res/drawable/flag_us.xml"
+    },
+    {
+      "resource_id": "0x7f080083",
+      "name": "ic_arrow_down_24dp",
+      "resource_key": "drawable/ic_arrow_down_24dp",
+      "resource_path": "res/drawable/ic_arrow_down_24dp.xml"
+    },
+    {
+      "resource_id": "0x7f080084",
+      "name": "ic_baseline_album_24",
+      "resource_key": "drawable/ic_baseline_album_24",
+      "resource_path": "res/drawable/ic_baseline_album_24.xml"
+    },
+    {
+      "resource_id": "0x7f080085",
+      "name": "ic_baseline_app_shortcut_24",
+      "resource_key": "drawable/ic_baseline_app_shortcut_24",
+      "resource_path": "res/drawable/ic_baseline_app_shortcut_24.xml"
+    },
+    {
+      "resource_id": "0x7f080086",
+      "name": "ic_baseline_arrow_downward_24",
+      "resource_key": "drawable/ic_baseline_arrow_downward_24",
+      "resource_path": "res/drawable/ic_baseline_arrow_downward_24.xml"
+    },
+    {
+      "resource_id": "0x7f080087",
+      "name": "ic_baseline_arrow_drop_down_24",
+      "resource_key": "drawable/ic_baseline_arrow_drop_down_24",
+      "resource_path": "res/drawable/ic_baseline_arrow_drop_down_24.xml"
+    },
+    {
+      "resource_id": "0x7f080088",
+      "name": "ic_baseline_arrow_drop_up_24",
+      "resource_key": "drawable/ic_baseline_arrow_drop_up_24",
+      "resource_path": "res/drawable/ic_baseline_arrow_drop_up_24.xml"
+    },
+    {
+      "resource_id": "0x7f080089",
+      "name": "ic_baseline_arrow_upward_24",
+      "resource_key": "drawable/ic_baseline_arrow_upward_24",
+      "resource_path": "res/drawable/ic_baseline_arrow_upward_24.xml"
+    },
+    {
+      "resource_id": "0x7f08008a",
+      "name": "ic_baseline_autorenew_24",
+      "resource_key": "drawable/ic_baseline_autorenew_24",
+      "resource_path": "res/drawable/ic_baseline_autorenew_24.xml"
+    },
+    {
+      "resource_id": "0x7f08008b",
+      "name": "ic_baseline_category_24",
+      "resource_key": "drawable/ic_baseline_category_24",
+      "resource_path": "res/drawable/ic_baseline_category_24.xml"
+    },
+    {
+      "resource_id": "0x7f08008c",
+      "name": "ic_baseline_chat_24",
+      "resource_key": "drawable/ic_baseline_chat_24",
+      "resource_path": "res/drawable/ic_baseline_chat_24.xml"
+    },
+    {
+      "resource_id": "0x7f08008d",
+      "name": "ic_baseline_check_green_24",
+      "resource_key": "drawable/ic_baseline_check_green_24",
+      "resource_path": "res/drawable/ic_baseline_check_green_24.xml"
+    },
+    {
+      "resource_id": "0x7f08008e",
+      "name": "ic_baseline_close_24",
+      "resource_key": "drawable/ic_baseline_close_24",
+      "resource_path": "res/drawable/ic_baseline_close_24.xml"
+    },
+    {
+      "resource_id": "0x7f08008f",
+      "name": "ic_baseline_delete_24",
+      "resource_key": "drawable/ic_baseline_delete_24",
+      "resource_path": "res/drawable/ic_baseline_delete_24.xml"
+    },
+    {
+      "resource_id": "0x7f080090",
+      "name": "ic_baseline_edit_24",
+      "resource_key": "drawable/ic_baseline_edit_24",
+      "resource_path": "res/drawable/ic_baseline_edit_24.xml"
+    },
+    {
+      "resource_id": "0x7f080091",
+      "name": "ic_baseline_exit_to_app_24",
+      "resource_key": "drawable/ic_baseline_exit_to_app_24",
+      "resource_path": "res/drawable/ic_baseline_exit_to_app_24.xml"
+    },
+    {
+      "resource_id": "0x7f080092",
+      "name": "ic_baseline_fast_forward_24",
+      "resource_key": "drawable/ic_baseline_fast_forward_24",
+      "resource_path": "res/drawable/ic_baseline_fast_forward_24.xml"
+    },
+    {
+      "resource_id": "0x7f080093",
+      "name": "ic_baseline_folder_24",
+      "resource_key": "drawable/ic_baseline_folder_24",
+      "resource_path": "res/drawable/ic_baseline_folder_24.xml"
+    },
+    {
+      "resource_id": "0x7f080094",
+      "name": "ic_baseline_folder_open_24",
+      "resource_key": "drawable/ic_baseline_folder_open_24",
+      "resource_path": "res/drawable/ic_baseline_folder_open_24.xml"
+    },
+    {
+      "resource_id": "0x7f080095",
+      "name": "ic_baseline_format_paint_24",
+      "resource_key": "drawable/ic_baseline_format_paint_24",
+      "resource_path": "res/drawable/ic_baseline_format_paint_24.xml"
+    },
+    {
+      "resource_id": "0x7f080096",
+      "name": "ic_baseline_gamepad_24",
+      "resource_key": "drawable/ic_baseline_gamepad_24",
+      "resource_path": "res/drawable/ic_baseline_gamepad_24.xml"
+    },
+    {
+      "resource_id": "0x7f080097",
+      "name": "ic_baseline_grid_view_24",
+      "resource_key": "drawable/ic_baseline_grid_view_24",
+      "resource_path": "res/drawable/ic_baseline_grid_view_24.xml"
+    },
+    {
+      "resource_id": "0x7f080098",
+      "name": "ic_baseline_help_24",
+      "resource_key": "drawable/ic_baseline_help_24",
+      "resource_path": "res/drawable/ic_baseline_help_24.xml"
+    },
+    {
+      "resource_id": "0x7f080099",
+      "name": "ic_baseline_help_outline_24",
+      "resource_key": "drawable/ic_baseline_help_outline_24",
+      "resource_path": "res/drawable/ic_baseline_help_outline_24.xml"
+    },
+    {
+      "resource_id": "0x7f08009a",
+      "name": "ic_baseline_image_24",
+      "resource_key": "drawable/ic_baseline_image_24",
+      "resource_path": "res/drawable/ic_baseline_image_24.xml"
+    },
+    {
+      "resource_id": "0x7f08009b",
+      "name": "ic_baseline_import_export_24",
+      "resource_key": "drawable/ic_baseline_import_export_24",
+      "resource_path": "res/drawable/ic_baseline_import_export_24.xml"
+    },
+    {
+      "resource_id": "0x7f08009c",
+      "name": "ic_baseline_info_24",
+      "resource_key": "drawable/ic_baseline_info_24",
+      "resource_path": "res/drawable/ic_baseline_info_24.xml"
+    },
+    {
+      "resource_id": "0x7f08009d",
+      "name": "ic_baseline_keyboard_arrow_left_24",
+      "resource_key": "drawable/ic_baseline_keyboard_arrow_left_24",
+      "resource_path": "res/drawable/ic_baseline_keyboard_arrow_left_24.xml"
+    },
+    {
+      "resource_id": "0x7f08009e",
+      "name": "ic_baseline_keyboard_arrow_right_24",
+      "resource_key": "drawable/ic_baseline_keyboard_arrow_right_24",
+      "resource_path": "res/drawable/ic_baseline_keyboard_arrow_right_24.xml"
+    },
+    {
+      "resource_id": "0x7f08009f",
+      "name": "ic_baseline_layers_clear_24",
+      "resource_key": "drawable/ic_baseline_layers_clear_24",
+      "resource_path": "res/drawable/ic_baseline_layers_clear_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800a0",
+      "name": "ic_baseline_lock_24",
+      "resource_key": "drawable/ic_baseline_lock_24",
+      "resource_path": "res/drawable/ic_baseline_lock_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800a1",
+      "name": "ic_baseline_lock_open_24",
+      "resource_key": "drawable/ic_baseline_lock_open_24",
+      "resource_path": "res/drawable/ic_baseline_lock_open_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800a2",
+      "name": "ic_baseline_menu_24",
+      "resource_key": "drawable/ic_baseline_menu_24",
+      "resource_path": "res/drawable/ic_baseline_menu_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800a3",
+      "name": "ic_baseline_newspaper_24",
+      "resource_key": "drawable/ic_baseline_newspaper_24",
+      "resource_path": "res/drawable/ic_baseline_newspaper_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800a4",
+      "name": "ic_baseline_open_in_browser_24",
+      "resource_key": "drawable/ic_baseline_open_in_browser_24",
+      "resource_path": "res/drawable/ic_baseline_open_in_browser_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800a5",
+      "name": "ic_baseline_play_arrow_24",
+      "resource_key": "drawable/ic_baseline_play_arrow_24",
+      "resource_path": "res/drawable/ic_baseline_play_arrow_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800a6",
+      "name": "ic_baseline_playlist_play_24",
+      "resource_key": "drawable/ic_baseline_playlist_play_24",
+      "resource_path": "res/drawable/ic_baseline_playlist_play_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800a7",
+      "name": "ic_baseline_power_settings_new_24",
+      "resource_key": "drawable/ic_baseline_power_settings_new_24",
+      "resource_path": "res/drawable/ic_baseline_power_settings_new_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800a8",
+      "name": "ic_baseline_query_builder_24",
+      "resource_key": "drawable/ic_baseline_query_builder_24",
+      "resource_path": "res/drawable/ic_baseline_query_builder_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800a9",
+      "name": "ic_baseline_radio_button_checked_24",
+      "resource_key": "drawable/ic_baseline_radio_button_checked_24",
+      "resource_path": "res/drawable/ic_baseline_radio_button_checked_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800aa",
+      "name": "ic_baseline_radio_button_unchecked_24",
+      "resource_key": "drawable/ic_baseline_radio_button_unchecked_24",
+      "resource_path": "res/drawable/ic_baseline_radio_button_unchecked_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800ab",
+      "name": "ic_baseline_refresh_24",
+      "resource_key": "drawable/ic_baseline_refresh_24",
+      "resource_path": "res/drawable/ic_baseline_refresh_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800ac",
+      "name": "ic_baseline_remove_24",
+      "resource_key": "drawable/ic_baseline_remove_24",
+      "resource_path": "res/drawable/ic_baseline_remove_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800ad",
+      "name": "ic_baseline_restart_alt_24",
+      "resource_key": "drawable/ic_baseline_restart_alt_24",
+      "resource_path": "res/drawable/ic_baseline_restart_alt_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800ae",
+      "name": "ic_baseline_save_24",
+      "resource_key": "drawable/ic_baseline_save_24",
+      "resource_path": "res/drawable/ic_baseline_save_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800af",
+      "name": "ic_baseline_sd_card_24",
+      "resource_key": "drawable/ic_baseline_sd_card_24",
+      "resource_path": "res/drawable/ic_baseline_sd_card_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800b0",
+      "name": "ic_baseline_search_24",
+      "resource_key": "drawable/ic_baseline_search_24",
+      "resource_path": "res/drawable/ic_baseline_search_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800b1",
+      "name": "ic_baseline_settings_24",
+      "resource_key": "drawable/ic_baseline_settings_24",
+      "resource_path": "res/drawable/ic_baseline_settings_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800b2",
+      "name": "ic_baseline_speed_24",
+      "resource_key": "drawable/ic_baseline_speed_24",
+      "resource_path": "res/drawable/ic_baseline_speed_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800b3",
+      "name": "ic_baseline_swap_horiz_24",
+      "resource_key": "drawable/ic_baseline_swap_horiz_24",
+      "resource_path": "res/drawable/ic_baseline_swap_horiz_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800b4",
+      "name": "ic_baseline_timer_24",
+      "resource_key": "drawable/ic_baseline_timer_24",
+      "resource_path": "res/drawable/ic_baseline_timer_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800b5",
+      "name": "ic_baseline_tips_and_updates_24",
+      "resource_key": "drawable/ic_baseline_tips_and_updates_24",
+      "resource_path": "res/drawable/ic_baseline_tips_and_updates_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800b6",
+      "name": "ic_baseline_touch_app_24",
+      "resource_key": "drawable/ic_baseline_touch_app_24",
+      "resource_path": "res/drawable/ic_baseline_touch_app_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800b7",
+      "name": "ic_baseline_trophy_24",
+      "resource_key": "drawable/ic_baseline_trophy_24",
+      "resource_path": "res/drawable/ic_baseline_trophy_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800b8",
+      "name": "ic_baseline_vibration_24",
+      "resource_key": "drawable/ic_baseline_vibration_24",
+      "resource_path": "res/drawable/ic_baseline_vibration_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800b9",
+      "name": "ic_baseline_view_list_24",
+      "resource_key": "drawable/ic_baseline_view_list_24",
+      "resource_path": "res/drawable/ic_baseline_view_list_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800ba",
+      "name": "ic_baseline_wallpaper_24",
+      "resource_key": "drawable/ic_baseline_wallpaper_24",
+      "resource_path": "res/drawable/ic_baseline_wallpaper_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800bb",
+      "name": "ic_chip_24",
+      "resource_key": "drawable/ic_chip_24",
+      "resource_path": "res/drawable/ic_chip_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800bc",
+      "name": "ic_clock_black_24dp",
+      "resource_key": "drawable/ic_clock_black_24dp",
+      "resource_path": "res/drawable/ic_clock_black_24dp.xml"
+    },
+    {
+      "resource_id": "0x7f0800bd",
+      "name": "ic_controller_a_button",
+      "resource_key": "drawable/ic_controller_a_button",
+      "resource_path": "res/drawable/ic_controller_a_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800be",
+      "name": "ic_controller_analog_base",
+      "resource_key": "drawable/ic_controller_analog_base",
+      "resource_path": "res/drawable/ic_controller_analog_base.xml"
+    },
+    {
+      "resource_id": "0x7f0800bf",
+      "name": "ic_controller_analog_button",
+      "resource_key": "drawable/ic_controller_analog_button",
+      "resource_path": "res/drawable/ic_controller_analog_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800c0",
+      "name": "ic_controller_analog_stick",
+      "resource_key": "drawable/ic_controller_analog_stick",
+      "resource_path": "res/drawable/ic_controller_analog_stick.xml"
+    },
+    {
+      "resource_id": "0x7f0800c1",
+      "name": "ic_controller_b_button",
+      "resource_key": "drawable/ic_controller_b_button",
+      "resource_path": "res/drawable/ic_controller_b_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800c2",
+      "name": "ic_controller_c_button",
+      "resource_key": "drawable/ic_controller_c_button",
+      "resource_path": "res/drawable/ic_controller_c_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800c3",
+      "name": "ic_controller_calibrate_button",
+      "resource_key": "drawable/ic_controller_calibrate_button",
+      "resource_path": "res/drawable/ic_controller_calibrate_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800c4",
+      "name": "ic_controller_circle_button",
+      "resource_key": "drawable/ic_controller_circle_button",
+      "resource_path": "res/drawable/ic_controller_circle_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800c5",
+      "name": "ic_controller_cross_button",
+      "resource_key": "drawable/ic_controller_cross_button",
+      "resource_path": "res/drawable/ic_controller_cross_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800c6",
+      "name": "ic_controller_down_button",
+      "resource_key": "drawable/ic_controller_down_button",
+      "resource_path": "res/drawable/ic_controller_down_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800c7",
+      "name": "ic_controller_l1_button",
+      "resource_key": "drawable/ic_controller_l1_button",
+      "resource_path": "res/drawable/ic_controller_l1_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800c8",
+      "name": "ic_controller_l2_button",
+      "resource_key": "drawable/ic_controller_l2_button",
+      "resource_path": "res/drawable/ic_controller_l2_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800c9",
+      "name": "ic_controller_l3_button",
+      "resource_key": "drawable/ic_controller_l3_button",
+      "resource_path": "res/drawable/ic_controller_l3_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800ca",
+      "name": "ic_controller_left_button",
+      "resource_key": "drawable/ic_controller_left_button",
+      "resource_path": "res/drawable/ic_controller_left_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800cb",
+      "name": "ic_controller_m1_button",
+      "resource_key": "drawable/ic_controller_m1_button",
+      "resource_path": "res/drawable/ic_controller_m1_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800cc",
+      "name": "ic_controller_m2_button",
+      "resource_key": "drawable/ic_controller_m2_button",
+      "resource_path": "res/drawable/ic_controller_m2_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800cd",
+      "name": "ic_controller_m3_button",
+      "resource_key": "drawable/ic_controller_m3_button",
+      "resource_path": "res/drawable/ic_controller_m3_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800ce",
+      "name": "ic_controller_m4_button",
+      "resource_key": "drawable/ic_controller_m4_button",
+      "resource_path": "res/drawable/ic_controller_m4_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800cf",
+      "name": "ic_controller_pause_button",
+      "resource_key": "drawable/ic_controller_pause_button",
+      "resource_path": "res/drawable/ic_controller_pause_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800d0",
+      "name": "ic_controller_pressure_modifier",
+      "resource_key": "drawable/ic_controller_pressure_modifier",
+      "resource_path": "res/drawable/ic_controller_pressure_modifier.xml"
+    },
+    {
+      "resource_id": "0x7f0800d1",
+      "name": "ic_controller_quick_load_button",
+      "resource_key": "drawable/ic_controller_quick_load_button",
+      "resource_path": "res/drawable/ic_controller_quick_load_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800d2",
+      "name": "ic_controller_quick_save_button",
+      "resource_key": "drawable/ic_controller_quick_save_button",
+      "resource_path": "res/drawable/ic_controller_quick_save_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800d3",
+      "name": "ic_controller_r1_button",
+      "resource_key": "drawable/ic_controller_r1_button",
+      "resource_path": "res/drawable/ic_controller_r1_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800d4",
+      "name": "ic_controller_r2_button",
+      "resource_key": "drawable/ic_controller_r2_button",
+      "resource_path": "res/drawable/ic_controller_r2_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800d5",
+      "name": "ic_controller_r3_button",
+      "resource_key": "drawable/ic_controller_r3_button",
+      "resource_path": "res/drawable/ic_controller_r3_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800d6",
+      "name": "ic_controller_right_button",
+      "resource_key": "drawable/ic_controller_right_button",
+      "resource_path": "res/drawable/ic_controller_right_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800d7",
+      "name": "ic_controller_select_button",
+      "resource_key": "drawable/ic_controller_select_button",
+      "resource_path": "res/drawable/ic_controller_select_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800d8",
+      "name": "ic_controller_square_button",
+      "resource_key": "drawable/ic_controller_square_button",
+      "resource_path": "res/drawable/ic_controller_square_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800d9",
+      "name": "ic_controller_start_button",
+      "resource_key": "drawable/ic_controller_start_button",
+      "resource_path": "res/drawable/ic_controller_start_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800da",
+      "name": "ic_controller_toggle_slowmo",
+      "resource_key": "drawable/ic_controller_toggle_slowmo",
+      "resource_path": "res/drawable/ic_controller_toggle_slowmo.xml"
+    },
+    {
+      "resource_id": "0x7f0800db",
+      "name": "ic_controller_toggle_speed_limit",
+      "resource_key": "drawable/ic_controller_toggle_speed_limit",
+      "resource_path": "res/drawable/ic_controller_toggle_speed_limit.xml"
+    },
+    {
+      "resource_id": "0x7f0800dc",
+      "name": "ic_controller_toggle_turbo",
+      "resource_key": "drawable/ic_controller_toggle_turbo",
+      "resource_path": "res/drawable/ic_controller_toggle_turbo.xml"
+    },
+    {
+      "resource_id": "0x7f0800dd",
+      "name": "ic_controller_triangle_button",
+      "resource_key": "drawable/ic_controller_triangle_button",
+      "resource_path": "res/drawable/ic_controller_triangle_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800de",
+      "name": "ic_controller_up_button",
+      "resource_key": "drawable/ic_controller_up_button",
+      "resource_path": "res/drawable/ic_controller_up_button.xml"
+    },
+    {
+      "resource_id": "0x7f0800df",
+      "name": "ic_emblem_system",
+      "resource_key": "drawable/ic_emblem_system",
+      "resource_path": "res/drawable/ic_emblem_system.xml"
+    },
+    {
+      "resource_id": "0x7f0800e0",
+      "name": "ic_keyboard_black_24dp",
+      "resource_key": "drawable/ic_keyboard_black_24dp",
+      "resource_path": "res/drawable/ic_keyboard_black_24dp.xml"
+    },
+    {
+      "resource_id": "0x7f0800e1",
+      "name": "ic_launcher_background",
+      "resource_key": "drawable/ic_launcher_background",
+      "resource_path": "res/drawable/ic_launcher_background.xml"
+    },
+    {
+      "resource_id": "0x7f0800e2",
+      "name": "ic_m3_chip_check",
+      "resource_key": "drawable/ic_m3_chip_check",
+      "resource_path": "res/drawable/ic_m3_chip_check.xml"
+    },
+    {
+      "resource_id": "0x7f0800e3",
+      "name": "ic_m3_chip_checked_circle",
+      "resource_key": "drawable/ic_m3_chip_checked_circle",
+      "resource_path": "res/drawable/ic_m3_chip_checked_circle.xml"
+    },
+    {
+      "resource_id": "0x7f0800e4",
+      "name": "ic_m3_chip_close",
+      "resource_key": "drawable/ic_m3_chip_close",
+      "resource_path": "res/drawable/ic_m3_chip_close.xml"
+    },
+    {
+      "resource_id": "0x7f0800e5",
+      "name": "ic_media_cdrom",
+      "resource_key": "drawable/ic_media_cdrom",
+      "resource_path": "res/drawable/ic_media_cdrom.xml"
+    },
+    {
+      "resource_id": "0x7f0800e6",
+      "name": "ic_media_cdrom_case",
+      "resource_key": "drawable/ic_media_cdrom_case",
+      "resource_path": "res/drawable/ic_media_cdrom_case.xml"
+    },
+    {
+      "resource_id": "0x7f0800e7",
+      "name": "ic_mtrl_checked_circle",
+      "resource_key": "drawable/ic_mtrl_checked_circle",
+      "resource_path": "res/drawable/ic_mtrl_checked_circle.xml"
+    },
+    {
+      "resource_id": "0x7f0800e8",
+      "name": "ic_mtrl_chip_checked_black",
+      "resource_key": "drawable/ic_mtrl_chip_checked_black",
+      "resource_path": "res/drawable/ic_mtrl_chip_checked_black.xml"
+    },
+    {
+      "resource_id": "0x7f0800e9",
+      "name": "ic_mtrl_chip_checked_circle",
+      "resource_key": "drawable/ic_mtrl_chip_checked_circle",
+      "resource_path": "res/drawable/ic_mtrl_chip_checked_circle.xml"
+    },
+    {
+      "resource_id": "0x7f0800ea",
+      "name": "ic_mtrl_chip_close_circle",
+      "resource_key": "drawable/ic_mtrl_chip_close_circle",
+      "resource_path": "res/drawable/ic_mtrl_chip_close_circle.xml"
+    },
+    {
+      "resource_id": "0x7f0800eb",
+      "name": "ic_outline_cross_red_24",
+      "resource_key": "drawable/ic_outline_cross_red_24",
+      "resource_path": "res/drawable/ic_outline_cross_red_24.xml"
+    },
+    {
+      "resource_id": "0x7f0800ec",
+      "name": "ic_placeholder",
+      "resource_key": "drawable/ic_placeholder",
+      "resource_path": "res/drawable/ic_placeholder.xml"
+    },
+    {
+      "resource_id": "0x7f0800ed",
+      "name": "m3_appbar_background",
+      "resource_key": "drawable/m3_appbar_background",
+      "resource_path": "res/drawable/m3_appbar_background.xml"
+    },
+    {
+      "resource_id": "0x7f0800ee",
+      "name": "m3_popupmenu_background_overlay",
+      "resource_key": "drawable/m3_popupmenu_background_overlay",
+      "resource_path": "res/drawable/m3_popupmenu_background_overlay.xml"
+    },
+    {
+      "resource_id": "0x7f0800ef",
+      "name": "m3_radiobutton_ripple",
+      "resource_key": "drawable/m3_radiobutton_ripple",
+      "resource_path": "res/drawable/m3_radiobutton_ripple.xml"
+    },
+    {
+      "resource_id": "0x7f0800f0",
+      "name": "m3_selection_control_ripple",
+      "resource_key": "drawable/m3_selection_control_ripple",
+      "resource_path": "res/drawable/m3_selection_control_ripple.xml"
+    },
+    {
+      "resource_id": "0x7f0800f1",
+      "name": "m3_tabs_background",
+      "resource_key": "drawable/m3_tabs_background",
+      "resource_path": "res/drawable/m3_tabs_background.xml"
+    },
+    {
+      "resource_id": "0x7f0800f2",
+      "name": "m3_tabs_line_indicator",
+      "resource_key": "drawable/m3_tabs_line_indicator",
+      "resource_path": "res/drawable/m3_tabs_line_indicator.xml"
+    },
+    {
+      "resource_id": "0x7f0800f3",
+      "name": "m3_tabs_rounded_line_indicator",
+      "resource_key": "drawable/m3_tabs_rounded_line_indicator",
+      "resource_path": "res/drawable/m3_tabs_rounded_line_indicator.xml"
+    },
+    {
+      "resource_id": "0x7f0800f4",
+      "name": "m3_tabs_transparent_background",
+      "resource_key": "drawable/m3_tabs_transparent_background",
+      "resource_path": "res/drawable/m3_tabs_transparent_background.xml"
+    },
+    {
+      "resource_id": "0x7f0800f5",
+      "name": "material_cursor_drawable",
+      "resource_key": "drawable/material_cursor_drawable",
+      "resource_path": "res/drawable/material_cursor_drawable.xml"
+    },
+    {
+      "resource_id": "0x7f0800f6",
+      "name": "material_ic_calendar_black_24dp",
+      "resource_key": "drawable/material_ic_calendar_black_24dp",
+      "resource_path": "res/drawable/material_ic_calendar_black_24dp.xml"
+    },
+    {
+      "resource_id": "0x7f0800f7",
+      "name": "material_ic_clear_black_24dp",
+      "resource_key": "drawable/material_ic_clear_black_24dp",
+      "resource_path": "res/drawable/material_ic_clear_black_24dp.xml"
+    },
+    {
+      "resource_id": "0x7f0800f8",
+      "name": "material_ic_edit_black_24dp",
+      "resource_key": "drawable/material_ic_edit_black_24dp",
+      "resource_path": "res/drawable/material_ic_edit_black_24dp.xml"
+    },
+    {
+      "resource_id": "0x7f0800f9",
+      "name": "material_ic_keyboard_arrow_left_black_24dp",
+      "resource_key": "drawable/material_ic_keyboard_arrow_left_black_24dp",
+      "resource_path": "res/drawable/material_ic_keyboard_arrow_left_black_24dp.xml"
+    },
+    {
+      "resource_id": "0x7f0800fc",
+      "name": "material_ic_keyboard_arrow_right_black_24dp",
+      "resource_key": "drawable/material_ic_keyboard_arrow_right_black_24dp",
+      "resource_path": "res/drawable/material_ic_keyboard_arrow_right_black_24dp.xml"
+    },
+    {
+      "resource_id": "0x7f0800fd",
+      "name": "material_ic_menu_arrow_down_black_24dp",
+      "resource_key": "drawable/material_ic_menu_arrow_down_black_24dp",
+      "resource_path": "res/drawable/material_ic_menu_arrow_down_black_24dp.xml"
+    },
+    {
+      "resource_id": "0x7f0800fe",
+      "name": "material_ic_menu_arrow_up_black_24dp",
+      "resource_key": "drawable/material_ic_menu_arrow_up_black_24dp",
+      "resource_path": "res/drawable/material_ic_menu_arrow_up_black_24dp.xml"
+    },
+    {
+      "resource_id": "0x7f0800ff",
+      "name": "mtrl_dialog_background",
+      "resource_key": "drawable/mtrl_dialog_background",
+      "resource_path": "res/drawable/mtrl_dialog_background.xml"
+    },
+    {
+      "resource_id": "0x7f080100",
+      "name": "mtrl_dropdown_arrow",
+      "resource_key": "drawable/mtrl_dropdown_arrow",
+      "resource_path": "res/drawable/mtrl_dropdown_arrow.xml"
+    },
+    {
+      "resource_id": "0x7f080101",
+      "name": "mtrl_ic_arrow_drop_down",
+      "resource_key": "drawable/mtrl_ic_arrow_drop_down",
+      "resource_path": "res/drawable/mtrl_ic_arrow_drop_down.xml"
+    },
+    {
+      "resource_id": "0x7f080102",
+      "name": "mtrl_ic_arrow_drop_up",
+      "resource_key": "drawable/mtrl_ic_arrow_drop_up",
+      "resource_path": "res/drawable/mtrl_ic_arrow_drop_up.xml"
+    },
+    {
+      "resource_id": "0x7f080103",
+      "name": "mtrl_ic_cancel",
+      "resource_key": "drawable/mtrl_ic_cancel",
+      "resource_path": "res/drawable/mtrl_ic_cancel.xml"
+    },
+    {
+      "resource_id": "0x7f080104",
+      "name": "mtrl_ic_error",
+      "resource_key": "drawable/mtrl_ic_error",
+      "resource_path": "res/drawable/mtrl_ic_error.xml"
+    },
+    {
+      "resource_id": "0x7f080105",
+      "name": "mtrl_navigation_bar_item_background",
+      "resource_key": "drawable/mtrl_navigation_bar_item_background",
+      "resource_path": "res/drawable/mtrl_navigation_bar_item_background.xml"
+    },
+    {
+      "resource_id": "0x7f080106",
+      "name": "mtrl_popupmenu_background",
+      "resource_key": "drawable/mtrl_popupmenu_background",
+      "resource_path": "res/drawable/mtrl_popupmenu_background.xml"
+    },
+    {
+      "resource_id": "0x7f080107",
+      "name": "mtrl_popupmenu_background_overlay",
+      "resource_key": "drawable/mtrl_popupmenu_background_overlay",
+      "resource_path": "res/drawable/mtrl_popupmenu_background_overlay.xml"
+    },
+    {
+      "resource_id": "0x7f080108",
+      "name": "mtrl_tabs_default_indicator",
+      "resource_key": "drawable/mtrl_tabs_default_indicator",
+      "resource_path": "res/drawable/mtrl_tabs_default_indicator.xml"
+    },
+    {
+      "resource_id": "0x7f080109",
+      "name": "navigation_empty_icon",
+      "resource_key": "drawable/navigation_empty_icon",
+      "resource_path": "res/drawable/navigation_empty_icon.xml"
+    },
+    {
+      "resource_id": "0x7f08010a",
+      "name": "notification_action_background",
+      "resource_key": "drawable/notification_action_background",
+      "resource_path": "res/drawable/notification_action_background.xml"
+    },
+    {
+      "resource_id": "0x7f08010b",
+      "name": "notification_bg",
+      "resource_key": "drawable/notification_bg",
+      "resource_path": "res/drawable/notification_bg.xml"
+    },
+    {
+      "resource_id": "0x7f08010c",
+      "name": "notification_bg_low",
+      "resource_key": "drawable/notification_bg_low",
+      "resource_path": "res/drawable/notification_bg_low.xml"
+    },
+    {
+      "resource_id": "0x7f080111",
+      "name": "notification_icon_background",
+      "resource_key": "drawable/notification_icon_background",
+      "resource_path": "res/drawable/notification_icon_background.xml"
+    },
+    {
+      "resource_id": "0x7f080114",
+      "name": "notification_tile_bg",
+      "resource_key": "drawable/notification_tile_bg",
+      "resource_path": "res/drawable/notification_tile_bg.xml"
+    },
+    {
+      "resource_id": "0x7f080116",
+      "name": "preference_list_divider_material",
+      "resource_key": "drawable/preference_list_divider_material",
+      "resource_path": "res/drawable/preference_list_divider_material.xml"
+    },
+    {
+      "resource_id": "0x7f080117",
+      "name": "test_custom_background",
+      "resource_key": "drawable/test_custom_background",
+      "resource_path": "res/drawable/test_custom_background.xml"
+    },
+    {
+      "resource_id": "0x7f080118",
+      "name": "test_level_drawable",
+      "resource_key": "drawable/test_level_drawable",
+      "resource_path": "res/drawable/test_level_drawable.xml"
+    },
+    {
+      "resource_id": "0x7f080119",
+      "name": "tooltip_frame_dark",
+      "resource_key": "drawable/tooltip_frame_dark",
+      "resource_path": "res/drawable/tooltip_frame_dark.xml"
+    },
+    {
+      "resource_id": "0x7f08011a",
+      "name": "tooltip_frame_light",
+      "resource_key": "drawable/tooltip_frame_light",
+      "resource_path": "res/drawable/tooltip_frame_light.xml"
+    },
+    {
+      "resource_id": "0x7f08011b",
+      "name": "tristate_preference_background",
+      "resource_key": "drawable/tristate_preference_background",
+      "resource_path": "res/drawable/tristate_preference_background.xml"
+    },
+    {
+      "resource_id": "0x7f08011c",
+      "name": "tristate_preference_background_shape",
+      "resource_key": "drawable/tristate_preference_background_shape",
+      "resource_path": "res/drawable/tristate_preference_background_shape.xml"
+    },
+    {
+      "resource_id": "0x7f08011d",
+      "name": "tristate_preference_button_background",
+      "resource_key": "drawable/tristate_preference_button_background",
+      "resource_path": "res/drawable/tristate_preference_button_background.xml"
+    }
+  ],
+  "observed_missing_axis_art": {
+    "independent_box_error_px": 0,
+    "legacy_pixel_percent": 75.869,
+    "strict_pixel_percent": 42.78983050847458,
+    "native_analog_art": true,
+    "candidate_analog_art": false
+  }
+}

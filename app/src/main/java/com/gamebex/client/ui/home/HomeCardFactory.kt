@@ -159,7 +159,34 @@ class HomeCardFactory(
             tv = card.tv.copy(
                 stateKey = HomeCopy.tvStateKey(state, null, nowMs, card.system),
                 stateDetail = HomeCopy.tvStateDetail(state, null, nowMs),
-                factsLine = HomeCopy.tvFacts(state, card.system, null, null),
+                factsLine = HomeCopy.tvFacts(state, card.system, null, nowMs),
+            ),
+        )
+    }
+
+    /**
+     * A Preparing card with no live prep run for 3
+     * ticks (never started, or died with the process) becomes NeedsFix —
+     * same state a FAILED prep derives, so the card says "Needs setup",
+     * the button says "Fix setup", and Detail offers Retry. Unlike
+     * [prepPatch] the actions change too: the button must work.
+     */
+    fun prepStale(card: HomeCard, note: String, nowMs: Long = System.currentTimeMillis()): HomeCard {
+        val state = CardState.NeedsFix(note)
+        return card.copy(
+            state = state,
+            cardLine = HomeCopy.cardLine(state, card.system, nowMs),
+            primary = primaryFor(state, card.gameId, card.downloadId, entry = null),
+            primaryLabel = HomeCopy.primaryLabel(state),
+            primaryTone = HomeCopy.buttonTone(state),
+            secondary = secondaryFor(state, card.gameId, card.downloadId, entry = null),
+            secondaryLabel = secondaryLabelFor(state),
+            tv = card.tv.copy(
+                stateKey = HomeCopy.tvStateKey(state, null, nowMs, card.system),
+                stateDetail = HomeCopy.tvStateDetail(state, null, nowMs),
+                factsLine = HomeCopy.tvFacts(state, card.system, null, nowMs),
+                glyph = HomeCopy.tvGlyph(state),
+                tone = HomeCopy.tvTone(state),
             ),
         )
     }

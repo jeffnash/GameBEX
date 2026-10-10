@@ -49,13 +49,29 @@ class StreamP2Test {
     fun emulatorsResolveLikePlay() {
         assertEquals(Emu.RETROARCH, StreamEmus.emuFor(game("n64")))
         assertEquals("mupen64plus_next_gles3", StreamEmus.raCore(game("n64")))
-        assertEquals(Emu.DOLPHIN, StreamEmus.emuFor(game("gc", Emu.DOLPHIN.pkg)))
-        assertNull(StreamEmus.raCore(game("gc", Emu.DOLPHIN.pkg)))
-        assertEquals("dolphin", StreamEmus.raCore(game("wii")))
+        assertEquals(Emu.DOLPHIN, StreamEmus.emuFor(game("gc")))
+        assertNull(StreamEmus.raCore(game("gc")))
+        assertEquals("dolphin", StreamEmus.raCore(game("wii", Emu.RETROARCH.pkg)))
+        assertEquals(Emu.PPSSPP, StreamEmus.emuFor(game("psp")))
+        assertNull(StreamEmus.raCore(game("psp")))
+        assertEquals("ppsspp", StreamEmus.raCore(game("psp", Emu.RETROARCH.pkg)))
         assertEquals(Emu.NETHER, StreamEmus.emuFor(game("ps2")))
         assertEquals(Emu.ARMSX2, StreamEmus.emuFor(game("ps2", Emu.ARMSX2.pkg)))
         assertEquals("pcsx_rearmed", StreamEmus.raCore(game("psx", core = "pcsx_rearmed")))
+        assertEquals(Emu.VITA3K, StreamEmus.emuFor(game("psvita")))
         assertNull(StreamEmus.emuFor(game("not-a-system")))
+    }
+
+    @Test
+    fun cropAspectFollowsTheCorePicture() {
+        assertEquals("3:2", StreamEmus.cropAspectForRaCore("mgba"))
+        assertEquals("10:9", StreamEmus.cropAspectForRaCore("gambatte"))
+        assertEquals("16:9", StreamEmus.cropAspectForRaCore("ppsspp"))
+        assertEquals("4:3", StreamEmus.cropAspectForRaCore("snes9x"))
+        assertEquals("4:3", StreamEmus.cropAspectForRaCore("flycast"))
+        assertEquals("4:3", StreamEmus.cropAspectForRaCore(null))
+        assertEquals("3:2", StreamEmus.cropAspectForRaCore(StreamEmus.raCore(game("gba"))))
+        assertEquals("10:9", StreamEmus.cropAspectForRaCore(StreamEmus.raCore(game("gb"))))
     }
 
     @Test
@@ -69,6 +85,27 @@ class StreamP2Test {
         assertEquals("+6", o["input_player2_l2_axis"])
         assertEquals("opensl", o["audio_driver"])
         assertEquals("32", o["audio_latency"])
+    }
+
+    @Test
+    fun reservationStaysUnderTheWorkaround() {
+        for (mode in listOf(P2SlotMode.PLACEHOLDER, P2SlotMode.GATE_REAL_PAD)) {
+            val o = StreamRaConfig.overrides(p2SlotMode = mode)
+            assertEquals(StreamCaps.PAD_NAME, o["input_player2_reserved_device"])
+            assertEquals("2", o["input_player2_device_reservation_type"])
+            assertEquals("97", o["input_player2_a_btn"])
+            assertEquals("96", o["input_player2_b_btn"])
+        }
+    }
+
+    @Test
+    fun placeholderUnbindsUserOne() {
+        val o = StreamRaConfig.overrides(p2SlotMode = P2SlotMode.PLACEHOLDER)
+        for (key in listOf("a", "b", "x", "y", "l", "r", "l2", "r2", "l3", "r3", "start", "select", "up", "down", "left", "right")) {
+            assertEquals("nul", o["input_player1_${key}_btn"])
+        }
+        assertFalse(StreamRaConfig.overrides().containsKey("input_player1_a_btn"))
+        assertFalse(StreamRaConfig.overrides(p2SlotMode = P2SlotMode.GATE_REAL_PAD).containsKey("input_player1_a_btn"))
     }
 
     @Test
@@ -497,6 +534,17 @@ class StreamP2Test {
         assertEquals(P2Prep.Guide(listOf(TogetherCopy.netherPlayer2)), p2.prepare(game("ps2"), Emu.NETHER))
         assertEquals(if (StreamCaps.NETHER_MAPPING_PERSISTS) P2Prep.Written else P2Prep.Guide(listOf(TogetherCopy.netherPlayer2)), p2.prepare(game("ps2"), Emu.NETHER))
         assertEquals(P2Prep.Guide(listOf(TogetherCopy.streamPlayer2Other("ARMSX2"))), p2.prepare(game("ps2", Emu.ARMSX2.pkg), Emu.ARMSX2))
+        assertEquals(P2Prep.Guide(listOf(TogetherCopy.flycastPlayer2)), p2.prepare(game("dreamcast", Emu.FLYCAST.pkg), Emu.FLYCAST))
+        assertEquals(P2Prep.Written, p2.prepare(game("dreamcast", Emu.FLYCAST.pkg), Emu.FLYCAST))
+        assertEquals(P2Prep.Guide(listOf(TogetherCopy.streamPlayer2Other("MAME4droid"))), p2.prepare(game("mame", Emu.MAME4DROID.pkg), Emu.MAME4DROID))
+        // Single-system portables and mouse/keypad machines have no second
+        // controller; nothing to set up.
+        assertEquals(P2Prep.NoSecondPad, p2.prepare(game("psp", Emu.PPSSPP.pkg), Emu.PPSSPP))
+        assertEquals(P2Prep.NoSecondPad, p2.prepare(game("nds", Emu.MELONDS.pkg), Emu.MELONDS))
+        assertEquals(P2Prep.NoSecondPad, p2.prepare(game("n3ds", Emu.AZAHAR.pkg), Emu.AZAHAR))
+        assertEquals(P2Prep.NoSecondPad, p2.prepare(game("psvita"), Emu.VITA3K))
+        assertEquals(P2Prep.NoSecondPad, p2.prepare(game("scummvm"), Emu.SCUMMVM))
+        assertEquals(P2Prep.NoSecondPad, p2.prepare(game("j2me"), Emu.J2MELOADER))
         assertTrue(p2.restore())
         assertFalse(File(configDir, "Dolphin.ini").readText().contains("SIDevice1"))
     }

@@ -208,7 +208,7 @@ class TouchTargetTest {
         where in LEGACY_SURFACES // legacy screen contents
 
     private fun logRows(report: Report) {
-        report.exempt.forEach { println("TOUCH-TARGET (allowlisted, §0.3-8/§12-12): $it") }
+        report.exempt.forEach { println("TOUCH-TARGET (allowlisted): $it") }
     }
 
     private fun describe(node: androidx.compose.ui.semantics.SemanticsNode): String {

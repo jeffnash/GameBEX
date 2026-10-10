@@ -36,10 +36,14 @@ object LocalLauncher {
         onStatus(LaunchStatus.progress(id, "Launching…", fresh))
         val status = withContext(Dispatchers.IO) {
             val g = LibraryDb.get(ctx).games().findById(id) ?: return@withContext null
-            val route = PlatformRegistry.byFolder[g.folder]?.route as? Route.RetroCore
+            val platform = PlatformRegistry.byFolder[g.folder]
+            val route = platform?.route as? Route.RetroCore
+            val altCore = (platform?.route as? Route.Standalone)
+                ?.takeIf { g.emulatorOverride == Emu.RETROARCH.pkg }
+                ?.let { platform.altRetroCore }
             val core = route?.takeIf {
                 g.emulatorOverride == null || g.emulatorOverride == Emu.RETROARCH.pkg
-            }?.let { g.coreOverride ?: it.core }
+            }?.let { g.coreOverride ?: it.core } ?: altCore?.let { g.coreOverride ?: it }
             val out = try {
                 withCoreProgress(id, core, fresh, onStatus) { progress ->
                     EmuRouter.play(ctx, g, fresh, onCoreFetch = progress)

@@ -73,7 +73,12 @@ class FakeStreamPlayer2(var prep: P2Prep = P2Prep.Written) : StreamPlayer2 {
     var prepareHandler: (suspend (GameEntity, Emu, Boolean) -> P2Prep)? = null
     @Volatile var restores = 0
 
-    override suspend fun prepare(game: GameEntity, emu: Emu, rsoundReady: Boolean): P2Prep {
+    override suspend fun prepare(
+        game: GameEntity,
+        emu: Emu,
+        rsoundReady: Boolean,
+        p2SlotMode: com.gamebex.client.stream.p2.P2SlotMode,
+    ): P2Prep {
         prepared += game.id to emu
         audioReadiness += rsoundReady
         return prepareHandler?.invoke(game, emu, rsoundReady) ?: prep

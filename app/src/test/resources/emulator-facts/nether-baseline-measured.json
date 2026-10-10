@@ -1,0 +1,131 @@
+{
+  "screen": [
+    1604,
+    720
+  ],
+  "viewport": [
+    70,
+    0,
+    1534,
+    720
+  ],
+  "controls": [
+    {
+      "resource": "controller_button_pause",
+      "globalBounds": [
+        1508,
+        35,
+        1569,
+        96
+      ]
+    },
+    {
+      "resource": "controller_button_l2",
+      "globalBounds": [
+        175,
+        186,
+        298,
+        247
+      ]
+    },
+    {
+      "resource": "controller_button_r2",
+      "globalBounds": [
+        1376,
+        186,
+        1499,
+        247
+      ]
+    },
+    {
+      "resource": "controller_button_l1",
+      "globalBounds": [
+        175,
+        274,
+        298,
+        335
+      ]
+    },
+    {
+      "resource": "controller_button_r1",
+      "globalBounds": [
+        1376,
+        274,
+        1499,
+        335
+      ]
+    },
+    {
+      "resource": "controller_axis_left",
+      "globalBounds": [
+        105,
+        404,
+        368,
+        667
+      ]
+    },
+    {
+      "resource": "controller_button_triangle",
+      "globalBounds": [
+        1393,
+        404,
+        1481,
+        492
+      ]
+    },
+    {
+      "resource": "controller_button_square",
+      "globalBounds": [
+        1306,
+        492,
+        1394,
+        580
+      ]
+    },
+    {
+      "resource": "controller_button_circle",
+      "globalBounds": [
+        1481,
+        492,
+        1569,
+        580
+      ]
+    },
+    {
+      "resource": "controller_button_select",
+      "globalBounds": [
+        723,
+        662,
+        793,
+        706
+      ]
+    },
+    {
+      "resource": "controller_button_analog",
+      "globalBounds": [
+        815,
+        662,
+        859,
+        706
+      ]
+    },
+    {
+      "resource": "controller_button_start",
+      "globalBounds": [
+        881,
+        662,
+        951,
+        706
+      ]
+    },
+    {
+      "resource": "controller_button_cross",
+      "globalBounds": [
+        1393,
+        579,
+        1481,
+        667
+      ]
+    }
+  ]
+}

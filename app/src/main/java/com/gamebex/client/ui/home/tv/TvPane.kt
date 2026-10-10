@@ -57,8 +57,8 @@ fun TvPane(
     channel: Int,
     reducedMotion: Boolean,
     onTap: () -> Unit,
-    selectionKey: String = channel.toString(),
     modifier: Modifier = Modifier,
+    selectionKey: String = channel.toString(),
 ) {
     val g = LocalConsoleGeometry.current
     val shape = RoundedCornerShape(g.x(22))
@@ -175,10 +175,10 @@ private fun HomeButton(
     val ringStrokePx = g.x(ConsoleDesign.FOCUS_STROKE)
     Row(
         modifier
-            .offset(
-                x = if (pressed) g.x(4) else g.x(0),
-                y = if (pressed) g.x(4) else g.x(0),
-            )
+            .offset {
+                val shift = if (pressed) g.x(4).roundToPx() else 0
+                androidx.compose.ui.unit.IntOffset(shift, shift)
+            }
             .drawBehind {
                 if (enabled) drawHardShadow(fill, shadowPx.toPx(), radiusPx.toPx())
                 if (focused && enabled) {
@@ -272,10 +272,10 @@ private fun HomeSecondaryButton(
     val ringStrokePx = g.x(ConsoleDesign.FOCUS_STROKE)
     Box(
         modifier
-            .offset(
-                x = if (pressed) g.x(4) else g.x(0),
-                y = if (pressed) g.x(4) else g.x(0),
-            )
+            .offset {
+                val shift = if (pressed) g.x(4).roundToPx() else 0
+                androidx.compose.ui.unit.IntOffset(shift, shift)
+            }
             .drawBehind {
                 if (focused) drawFocusRing(radiusPx.toPx(), ringPadPx.toPx(), ringStrokePx.toPx())
             }

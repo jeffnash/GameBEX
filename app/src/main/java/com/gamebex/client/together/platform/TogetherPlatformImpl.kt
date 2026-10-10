@@ -123,7 +123,6 @@ class TogetherPlatformImpl(
     }
 
     private fun ensureChannels() {
-        if (Build.VERSION.SDK_INT < 26) return
         val manager = notifications ?: return
         if (manager.getNotificationChannel(ONGOING_CHANNEL_ID) == null) {
             manager.createNotificationChannel(
@@ -196,7 +195,6 @@ class TogetherPlatformImpl(
         }
 
         internal fun ensureChannels(ctx: Context) {
-            if (Build.VERSION.SDK_INT < 26) return
             val manager = ctx.getSystemService(NotificationManager::class.java) ?: return
             if (manager.getNotificationChannel(ONGOING_CHANNEL_ID) == null) {
                 manager.createNotificationChannel(

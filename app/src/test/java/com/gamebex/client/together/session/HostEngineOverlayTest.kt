@@ -3,6 +3,12 @@ package com.gamebex.client.together.session
 import com.gamebex.client.data.Emu
 import com.gamebex.client.data.local.GameEntity
 import com.gamebex.client.launch.EmuRouter
+import com.gamebex.client.launch.DirectFiles
+import com.gamebex.client.launch.EmuFiles
+import com.gamebex.client.stream.guest.OverlayDesc
+import com.gamebex.client.stream.guest.OverlayShape
+import com.gamebex.client.stream.guest.raAlphaFor
+import com.gamebex.client.stream.guest.toSettings
 import com.gamebex.client.stream.P2Prep
 import com.gamebex.client.stream.StreamConfig
 import com.gamebex.client.stream.StreamHost
@@ -31,6 +37,7 @@ import com.gamebex.client.together.session.fakes.engineTestScope
 import java.io.File
 import java.nio.file.Files
 import kotlin.coroutines.ContinuationInterceptor
+import kotlinx.serialization.json.*
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -68,6 +75,8 @@ class HostEngineOverlayTest {
         scope: TestScope,
         overlay26b: Boolean = false,
         overlayDir: File? = null,
+        androidData: File? = null,
+        files: EmuFiles = DirectFiles,
     ): Harness {
         val engineScope = scope.engineTestScope()
         val stream = FakeStreamHost()
@@ -94,6 +103,8 @@ class HostEngineOverlayTest {
             { null },
             overlay26bEnabled = { overlay26b },
             overlayConfigDir = { overlayDir },
+            emuAndroidData = { androidData },
+            emuOverlayFiles = { files },
         )
         return Harness(engine, transport, discovery, emulators, stream)
     }
@@ -120,6 +131,35 @@ class HostEngineOverlayTest {
         overlays.resolve("pad.cfg").writeText(PAD_CFG)
         overlays.resolve("img").apply { mkdirs() }.resolve("a.png").writeBytes(byteArrayOf(1, 2, 3, 4))
         return root
+    }
+
+    @Test
+    fun installedMainDriverIsReadWithTheRegisteredBackendAndSentToTheGuest() = runTest {
+        val root = overlayTree()
+        try {
+            root.resolve("retroarch.cfg").appendText("video_driver=gl3\n")
+            val facts = Json.parseToJsonElement(requireNotNull(javaClass.getResource("/emulator-facts/retro-held-floating-alpha-observed.json")).readText()).jsonObject
+            val androidData = root.resolve("Android/data")
+            val installed = androidData.resolve("${Emu.RETROARCH.pkg}/files/retroarch.cfg").apply {
+                parentFile!!.mkdirs()
+                writeText("video_driver=\"${facts.getValue("effective_config_driver").jsonPrimitive.content}\"\ninput_overlay_opacity=${facts.getValue("opacity")}\ninput_overlay_dpad_diagonal_sensitivity=21\ninput_overlay_abxy_diagonal_sensitivity=43")
+            }
+            val reads = mutableListOf<String>()
+            val files = object : EmuFiles by DirectFiles {
+                override fun readText(path: String): String? { reads += path; return DirectFiles.readText(path) }
+                override fun writeTextAtomic(path: String, text: String): Boolean = error("overlay discovery must only read")
+            }
+            val h = harness(this, overlay26b = true, overlayDir = root, androidData = androidData, files = files)
+            h.emulators.inner.launchOutcomes = ArrayDeque(listOf(EmuRouter.Outcome.Launched("RetroArch", Emu.RETROARCH.pkg)))
+            val pair = h.startGame(this)
+            assertEquals(listOf(installed.path), reads)
+            val settings = pair.host.sent.filterIsInstance<LinkMsg.StreamOverlay>().single().settings.toSettings()
+            val desc = OverlayDesc("a", 0.5f, 0.5f, OverlayShape.RECT, 0.1f, 0.1f, alphaMod = facts.getValue("highlight_multiplier").jsonPrimitive.float)
+            assertTrue(settings.floatingAlpha)
+            assertEquals(21f, settings.dpadDiagonalSensitivity, 0f)
+            assertEquals(43f, settings.abxyDiagonalSensitivity, 0f)
+            assertEquals(facts.getValue("held_global_multiplier").jsonPrimitive.float, raAlphaFor(desc, settings, true), 0f)
+        } finally { root.deleteRecursively() }
     }
 
     @Test

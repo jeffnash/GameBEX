@@ -39,6 +39,7 @@ import com.gamebex.client.together.DownloadState
 import com.gamebex.client.together.net.JoinLink
 import com.gamebex.client.stream.StreamEndpoint
 import com.gamebex.client.stream.StreamToken
+import com.gamebex.client.stream.guest.EmuOverlayStore
 import com.gamebex.client.stream.guest.StreamOverlayStore
 import com.gamebex.client.stream.proto.StreamWire
 import com.gamebex.client.together.proto.BlobSink
@@ -234,20 +235,48 @@ internal class GuestEngine(
     private var lastCoreProgress: Int? = null
     private var lastCoreProgressAtNs = 0L
     private var resources: SessionResources? = null
- /** Validated dialed address, actor-owned; emulator config uses this, not Offer.hostAddress. */
+    /** Validated dialed address, actor-owned; emulator config uses this, not Offer.hostAddress. */
     private var playAddress: String? = null
- /** STREAM: the host's last StreamReady; the viewer reopens with it. */
+    /** Host's last StreamReady; the viewer reopens with it. */
     private var streamReady: LinkMsg.StreamReady? = null
     private var controlSnapshot = TogetherControlOptions()
     private var resumeSerial = 0L
     private var resumeJob: Job? = null
     private var debugCutJob: Job? = null
- /** STREAM: completed by the StreamReady of the round being launched. */
+    /** Completed by the StreamReady of the round being launched. */
     private var streamSignal = CompletableDeferred<LinkMsg.StreamReady>()
     private val coreName = Regex("^[a-z0-9_]+$")
 
     init {
         refreshPlayerName()
+        // Re-request overlay images the host skipped, once per round;
+        // stragglers render as degraded outlines in the viewer.
+        StreamOverlayStore.onMissingRefs = { missingRound, missing ->
+            val session = offer?.sessionId
+            val currentLink = link
+            if (session != null && currentLink != null && missingRound == round) {
+                scope.launch(ioDispatcher) {
+                    runCatching {
+                        currentLink.send(LinkMsg.StreamOverlayRequest(session, missingRound, missing))
+                    }
+                    log("26b re-request: ${missing.size} refs")
+                }
+            }
+        }
+        // Re-request emu art the host skipped, once per round;
+        // stragglers render as degraded outlines in the viewer.
+        EmuOverlayStore.onMissingControls = { missingRound, missing ->
+            val session = offer?.sessionId
+            val currentLink = link
+            if (session != null && currentLink != null && missingRound == round) {
+                scope.launch(ioDispatcher) {
+                    runCatching {
+                        currentLink.send(LinkMsg.StreamOverlayRequest(session, missingRound, missing, emu = true))
+                    }
+                    log("emu re-request: ${missing.size} controls")
+                }
+            }
+        }
         scope.launch {
             for (input in inputs) {
                 try {
@@ -262,7 +291,7 @@ internal class GuestEngine(
         }
     }
 
- /** Refreshes the cached player name without doing Settings/network work on the caller. */
+    /** Refreshes the cached player name without doing Settings/network work on the caller. */
     internal fun refreshPlayerName(): Job = scope.launch {
             try {
                 myName = withContext(ioDispatcher) { platform.playerName() }
@@ -278,13 +307,13 @@ internal class GuestEngine(
         commitJoin(target)
     }
 
- /** Sets CONNECTING on the caller thread without entering the actor. */
+    /** Sets CONNECTING on the caller thread without entering the actor. */
     internal fun prepareJoin(target: NearbyHost) {
         val token = sessionToken.incrementAndGet()
         replaceView(token, GuestView(GuestStep.CONNECTING, target.name))
     }
 
- /** Starts the join after the other engine has finished ending. */
+    /** Starts the join after the other engine has finished ending. */
     internal fun commitJoin(target: NearbyHost) {
         post(Input.Join(target) {})
     }
@@ -301,7 +330,7 @@ internal class GuestEngine(
         post(Input.End(publishedToken(), null))
     }
 
- /** Completes only after this engine has run its ordered end cleanup. */
+    /** Completes only after this engine has run its ordered end cleanup. */
     internal suspend fun endAndAwait() {
         val done = CompletableDeferred<Unit>()
         inputs.send(Input.End(publishedToken(), done))
@@ -399,6 +428,7 @@ internal class GuestEngine(
         playAddress = null
         streamReady = null
         StreamOverlayStore.clear()
+        EmuOverlayStore.clear()
         streamSignal = CompletableDeferred()
         resources = SessionResources()
         replaceView(token, GuestView(GuestStep.CONNECTING, input.target.name))
@@ -701,6 +731,9 @@ internal class GuestEngine(
             is LinkMsg.CoreUnavailable -> if (message.sessionId == offer?.sessionId) handleCoreUnavailable()
             is LinkMsg.StreamReady -> handleStreamReady(message)
             is LinkMsg.StreamOverlay -> handleStreamOverlay(message)
+            is LinkMsg.StreamEmuOverlay -> handleStreamEmuOverlay(message)
+            // The guest sends these; the host answers with top-up StreamOverlay parts.
+            is LinkMsg.StreamOverlayRequest -> Unit
             is LinkMsg.StreamResumed, is LinkMsg.Ping, is LinkMsg.Pong, is LinkMsg.GuestState, is LinkMsg.CoreRequest -> Unit
         }
     }
@@ -723,6 +756,7 @@ internal class GuestEngine(
         clearCoreTransfer()
         round = message.round
         StreamOverlayStore.clear()
+        EmuOverlayStore.clear()
         lastLaunchFailed = false
         liveSignal = CompletableDeferred()
         streamSignal = CompletableDeferred()
@@ -732,7 +766,7 @@ internal class GuestEngine(
         val selectedPlayerName = myName
         val selectedCore = sessionCore
         val mode = selectedOffer.mode
- // A STREAM guest has nothing to count down to; it waits for the host's stream.
+        // A STREAM guest has nothing to count down to; it waits for the host's stream.
         val countdownS = if (mode == TogetherMode.STREAM) 0 else timing.countdownS
         _view.value = _view.value?.copy(
             step = GuestStep.LAUNCHING,
@@ -897,29 +931,50 @@ internal class GuestEngine(
         streamSignal.complete(message)
     }
 
- /**
- * the host's RetroArch overlay for this round. Stored for the
- * viewer, which renders it only when the guest flag `overlay_26b` is on
- * and the play page is usable — otherwise the 26a layout stands in.
- * Anything for another session/round, or with no cfg, is ignored.
- */
+    /**
+     * One part of the host's RetroArch overlay for this round. Part 0
+     * carries the cfg + settings; follow-ups and top-ups merge images. The
+     * viewer renders it when the guest flag `overlay_26b` is on and a play
+     * page exists — otherwise the guest's own RA stock overlay stands in.
+     * Anything for another session/round is ignored.
+     */
     private fun handleStreamOverlay(message: LinkMsg.StreamOverlay) {
         if (message.sessionId != offer?.sessionId || message.round != round) {
             log("26b drop: stale session/round")
             return
         }
-        if (message.cfg.isBlank()) {
-            log("rejected stream_overlay: empty cfg")
+        if (message.partIndex == 0 && message.cfg.isBlank()) {
+            log("rejected stream_overlay: empty cfg on part 0")
             return
         }
         StreamOverlayStore.publish(message.round, message)
-        val usable = runCatching {
-            com.gamebex.client.stream.guest.OverlayCfg.parse(message.cfg, message.name).mapped().usableForPlay
-        }.getOrDefault(false)
-        log("26b recv: ${message.name} cfg=${message.cfg.length}B images=${message.images.size} usable=$usable")
+        val stored = StreamOverlayStore.current()
+        log("26b recv: part=${message.partIndex}/${message.partCount} images=${message.images.size} have=${stored?.images?.size} complete=${stored?.complete}")
     }
 
- /** The guest closed its viewer while the host still streams; open it again. */
+    /**
+     * One part of the host's standalone-emulator touch controls for
+     * this round. Part 0 locates every control (rects + outputs);
+     * follow-ups and top-ups merge art. The viewer renders them 1:1 when
+     * the guest flag `overlay_26b` is on — otherwise the guest's stock
+     * overlay for the backend stands in. Anything for another
+     * session/round is ignored.
+     */
+    private fun handleStreamEmuOverlay(message: LinkMsg.StreamEmuOverlay) {
+        if (message.sessionId != offer?.sessionId || message.round != round) {
+            log("emu drop: stale session/round")
+            return
+        }
+        if (message.partIndex == 0 && message.controls.isEmpty()) {
+            log("rejected stream_emu_overlay: empty controls on part 0")
+            return
+        }
+        EmuOverlayStore.publish(message.round, message)
+        val stored = EmuOverlayStore.current()
+        log("emu recv: backend=${message.backend} part=${message.partIndex}/${message.partCount} controls=${message.controls.size} have=${stored?.controls?.size} parts=${stored?.partsReceived}/${stored?.partCount}")
+    }
+
+    /** The guest closed its viewer while the host still streams; open it again. */
     private fun reopenStream() {
         val ready = streamReady ?: return
         val selectedOffer = offer ?: return
@@ -953,7 +1008,7 @@ internal class GuestEngine(
         }
     }
 
- /** The viewer connects to the dialed host address, never to one the host names. */
+    /** The viewer connects to the dialed host address, never to one the host names. */
     private fun endpointFor(ready: LinkMsg.StreamReady, address: String, name: String) = StreamEndpoint(
         host = address,
         mediaPort = ready.mediaPort,
@@ -968,7 +1023,7 @@ internal class GuestEngine(
         backend = ready.backend,
     )
 
- /** STREAM guests never run the game: a row-less stand-in carries its title and folder. */
+    /** STREAM guests never run the game: a row-less stand-in carries its title and folder. */
     private fun streamStandIn(o: LinkMsg.Offer): GameEntity = GameEntity(
         id = 0,
         title = o.game.title,
@@ -1106,7 +1161,7 @@ internal class GuestEngine(
     private suspend fun runPrepChain(snapshot: PrepSnapshot): ChainResult {
         val selectedOffer = snapshot.offer
         val mode = snapshot.mode
- // A STREAM guest needs no game, emulator or core, only a phone that can watch.
+        // A STREAM guest needs no game, emulator or core, only a phone that can watch.
         if (mode == TogetherMode.STREAM) {
             val stand = streamStandIn(selectedOffer)
             return when (val readiness = emulators.readiness(mode, Role.GUEST, stand, null)) {
@@ -1593,8 +1648,8 @@ internal class GuestEngine(
         coreRequestTimer = null
         coreRequestGeneration += 1
         val expected = sessionCore ?: return
- // isSafeCoreBuild pins build.core to expected. The allowlist check is defense in
- // depth: Offer receipt already rejected an off-allowlist session core.
+        // isSafeCoreBuild pins build.core to expected. The allowlist check is defense in
+        // depth: Offer receipt already rejected an off-allowlist session core.
         if (message.build != hostBuild || !TogetherSupport.isSafeCoreBuild(message.build, expected) || !sideloadAllowed(selectedOffer.mode, expected)) {
             handleCoreFailure()
             return
@@ -1834,7 +1889,7 @@ internal class GuestEngine(
 
     private fun hostName(): String = _view.value?.hostName ?: hostHello?.name ?: target?.name ?: TogetherCopy.otherPhone
 
- /** The dialed address becomes the emulator target, so it must be private too; loopback pairs only with loopback. */
+    /** The dialed address becomes the emulator target, so it must be private too; loopback pairs only with loopback. */
     private fun acceptedHostAddress(hostAddress: String, currentLink: Link): Boolean {
         val remote = currentLink.remoteAddress
         if (isLoopbackHost(remote) || isLoopbackHost(hostAddress)) return isLoopbackHost(remote) && isLoopbackHost(hostAddress)

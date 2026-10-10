@@ -1,5 +1,6 @@
 package com.gamebex.client.ui.sources
 
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -60,7 +61,7 @@ fun SourceDetailView(
 
     val actions = remember(d, selectedId) { detailActions(vm, d, selectedId, onReplace) }
     val shelf = rememberShelfState(maxOf(actions.size, 1))
-    var dialogChoice by remember(impact, message, importState) { mutableStateOf(0) }
+    var dialogChoice by remember(impact, message, importState) { mutableIntStateOf(0) }
     val dialogOpen = importState !is ImportState.Idle || impact != null || message != null
 
     fun dialogPrimary(): Boolean {

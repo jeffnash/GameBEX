@@ -1,0 +1,2483 @@
+{
+  "runtime_read_required": true,
+  "apk_sha256": "42dca296ecded69c19bd049034edd90a7ff5c7ba1df742210bd7cf8e4e26392e",
+  "resource_table_sha256": "11ab17e57d405915ac2f68cfce459439d268d0fdf9febc8305dc62bd57a34cc1",
+  "integer_resources": [
+    {
+      "resource": "integer/BUTTON_A_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 638
+        }
+      ],
+      "source_line": 9291
+    },
+    {
+      "resource": "integer/BUTTON_A_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 534
+        }
+      ],
+      "source_line": 9293
+    },
+    {
+      "resource": "integer/BUTTON_A_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 865
+        }
+      ],
+      "source_line": 9295
+    },
+    {
+      "resource": "integer/BUTTON_A_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 652
+        }
+      ],
+      "source_line": 9297
+    },
+    {
+      "resource": "integer/BUTTON_B_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 560
+        }
+      ],
+      "source_line": 9299
+    },
+    {
+      "resource": "integer/BUTTON_B_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 648
+        }
+      ],
+      "source_line": 9301
+    },
+    {
+      "resource": "integer/BUTTON_B_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 785
+        }
+      ],
+      "source_line": 9303
+    },
+    {
+      "resource": "integer/BUTTON_B_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 524
+        }
+      ],
+      "source_line": 9305
+    },
+    {
+      "resource": "integer/BUTTON_START_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 472
+        }
+      ],
+      "source_line": 9307
+    },
+    {
+      "resource": "integer/BUTTON_START_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 789
+        }
+      ],
+      "source_line": 9309
+    },
+    {
+      "resource": "integer/BUTTON_START_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 506
+        }
+      ],
+      "source_line": 9311
+    },
+    {
+      "resource": "integer/BUTTON_START_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 818
+        }
+      ],
+      "source_line": 9313
+    },
+    {
+      "resource": "integer/BUTTON_UP_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 44
+        }
+      ],
+      "source_line": 9315
+    },
+    {
+      "resource": "integer/BUTTON_UP_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 448
+        }
+      ],
+      "source_line": 9317
+    },
+    {
+      "resource": "integer/BUTTON_UP_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 222
+        }
+      ],
+      "source_line": 9319
+    },
+    {
+      "resource": "integer/BUTTON_UP_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 629
+        }
+      ],
+      "source_line": 9321
+    },
+    {
+      "resource": "integer/BUTTON_X_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 795
+        }
+      ],
+      "source_line": 9323
+    },
+    {
+      "resource": "integer/BUTTON_X_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 519
+        }
+      ],
+      "source_line": 9325
+    },
+    {
+      "resource": "integer/BUTTON_X_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 896
+        }
+      ],
+      "source_line": 9327
+    },
+    {
+      "resource": "integer/BUTTON_X_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 388
+        }
+      ],
+      "source_line": 9329
+    },
+    {
+      "resource": "integer/BUTTON_Y_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 594
+        }
+      ],
+      "source_line": 9331
+    },
+    {
+      "resource": "integer/BUTTON_Y_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 463
+        }
+      ],
+      "source_line": 9333
+    },
+    {
+      "resource": "integer/BUTTON_Y_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 784
+        }
+      ],
+      "source_line": 9335
+    },
+    {
+      "resource": "integer/BUTTON_Y_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 297
+        }
+      ],
+      "source_line": 9337
+    },
+    {
+      "resource": "integer/BUTTON_Z_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 357
+        }
+      ],
+      "source_line": 9339
+    },
+    {
+      "resource": "integer/BUTTON_Z_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 560
+        }
+      ],
+      "source_line": 9341
+    },
+    {
+      "resource": "integer/BUTTON_Z_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 131
+        }
+      ],
+      "source_line": 9343
+    },
+    {
+      "resource": "integer/BUTTON_Z_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 431
+        }
+      ],
+      "source_line": 9345
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_A_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 820
+        }
+      ],
+      "source_line": 9347
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_A_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 481
+        }
+      ],
+      "source_line": 9349
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_A_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 860
+        }
+      ],
+      "source_line": 9351
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_A_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 688
+        }
+      ],
+      "source_line": 9353
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_B_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 763
+        }
+      ],
+      "source_line": 9355
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_B_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 562
+        }
+      ],
+      "source_line": 9357
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_B_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 787
+        }
+      ],
+      "source_line": 9359
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_B_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 806
+        }
+      ],
+      "source_line": 9361
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_HOME_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 250
+        }
+      ],
+      "source_line": 9363
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_HOME_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 420
+        }
+      ],
+      "source_line": 9365
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_HOME_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 500
+        }
+      ],
+      "source_line": 9367
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_HOME_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 834
+        }
+      ],
+      "source_line": 9369
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_MINUS_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 100
+        }
+      ],
+      "source_line": 9371
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_MINUS_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 420
+        }
+      ],
+      "source_line": 9373
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_MINUS_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 420
+        }
+      ],
+      "source_line": 9375
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_MINUS_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 870
+        }
+      ],
+      "source_line": 9377
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_PLUS_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 400
+        }
+      ],
+      "source_line": 9379
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_PLUS_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 420
+        }
+      ],
+      "source_line": 9381
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_PLUS_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 580
+        }
+      ],
+      "source_line": 9383
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_PLUS_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 870
+        }
+      ],
+      "source_line": 9385
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_X_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 665
+        }
+      ],
+      "source_line": 9387
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_X_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 476
+        }
+      ],
+      "source_line": 9389
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_X_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 932
+        }
+      ],
+      "source_line": 9391
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_X_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 523
+        }
+      ],
+      "source_line": 9393
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_Y_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 601
+        }
+      ],
+      "source_line": 9395
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_Y_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 552
+        }
+      ],
+      "source_line": 9397
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_Y_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 823
+        }
+      ],
+      "source_line": 9399
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_Y_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 522
+        }
+      ],
+      "source_line": 9401
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_ZL_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 301
+        }
+      ],
+      "source_line": 9403
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_ZL_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 613
+        }
+      ],
+      "source_line": 9405
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_ZL_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 19
+        }
+      ],
+      "source_line": 9407
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_ZL_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 223
+        }
+      ],
+      "source_line": 9409
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_ZR_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 445
+        }
+      ],
+      "source_line": 9411
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_ZR_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 734
+        }
+      ],
+      "source_line": 9413
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_ZR_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 897
+        }
+      ],
+      "source_line": 9415
+    },
+    {
+      "resource": "integer/CLASSIC_BUTTON_ZR_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 263
+        }
+      ],
+      "source_line": 9417
+    },
+    {
+      "resource": "integer/CLASSIC_DPAD_UP_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 101
+        }
+      ],
+      "source_line": 9419
+    },
+    {
+      "resource": "integer/CLASSIC_DPAD_UP_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 752
+        }
+      ],
+      "source_line": 9421
+    },
+    {
+      "resource": "integer/CLASSIC_DPAD_UP_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 203
+        }
+      ],
+      "source_line": 9423
+    },
+    {
+      "resource": "integer/CLASSIC_DPAD_UP_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 680
+        }
+      ],
+      "source_line": 9425
+    },
+    {
+      "resource": "integer/CLASSIC_STICK_LEFT_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 46
+        }
+      ],
+      "source_line": 9427
+    },
+    {
+      "resource": "integer/CLASSIC_STICK_LEFT_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 533
+        }
+      ],
+      "source_line": 9429
+    },
+    {
+      "resource": "integer/CLASSIC_STICK_LEFT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 23
+        }
+      ],
+      "source_line": 9431
+    },
+    {
+      "resource": "integer/CLASSIC_STICK_LEFT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 622
+        }
+      ],
+      "source_line": 9433
+    },
+    {
+      "resource": "integer/CLASSIC_STICK_RIGHT_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 706
+        }
+      ],
+      "source_line": 9435
+    },
+    {
+      "resource": "integer/CLASSIC_STICK_RIGHT_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 671
+        }
+      ],
+      "source_line": 9437
+    },
+    {
+      "resource": "integer/CLASSIC_STICK_RIGHT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 636
+        }
+      ],
+      "source_line": 9439
+    },
+    {
+      "resource": "integer/CLASSIC_STICK_RIGHT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 655
+        }
+      ],
+      "source_line": 9441
+    },
+    {
+      "resource": "integer/CLASSIC_TRIGGER_L_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 342
+        }
+      ],
+      "source_line": 9443
+    },
+    {
+      "resource": "integer/CLASSIC_TRIGGER_L_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 458
+        }
+      ],
+      "source_line": 9445
+    },
+    {
+      "resource": "integer/CLASSIC_TRIGGER_L_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 124
+        }
+      ],
+      "source_line": 9447
+    },
+    {
+      "resource": "integer/CLASSIC_TRIGGER_L_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 429
+        }
+      ],
+      "source_line": 9449
+    },
+    {
+      "resource": "integer/CLASSIC_TRIGGER_R_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 650
+        }
+      ],
+      "source_line": 9451
+    },
+    {
+      "resource": "integer/CLASSIC_TRIGGER_R_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 360
+        }
+      ],
+      "source_line": 9453
+    },
+    {
+      "resource": "integer/CLASSIC_TRIGGER_R_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 737
+        }
+      ],
+      "source_line": 9455
+    },
+    {
+      "resource": "integer/CLASSIC_TRIGGER_R_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 311
+        }
+      ],
+      "source_line": 9457
+    },
+    {
+      "resource": "integer/NUNCHUK_BUTTON_C_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 786
+        }
+      ],
+      "source_line": 9459
+    },
+    {
+      "resource": "integer/NUNCHUK_BUTTON_C_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 455
+        }
+      ],
+      "source_line": 9461
+    },
+    {
+      "resource": "integer/NUNCHUK_BUTTON_C_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 681
+        }
+      ],
+      "source_line": 9463
+    },
+    {
+      "resource": "integer/NUNCHUK_BUTTON_C_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 765
+        }
+      ],
+      "source_line": 9465
+    },
+    {
+      "resource": "integer/NUNCHUK_BUTTON_Z_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 526
+        }
+      ],
+      "source_line": 9467
+    },
+    {
+      "resource": "integer/NUNCHUK_BUTTON_Z_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 483
+        }
+      ],
+      "source_line": 9469
+    },
+    {
+      "resource": "integer/NUNCHUK_BUTTON_Z_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 850
+        }
+      ],
+      "source_line": 9471
+    },
+    {
+      "resource": "integer/NUNCHUK_BUTTON_Z_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 208
+        }
+      ],
+      "source_line": 9473
+    },
+    {
+      "resource": "integer/NUNCHUK_STICK_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 68
+        }
+      ],
+      "source_line": 9475
+    },
+    {
+      "resource": "integer/NUNCHUK_STICK_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 602
+        }
+      ],
+      "source_line": 9477
+    },
+    {
+      "resource": "integer/NUNCHUK_STICK_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 51
+        }
+      ],
+      "source_line": 9479
+    },
+    {
+      "resource": "integer/NUNCHUK_STICK_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 681
+        }
+      ],
+      "source_line": 9481
+    },
+    {
+      "resource": "integer/STICK_C_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 622
+        }
+      ],
+      "source_line": 9483
+    },
+    {
+      "resource": "integer/STICK_C_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 715
+        }
+      ],
+      "source_line": 9485
+    },
+    {
+      "resource": "integer/STICK_C_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 686
+        }
+      ],
+      "source_line": 9487
+    },
+    {
+      "resource": "integer/STICK_C_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 676
+        }
+      ],
+      "source_line": 9489
+    },
+    {
+      "resource": "integer/STICK_MAIN_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 134
+        }
+      ],
+      "source_line": 9491
+    },
+    {
+      "resource": "integer/STICK_MAIN_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 687
+        }
+      ],
+      "source_line": 9493
+    },
+    {
+      "resource": "integer/STICK_MAIN_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 17
+        }
+      ],
+      "source_line": 9495
+    },
+    {
+      "resource": "integer/STICK_MAIN_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 620
+        }
+      ],
+      "source_line": 9497
+    },
+    {
+      "resource": "integer/TRIGGER_L_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 76
+        }
+      ],
+      "source_line": 9499
+    },
+    {
+      "resource": "integer/TRIGGER_L_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 582
+        }
+      ],
+      "source_line": 9501
+    },
+    {
+      "resource": "integer/TRIGGER_L_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 13
+        }
+      ],
+      "source_line": 9503
+    },
+    {
+      "resource": "integer/TRIGGER_L_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 330
+        }
+      ],
+      "source_line": 9505
+    },
+    {
+      "resource": "integer/TRIGGER_R_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 739
+        }
+      ],
+      "source_line": 9507
+    },
+    {
+      "resource": "integer/TRIGGER_R_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 629
+        }
+      ],
+      "source_line": 9509
+    },
+    {
+      "resource": "integer/TRIGGER_R_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 845
+        }
+      ],
+      "source_line": 9511
+    },
+    {
+      "resource": "integer/TRIGGER_R_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 133
+        }
+      ],
+      "source_line": 9513
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_1_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 707
+        }
+      ],
+      "source_line": 9515
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_1_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 742
+        }
+      ],
+      "source_line": 9517
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_1_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 778
+        }
+      ],
+      "source_line": 9519
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_1_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 715
+        }
+      ],
+      "source_line": 9521
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_2_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 846
+        }
+      ],
+      "source_line": 9523
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_2_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 692
+        }
+      ],
+      "source_line": 9525
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_2_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 778
+        }
+      ],
+      "source_line": 9527
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_2_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 864
+        }
+      ],
+      "source_line": 9529
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_A_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 769
+        }
+      ],
+      "source_line": 9531
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_A_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 584
+        }
+      ],
+      "source_line": 9533
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_A_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 858
+        }
+      ],
+      "source_line": 9535
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_A_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 772
+        }
+      ],
+      "source_line": 9537
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_B_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 553
+        }
+      ],
+      "source_line": 9539
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_B_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 621
+        }
+      ],
+      "source_line": 9541
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_B_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 850
+        }
+      ],
+      "source_line": 9543
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_B_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 460
+        }
+      ],
+      "source_line": 9545
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_HOME_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 250
+        }
+      ],
+      "source_line": 9547
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_HOME_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 420
+        }
+      ],
+      "source_line": 9549
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_HOME_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 514
+        }
+      ],
+      "source_line": 9551
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_HOME_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 854
+        }
+      ],
+      "source_line": 9553
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_MINUS_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 100
+        }
+      ],
+      "source_line": 9555
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_MINUS_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 420
+        }
+      ],
+      "source_line": 9557
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_MINUS_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 787
+        }
+      ],
+      "source_line": 9559
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_MINUS_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 578
+        }
+      ],
+      "source_line": 9561
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_PLUS_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 400
+        }
+      ],
+      "source_line": 9563
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_PLUS_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 420
+        }
+      ],
+      "source_line": 9565
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_PLUS_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 701
+        }
+      ],
+      "source_line": 9567
+    },
+    {
+      "resource": "integer/WIIMOTE_BUTTON_PLUS_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 630
+        }
+      ],
+      "source_line": 9569
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_1_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 707
+        }
+      ],
+      "source_line": 9571
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_1_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 742
+        }
+      ],
+      "source_line": 9573
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_1_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 867
+        }
+      ],
+      "source_line": 9575
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_1_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 303
+        }
+      ],
+      "source_line": 9577
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_2_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 846
+        }
+      ],
+      "source_line": 9579
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_2_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 692
+        }
+      ],
+      "source_line": 9581
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_2_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 925
+        }
+      ],
+      "source_line": 9583
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_2_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 103
+        }
+      ],
+      "source_line": 9585
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_A_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 769
+        }
+      ],
+      "source_line": 9587
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_A_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 584
+        }
+      ],
+      "source_line": 9589
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_A_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 890
+        }
+      ],
+      "source_line": 9591
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_A_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 734
+        }
+      ],
+      "source_line": 9593
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_B_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 553
+        }
+      ],
+      "source_line": 9595
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_B_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 621
+        }
+      ],
+      "source_line": 9597
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_B_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 731
+        }
+      ],
+      "source_line": 9599
+    },
+    {
+      "resource": "integer/WIIMOTE_H_BUTTON_B_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 715
+        }
+      ],
+      "source_line": 9601
+    },
+    {
+      "resource": "integer/WIIMOTE_O_UP_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 260
+        }
+      ],
+      "source_line": 9603
+    },
+    {
+      "resource": "integer/WIIMOTE_O_UP_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 773
+        }
+      ],
+      "source_line": 9605
+    },
+    {
+      "resource": "integer/WIIMOTE_O_UP_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 48
+        }
+      ],
+      "source_line": 9607
+    },
+    {
+      "resource": "integer/WIIMOTE_O_UP_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 652
+        }
+      ],
+      "source_line": 9609
+    },
+    {
+      "resource": "integer/WIIMOTE_RIGHT_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 68
+        }
+      ],
+      "source_line": 9611
+    },
+    {
+      "resource": "integer/WIIMOTE_RIGHT_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 602
+        }
+      ],
+      "source_line": 9613
+    },
+    {
+      "resource": "integer/WIIMOTE_RIGHT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 48
+        }
+      ],
+      "source_line": 9615
+    },
+    {
+      "resource": "integer/WIIMOTE_RIGHT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 187
+        }
+      ],
+      "source_line": 9617
+    },
+    {
+      "resource": "integer/WIIMOTE_UP_PORTRAIT_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 260
+        }
+      ],
+      "source_line": 9619
+    },
+    {
+      "resource": "integer/WIIMOTE_UP_PORTRAIT_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 773
+        }
+      ],
+      "source_line": 9621
+    },
+    {
+      "resource": "integer/WIIMOTE_UP_X",
+      "values": [
+        {
+          "configuration": "",
+          "value": 224
+        }
+      ],
+      "source_line": 9623
+    },
+    {
+      "resource": "integer/WIIMOTE_UP_Y",
+      "values": [
+        {
+          "configuration": "",
+          "value": 652
+        }
+      ],
+      "source_line": 9625
+    },
+    {
+      "resource": "integer/abc_config_activityDefaultDur",
+      "values": [
+        {
+          "configuration": "",
+          "value": 220
+        }
+      ],
+      "source_line": 9627
+    },
+    {
+      "resource": "integer/abc_config_activityShortDur",
+      "values": [
+        {
+          "configuration": "",
+          "value": 150
+        }
+      ],
+      "source_line": 9629
+    },
+    {
+      "resource": "integer/app_bar_elevation_anim_duration",
+      "values": [
+        {
+          "configuration": "",
+          "value": 150
+        }
+      ],
+      "source_line": 9631
+    },
+    {
+      "resource": "integer/bottom_sheet_slide_duration",
+      "values": [
+        {
+          "configuration": "",
+          "value": 150
+        }
+      ],
+      "source_line": 9633
+    },
+    {
+      "resource": "integer/config_tooltipAnimTime",
+      "values": [
+        {
+          "configuration": "",
+          "value": 150
+        }
+      ],
+      "source_line": 9635
+    },
+    {
+      "resource": "integer/default_icon_animation_duration",
+      "values": [
+        {
+          "configuration": "",
+          "value": 10000
+        }
+      ],
+      "source_line": 9637
+    },
+    {
+      "resource": "integer/design_snackbar_text_max_lines",
+      "values": [
+        {
+          "configuration": "",
+          "value": 2
+        },
+        {
+          "configuration": "sw600dp",
+          "value": 1
+        }
+      ],
+      "source_line": 9639
+    },
+    {
+      "resource": "integer/design_tab_indicator_anim_duration_ms",
+      "values": [
+        {
+          "configuration": "",
+          "value": 300
+        }
+      ],
+      "source_line": 9642
+    },
+    {
+      "resource": "integer/game_title_lines",
+      "values": [
+        {
+          "configuration": "",
+          "value": 2
+        },
+        {
+          "configuration": "h500dp",
+          "value": 3
+        },
+        {
+          "configuration": "h600dp",
+          "value": 4
+        }
+      ],
+      "source_line": 9644
+    },
+    {
+      "resource": "integer/hide_password_duration",
+      "values": [
+        {
+          "configuration": "",
+          "value": 320
+        }
+      ],
+      "source_line": 9648
+    },
+    {
+      "resource": "integer/lb_browse_headers_transition_delay",
+      "values": [
+        {
+          "configuration": "",
+          "value": 150
+        }
+      ],
+      "source_line": 9650
+    },
+    {
+      "resource": "integer/lb_browse_headers_transition_duration",
+      "values": [
+        {
+          "configuration": "",
+          "value": 250
+        }
+      ],
+      "source_line": 9652
+    },
+    {
+      "resource": "integer/lb_browse_rows_anim_duration",
+      "values": [
+        {
+          "configuration": "",
+          "value": 250
+        }
+      ],
+      "source_line": 9654
+    },
+    {
+      "resource": "integer/lb_card_activated_animation_duration",
+      "values": [
+        {
+          "configuration": "",
+          "value": 150
+        }
+      ],
+      "source_line": 9656
+    },
+    {
+      "resource": "integer/lb_card_selected_animation_delay",
+      "values": [
+        {
+          "configuration": "",
+          "value": 400
+        }
+      ],
+      "source_line": 9658
+    },
+    {
+      "resource": "integer/lb_card_selected_animation_duration",
+      "values": [
+        {
+          "configuration": "",
+          "value": 150
+        }
+      ],
+      "source_line": 9660
+    },
+    {
+      "resource": "integer/lb_details_description_subtitle_max_lines",
+      "values": [
+        {
+          "configuration": "",
+          "value": 1
+        }
+      ],
+      "source_line": 9662
+    },
+    {
+      "resource": "integer/lb_details_description_title_max_lines",
+      "values": [
+        {
+          "configuration": "",
+          "value": 2
+        }
+      ],
+      "source_line": 9664
+    },
+    {
+      "resource": "integer/lb_error_message_max_lines",
+      "values": [
+        {
+          "configuration": "",
+          "value": 3
+        }
+      ],
+      "source_line": 9666
+    },
+    {
+      "resource": "integer/lb_guidedactions_item_animation_duration",
+      "values": [
+        {
+          "configuration": "",
+          "value": 100
+        }
+      ],
+      "source_line": 9668
+    },
+    {
+      "resource": "integer/lb_guidedactions_item_description_min_lines",
+      "values": [
+        {
+          "configuration": "",
+          "value": 2
+        }
+      ],
+      "source_line": 9670
+    },
+    {
+      "resource": "integer/lb_guidedactions_item_title_max_lines",
+      "values": [
+        {
+          "configuration": "",
+          "value": 3
+        }
+      ],
+      "source_line": 9672
+    },
+    {
+      "resource": "integer/lb_guidedactions_item_title_min_lines",
+      "values": [
+        {
+          "configuration": "",
+          "value": 1
+        }
+      ],
+      "source_line": 9674
+    },
+    {
+      "resource": "integer/lb_guidedstep_activity_background_fade_duration_ms",
+      "values": [
+        {
+          "configuration": "",
+          "value": 350
+        }
+      ],
+      "source_line": 9676
+    },
+    {
+      "resource": "integer/lb_playback_controls_show_time_ms",
+      "values": [
+        {
+          "configuration": "",
+          "value": 3000
+        }
+      ],
+      "source_line": 9678
+    },
+    {
+      "resource": "integer/lb_playback_controls_tickle_timeout_ms",
+      "values": [
+        {
+          "configuration": "",
+          "value": 0
+        }
+      ],
+      "source_line": 9680
+    },
+    {
+      "resource": "integer/lb_search_orb_pulse_duration_ms",
+      "values": [
+        {
+          "configuration": "",
+          "value": 1000
+        }
+      ],
+      "source_line": 9682
+    },
+    {
+      "resource": "integer/lb_search_orb_scale_duration_ms",
+      "values": [
+        {
+          "configuration": "",
+          "value": 150
+        }
+      ],
+      "source_line": 9684
+    },
+    {
+      "resource": "integer/loadsave_state_columns",
+      "values": [
+        {
+          "configuration": "",
+          "value": 1
+        },
+        {
+          "configuration": "w540dp",
+          "value": 2
+        },
+        {
+          "configuration": "w660dp",
+          "value": 3
+        }
+      ],
+      "source_line": 9686
+    },
+    {
+      "resource": "integer/loadsave_state_rows",
+      "values": [
+        {
+          "configuration": "",
+          "value": 6
+        },
+        {
+          "configuration": "w540dp",
+          "value": 3
+        },
+        {
+          "configuration": "w660dp",
+          "value": 2
+        }
+      ],
+      "source_line": 9690
+    },
+    {
+      "resource": "integer/m3_badge_max_number",
+      "values": [
+        {
+          "configuration": "",
+          "value": 999
+        }
+      ],
+      "source_line": 9694
+    },
+    {
+      "resource": "integer/m3_btn_anim_delay_ms",
+      "values": [
+        {
+          "configuration": "",
+          "value": 100
+        }
+      ],
+      "source_line": 9696
+    },
+    {
+      "resource": "integer/m3_btn_anim_duration_ms",
+      "values": [
+        {
+          "configuration": "",
+          "value": 100
+        }
+      ],
+      "source_line": 9698
+    },
+    {
+      "resource": "integer/m3_chip_anim_duration",
+      "values": [
+        {
+          "configuration": "",
+          "value": 100
+        }
+      ],
+      "source_line": 9700
+    },
+    {
+      "resource": "integer/m3_sys_motion_duration_extra_long1",
+      "values": [
+        {
+          "configuration": "",
+          "value": 700
+        }
+      ],
+      "source_line": 9702
+    },
+    {
+      "resource": "integer/m3_sys_motion_duration_extra_long2",
+      "values": [
+        {
+          "configuration": "",
+          "value": 800
+        }
+      ],
+      "source_line": 9704
+    },
+    {
+      "resource": "integer/m3_sys_motion_duration_extra_long3",
+      "values": [
+        {
+          "configuration": "",
+          "value": 900
+        }
+      ],
+      "source_line": 9706
+    },
+    {
+      "resource": "integer/m3_sys_motion_duration_extra_long4",
+      "values": [
+        {
+          "configuration": "",
+          "value": 1000
+        }
+      ],
+      "source_line": 9708
+    },
+    {
+      "resource": "integer/m3_sys_motion_duration_long1",
+      "values": [
+        {
+          "configuration": "",
+          "value": 450
+        }
+      ],
+      "source_line": 9710
+    },
+    {
+      "resource": "integer/m3_sys_motion_duration_long2",
+      "values": [
+        {
+          "configuration": "",
+          "value": 500
+        }
+      ],
+      "source_line": 9712
+    },
+    {
+      "resource": "integer/m3_sys_motion_duration_long3",
+      "values": [
+        {
+          "configuration": "",
+          "value": 550
+        }
+      ],
+      "source_line": 9714
+    },
+    {
+      "resource": "integer/m3_sys_motion_duration_long4",
+      "values": [
+        {
+          "configuration": "",
+          "value": 600
+        }
+      ],
+      "source_line": 9716
+    },
+    {
+      "resource": "integer/m3_sys_motion_duration_medium1",
+      "values": [
+        {
+          "configuration": "",
+          "value": 250
+        }
+      ],
+      "source_line": 9718
+    },
+    {
+      "resource": "integer/m3_sys_motion_duration_medium2",
+      "values": [
+        {
+          "configuration": "",
+          "value": 300
+        }
+      ],
+      "source_line": 9720
+    },
+    {
+      "resource": "integer/m3_sys_motion_duration_medium3",
+      "values": [
+        {
+          "configuration": "",
+          "value": 350
+        }
+      ],
+      "source_line": 9722
+    },
+    {
+      "resource": "integer/m3_sys_motion_duration_medium4",
+      "values": [
+        {
+          "configuration": "",
+          "value": 400
+        }
+      ],
+      "source_line": 9724
+    },
+    {
+      "resource": "integer/m3_sys_motion_duration_short1",
+      "values": [
+        {
+          "configuration": "",
+          "value": 50
+        }
+      ],
+      "source_line": 9726
+    },
+    {
+      "resource": "integer/m3_sys_motion_duration_short2",
+      "values": [
+        {
+          "configuration": "",
+          "value": 100
+        }
+      ],
+      "source_line": 9728
+    },
+    {
+      "resource": "integer/m3_sys_motion_duration_short3",
+      "values": [
+        {
+          "configuration": "",
+          "value": 150
+        }
+      ],
+      "source_line": 9730
+    },
+    {
+      "resource": "integer/m3_sys_motion_duration_short4",
+      "values": [
+        {
+          "configuration": "",
+          "value": 200
+        }
+      ],
+      "source_line": 9732
+    },
+    {
+      "resource": "integer/m3_sys_motion_path",
+      "values": [
+        {
+          "configuration": "",
+          "value": 0
+        }
+      ],
+      "source_line": 9734
+    },
+    {
+      "resource": "integer/m3_sys_shape_corner_full_corner_family",
+      "values": [
+        {
+          "configuration": "",
+          "value": 0
+        }
+      ],
+      "source_line": 9736
+    },
+    {
+      "resource": "integer/material_motion_duration_long_1",
+      "values": [
+        {
+          "configuration": "",
+          "value": 300
+        }
+      ],
+      "source_line": 9738
+    },
+    {
+      "resource": "integer/material_motion_duration_long_2",
+      "values": [
+        {
+          "configuration": "",
+          "value": 350
+        }
+      ],
+      "source_line": 9740
+    },
+    {
+      "resource": "integer/material_motion_duration_medium_1",
+      "values": [
+        {
+          "configuration": "",
+          "value": 200
+        }
+      ],
+      "source_line": 9742
+    },
+    {
+      "resource": "integer/material_motion_duration_medium_2",
+      "values": [
+        {
+          "configuration": "",
+          "value": 250
+        }
+      ],
+      "source_line": 9744
+    },
+    {
+      "resource": "integer/material_motion_duration_short_1",
+      "values": [
+        {
+          "configuration": "",
+          "value": 75
+        }
+      ],
+      "source_line": 9746
+    },
+    {
+      "resource": "integer/material_motion_duration_short_2",
+      "values": [
+        {
+          "configuration": "",
+          "value": 150
+        }
+      ],
+      "source_line": 9748
+    },
+    {
+      "resource": "integer/material_motion_path",
+      "values": [
+        {
+          "configuration": "",
+          "value": 0
+        }
+      ],
+      "source_line": 9750
+    },
+    {
+      "resource": "integer/mtrl_btn_anim_delay_ms",
+      "values": [
+        {
+          "configuration": "",
+          "value": 100
+        }
+      ],
+      "source_line": 9752
+    },
+    {
+      "resource": "integer/mtrl_btn_anim_duration_ms",
+      "values": [
+        {
+          "configuration": "",
+          "value": 100
+        }
+      ],
+      "source_line": 9754
+    },
+    {
+      "resource": "integer/mtrl_calendar_header_orientation",
+      "values": [
+        {
+          "configuration": "",
+          "value": 1
+        },
+        {
+          "configuration": "land",
+          "value": 0
+        }
+      ],
+      "source_line": 9756
+    },
+    {
+      "resource": "integer/mtrl_calendar_selection_text_lines",
+      "values": [
+        {
+          "configuration": "",
+          "value": 1
+        },
+        {
+          "configuration": "land",
+          "value": 6
+        }
+      ],
+      "source_line": 9759
+    },
+    {
+      "resource": "integer/mtrl_calendar_year_selector_span",
+      "values": [
+        {
+          "configuration": "",
+          "value": 3
+        }
+      ],
+      "source_line": 9762
+    },
+    {
+      "resource": "integer/mtrl_card_anim_delay_ms",
+      "values": [
+        {
+          "configuration": "",
+          "value": 75
+        }
+      ],
+      "source_line": 9764
+    },
+    {
+      "resource": "integer/mtrl_card_anim_duration_ms",
+      "values": [
+        {
+          "configuration": "",
+          "value": 120
+        }
+      ],
+      "source_line": 9766
+    },
+    {
+      "resource": "integer/mtrl_chip_anim_duration",
+      "values": [
+        {
+          "configuration": "",
+          "value": 100
+        }
+      ],
+      "source_line": 9768
+    },
+    {
+      "resource": "integer/mtrl_switch_thumb_viewport_center_coordinate",
+      "values": [
+        {
+          "configuration": "",
+          "value": 16
+        }
+      ],
+      "source_line": 9776
+    },
+    {
+      "resource": "integer/mtrl_switch_thumb_viewport_size",
+      "values": [
+        {
+          "configuration": "",
+          "value": 32
+        }
+      ],
+      "source_line": 9778
+    },
+    {
+      "resource": "integer/mtrl_switch_track_viewport_height",
+      "values": [
+        {
+          "configuration": "",
+          "value": 32
+        }
+      ],
+      "source_line": 9780
+    },
+    {
+      "resource": "integer/mtrl_switch_track_viewport_width",
+      "values": [
+        {
+          "configuration": "",
+          "value": 52
+        }
+      ],
+      "source_line": 9782
+    },
+    {
+      "resource": "integer/mtrl_tab_indicator_anim_duration_ms",
+      "values": [
+        {
+          "configuration": "",
+          "value": 250
+        }
+      ],
+      "source_line": 9784
+    },
+    {
+      "resource": "integer/mtrl_view_invisible",
+      "values": [
+        {
+          "configuration": "",
+          "value": 1
+        }
+      ],
+      "source_line": 9786
+    },
+    {
+      "resource": "integer/show_password_duration",
+      "values": [
+        {
+          "configuration": "",
+          "value": 200
+        }
+      ],
+      "source_line": 9788
+    },
+    {
+      "resource": "integer/slideEdgeEnd",
+      "values": [
+        {
+          "configuration": "ldrtl",
+          "value": 3
+        }
+      ],
+      "source_line": 9790
+    },
+    {
+      "resource": "integer/slideEdgeStart",
+      "values": [
+        {
+          "configuration": "ldrtl",
+          "value": 5
+        }
+      ],
+      "source_line": 9793
+    }
+  ]
+}

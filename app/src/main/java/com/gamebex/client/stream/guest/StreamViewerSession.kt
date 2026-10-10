@@ -506,10 +506,24 @@ class StreamViewerSession(
         if (message == null) onLeave()
     }
 
+    /** The overlay health line, or null when the overlay is whole. */
+    private fun overlayStatusLine(): String? {
+        if (StreamOverlayStore.using26aFallback) return "OVERLAY_DEGRADED 26a fallback (no host/stock overlay)"
+        EmuOverlayStore.statusLine.value?.let { return it }
+        return StreamOverlayStore.statusLine.value
+    }
+
     private fun refreshStats(log: Boolean) {
         synchronized(lock) { refreshAudioCounters() }
         val now = System.nanoTime()
-        if (_ui.value.showStats) _ui.update { it.copy(stats = StreamStatsText.lines(stats.snapshot(now), endpoint.audioTimestampOrigin, activeFlagsLine)) }
+        if (_ui.value.showStats) _ui.update {
+            it.copy(
+                stats = StreamStatsText.lines(
+                    stats.snapshot(now), endpoint.audioTimestampOrigin, activeFlagsLine,
+                    overlayLine = overlayStatusLine(),
+                ),
+            )
+        }
         if (log) {
             Log.i(TAG, "${stats.statsLine(now)} audio_origin=${endpoint.audioTimestampOrigin}")
             val mapping = synchronized(lock) {

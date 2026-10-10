@@ -160,7 +160,7 @@ private fun SearchSpinner() {
     val g = LocalConsoleGeometry.current
     val reducedMotion = isSystemReducedMotion()
     val phase by if (reducedMotion) {
-        androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0f) }
+        androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
     } else {
         val transition = rememberInfiniteTransition(label = "quiet-spin")
         transition.animateFloat(

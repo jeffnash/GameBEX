@@ -1,14 +1,20 @@
-# moto g 2025 debloat
+# moto g 2025: set up a GameBEX handheld
 
-`debloat.sh` removes carrier apps, ad installers and preloaded games from a
-**moto g 2025** (codename `kansas`: XT2513-1/-2/-3 and XT2513V, including the
-Straight Talk, Total and Tracfone models). It also applies a few gaming display
-tweaks. It works over adb from any Linux or macOS computer. You don't need
-root or an unlocked bootloader.
+Two scripts for a **moto g 2025** (codename `kansas`: XT2513-1/-2/-3 and XT2513V, including the
+Straight Talk, Total and Tracfone models). Both work over adb from any Linux or macOS computer.
+You don't need root or an unlocked bootloader.
 
-Packages are removed with `pm uninstall --user 0`, so each app stays on the
-phone's system image and one command brings it back. The script writes down
-what it removed so you can undo it.
+- `setup.sh` does the whole setup in one go:
+  1. runs `debloat.sh`;
+  2. installs GameBEX;
+  3. grants GameBEX All files access, permission to install emulators, and notifications;
+  4. installs and starts Shizuku;
+  5. can make GameBEX the home screen.
+- `debloat.sh` removes carrier apps, ad installers and preloaded games, and applies a few gaming
+  display tweaks. `setup.sh` runs it for you, or you can use it on its own (below).
+
+Packages are removed with `pm uninstall --user 0`, so each app stays on the phone's system image
+and one command brings it back. The script writes down what it removed so you can undo it.
 
 ## Before you start
 
@@ -19,7 +25,41 @@ what it removed so you can undo it.
    Then go to Settings > System > Developer options and turn on **USB debugging**.
 3. Plug the phone in and accept the **Allow USB debugging?** prompt.
 
-## Use
+## One-command setup
+
+```sh
+DRY_RUN=1 ./setup.sh                    # shows what it would do; changes and downloads nothing
+GAMEBEX_APK=GameBEX-1.0.0.apk ./setup.sh   # does it, with an APK you downloaded
+./setup.sh                              # same, but downloads the latest GitHub release itself
+./setup.sh shizuku                      # only (re)start Shizuku, e.g. after a reboot
+```
+
+**Options**
+- `MAKE_HOME=1`: also makes GameBEX the home screen.
+- `DEBLOAT=0`: skips the debloat step.
+- `SHIZUKU=0`: skips Shizuku.
+- `SERIAL=...`: picks the phone when several are connected.
+- Every `debloat.sh` option (`INCLUDE`, `EXCLUDE`, `KEEP`, `PERF`) passes through.
+- `./setup.sh --help` lists them all.
+
+**Safety**
+- The debloat step still asks before removing anything.
+- Shizuku comes from its official GitHub releases.
+- If a GameBEX signed with a different key is already installed (for example a self-built debug copy), the script stops and explains. It doesn't uninstall it, because that would erase GameBEX's library and settings.
+
+**After it finishes, on the phone:**
+1. Open GameBEX.
+2. Pair your controller in Bluetooth settings.
+3. In **System → Device → Controls & text size → Set up emulators**, allow Shizuku access.
+4. Add games, or a plugin.
+
+**Shizuku stops on every reboot.** `./setup.sh shizuku` starts it again, or start it from the Shizuku app with wireless debugging.
+
+**No computer?** Every step can be done on the phone instead. See "The $30 handheld" on the GameBEX website.
+
+## Debloat only
+
+### Use
 
 ```sh
 DRY_RUN=1 ./debloat.sh          # shows exactly what would change, and changes nothing
