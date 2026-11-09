@@ -718,7 +718,10 @@ private fun ConsoleNavHost(
         }
         composable("emulators") {
             val vm: EmulatorsViewModel = viewModel { EmulatorsViewModel(context.applicationContext) }
-            SystemScreen(vm, focusMemory, rail, onSources = { nav.navigate("sources") }, onTogether = { nav.navigate("together") }, onAdvanced = { nav.navigate("advanced") }, hints = hints)
+            SystemScreen(vm, focusMemory, rail, onSources = { nav.navigate("sources") }, onTogether = { nav.navigate("together") }, onAdvanced = { nav.navigate("advanced") }, onAbout = { nav.navigate("about") }, hints = hints)
+        }
+        composable("about") {
+            com.gamebex.client.ui.system.AboutScreen(onBack = { nav.popBackStack() }, rail, hints)
         }
         composable("advanced") {
             AdvancedScreen(onBack = { nav.popBackStack() }, onStreamFlags = { nav.navigate("stream-flags") }, rail, focusMemory, hints = hints)

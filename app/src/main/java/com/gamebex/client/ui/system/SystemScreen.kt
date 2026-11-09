@@ -109,6 +109,7 @@ fun SystemScreen(
     onSources: () -> Unit = {},
     onTogether: () -> Unit = {},
     onAdvanced: () -> Unit = {},
+    onAbout: () -> Unit = {},
     hints: ConsoleHints? = null,
 ) {
     val g = LocalConsoleGeometry.current
@@ -536,6 +537,7 @@ fun SystemScreen(
                 onControls = { showControls = true },
                 onFiles = { context.openAllFilesSettings() },
                 onAdvanced = onAdvanced,
+                onAbout = onAbout,
             )
         }
 
@@ -995,6 +997,7 @@ private fun DeviceDialog(
     onControls: () -> Unit,
     onFiles: () -> Unit,
     onAdvanced: () -> Unit,
+    onAbout: () -> Unit,
 ) {
     val first = remember { androidx.compose.ui.focus.FocusRequester() }
     fun go(action: () -> Unit): () -> Unit = { onDismiss(); action() }
@@ -1012,6 +1015,7 @@ private fun DeviceDialog(
                 add(TogetherCopy.deviceMenuOption to onTogether)
                 if (sdPresent) add((if (grantOk) "Storage: granted" else "Storage: grant") to onFiles)
                 add("Advanced" to onAdvanced)
+                  add("About GameBEX" to onAbout)
             }
             // Two columns keep all options on screen at large text sizes.
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
