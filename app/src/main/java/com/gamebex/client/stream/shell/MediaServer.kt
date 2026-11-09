@@ -46,6 +46,9 @@ class MediaServer(
     private val latencyControl: Boolean = shellFlag("latency_cc", config.latencyCc),
     private val videoWriteStallMs: Int = StreamDebug.int("video_write_stall_ms", 0, 0..50),
     private val logger: (String) -> Unit = { System.err.println(it) },
+    private val videoWriteTrace: Boolean = StreamDebug.flag("video_write_trace"),
+    private val codecBitrate: Int? = if (com.gamebex.client.BuildConfig.DEBUG)
+        AvcEncoders.vendorKeys(StreamDebug.prop("venc_keys"))["bitrate"]?.takeIf { it > 0 } else null,
 ) : MediaChannel {
     private val token = StreamToken.bytes(config.token)
     private val lock = Object()
@@ -122,7 +125,8 @@ class MediaServer(
             logQuality("start")
         }
         spawn("gbx-media-accept") { acceptLoop(s) }
-        spawn("gbx-media-tick") { tickLoop() }
+        if (codecBitrate == null) spawn("gbx-media-tick") { tickLoop() }
+        else logger("HOST_QUALITY fixed_codec_bitrate=$codecBitrate")
     }
 
     override fun stats(): MediaStats {
@@ -409,6 +413,10 @@ class MediaServer(
                             throw e
                         }
                         framesSent.incrementAndGet()
+                        if (videoWriteTrace) {
+                            val end = clock()
+                            logger("VIDEO_WRITE seq=${f.seq} key=${f.key} auBytes=${f.data.size} beginNs=$begin endNs=$end durationNs=${(end - begin).coerceAtLeast(0L)} captureNs=${f.captureNs} encodedNs=${f.encodedNs}")
+                        }
                         synchronized(lock) {
                             val end = clock()
                             writeTimes.addLast(end to (end - begin).coerceAtLeast(0L))

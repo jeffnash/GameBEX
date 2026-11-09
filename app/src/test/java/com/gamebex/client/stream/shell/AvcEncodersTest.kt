@@ -132,6 +132,53 @@ class AvcEncodersTest {
     }
 
     @Test
+    fun hintedAttemptsFallBackToTheRealRateAfterEveryHintedConfiguration() {
+        val configurations = AvcEncoders.configurationAttempts(StreamCaps.LEVELS[1],
+            enc("c2.mtk.avc.encoder", true).copy(intraRefresh = true),
+            AvcEncoders.Options(fps = 50, intraRefresh = true, rateHint = 240))
+        assertEquals(listOf(240, 240, 240, 240, 50, 50, 50, 50), configurations.map { it.declaredFps })
+        assertEquals(listOf(500, 500, 0, 0, 500, 500, 0, 0), configurations.map { it.intraRefreshPeriod })
+        assertEquals(listOf(true, false, true, false, true, false, true, false), configurations.map { it.strict })
+        assertTrue(configurations.all { it.fps == 50 })
+    }
+
+    @Test
+    fun anUnknownSocUsesTheRealRateAutomatically() {
+        assertEquals(60, AvcEncoders.Options().declaredFps(enc("c2.mtk.avc.encoder", true), 60))
+    }
+
+    @Test
+    fun mediaTekDeclaresAHighRateButKeepsRealCadenceAndIdrSpacing() {
+        for (name in listOf("c2.mtk.avc.encoder", "OMX.MTK.VIDEO.ENCODER.AVC")) {
+            val configurations = AvcEncoders.configurationAttempts(StreamCaps.LEVELS[1],
+                enc(name, true).copy(intraRefresh = true), AvcEncoders.Options(fps = 50, intraRefresh = true, socModel = "MT6835"))
+            val hinted = configurations.take(4)
+            assertTrue(hinted.all { it.fps == 50 && it.declaredFps == AvcEncoders.MTK_DECLARED_FPS })
+            assertEquals(listOf(500, 500, 0, 0), hinted.map { it.intraRefreshPeriod })
+            val periodic = hinted.last()
+            assertEquals(10, periodic.iFrameIntervalS)
+            assertEquals(10f * 50 / AvcEncoders.MTK_DECLARED_FPS, periodic.declaredIFrameInterval, 1e-6f)
+            assertEquals(-1f, configurations.first().declaredIFrameInterval, 0f)
+        }
+        val other = AvcEncoders.configurationAttempts(StreamCaps.LEVELS[1], enc("c2.qti.avc.encoder", true), AvcEncoders.Options())
+        assertTrue(other.all { it.fps == 60 && it.declaredFps == 60 && it.declaredIFrameInterval == 10f })
+    }
+
+    @Test
+    fun rateHintTurnsTheDeclaredRateOffOrOverridesItButNeverGoesBelowCadence() {
+        val mtk = enc("c2.mtk.avc.encoder", true)
+        val qti = enc("c2.qti.avc.encoder", true)
+        assertEquals(60, AvcEncoders.Options(rateHint = 0).declaredFps(mtk, 60))
+        assertEquals(120, AvcEncoders.Options(rateHint = 120).declaredFps(qti, 60))
+        assertEquals(60, AvcEncoders.Options(rateHint = 30).declaredFps(mtk, 60))
+        assertEquals(AvcEncoders.MTK_DECLARED_FPS, AvcEncoders.Options(socModel = "mt6835-rev1").declaredFps(mtk, 30))
+        assertEquals(30, AvcEncoders.Options(socModel = "MT6877").declaredFps(mtk, 30))
+        assertEquals(30, AvcEncoders.Options(socModel = "MT6835", rateHint = 0).declaredFps(mtk, 30))
+        assertEquals(240, AvcEncoders.Options(socModel = "MT6877", rateHint = 240).declaredFps(mtk, 30))
+        assertEquals(30, AvcEncoders.Options().declaredFps(qti, 30))
+    }
+
+    @Test
     fun ignoredOrInvalidRefreshOutputRequiresPeriodicFallback() {
         val refresh = AvcEncoders.Configuration(true, 50, 500)
         for (period in listOf(null, 0, -1)) assertFalse(AvcEncoders.intraRefreshConfirmed(refresh, period))

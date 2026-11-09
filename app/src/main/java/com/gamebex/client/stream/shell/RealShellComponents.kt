@@ -79,4 +79,8 @@ class RealShellComponents(@Suppress("unused") private val context: Context?) : S
 
     override fun mediaChannel(config: StreamConfig): MediaChannel =
         MediaServer(config, logger = { android.util.Log.i("GameBEXStream", it) })
+
+    /** Debug `host_wifi_boost=1` while it is measured. */
+    override fun linkBoost(config: StreamConfig): LinkBoost =
+        if (shellFlag("host_wifi_boost", false)) ShellContext.get()?.let { HostWifiBoost(it) } ?: NoLinkBoost else NoLinkBoost
 }

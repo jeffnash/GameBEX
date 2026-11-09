@@ -91,4 +91,62 @@ class AvcScreenSourceTest {
         }
         assertEquals(0, calls)
     }
+
+    @Test
+    fun slowStartCheckJudgesTheMedianOnceAfterWarmUp() {
+        val fast = SlowStartCheck(thresholdNs = 18_000_000L, skip = 2, window = 5)
+        assertFalse(fast.add(90_000_000L))
+        assertFalse(fast.add(90_000_000L))
+        repeat(4) { assertFalse(fast.add(13_000_000L)) }
+        assertFalse(fast.add(40_000_000L))
+        assertFalse(fast.add(40_000_000L))
+        val slow = SlowStartCheck(thresholdNs = 18_000_000L, skip = 0, window = 5)
+        val answers = listOf(23L, 22L, 12L, 24L, 25L, 30L, 30L).map { slow.add(it * 1_000_000L) }
+        assertEquals(listOf(false, false, false, false, true, false, false), answers)
+    }
+    @Test
+    fun glPassAllowanceKeepsHealthyCropCapturesFromReopening() {
+        val direct = SlowStartCheck(AvcScreenSource.slowThresholdNs(false), skip = 0, window = 3)
+        val crop = SlowStartCheck(AvcScreenSource.slowThresholdNs(true), skip = 0, window = 3)
+        repeat(2) { assertFalse(direct.add(23_000_000L)); assertFalse(crop.add(20_700_000L)) }
+        assertTrue(direct.add(23_000_000L))
+        assertFalse(crop.add(20_700_000L))
+        assertEquals(26_000_000L, AvcScreenSource.slowThresholdNs(true))
+        assertEquals(9_000_000L, AvcScreenSource.slowThresholdNs(true, 1_000_000L))
+    }
+
+    @Test
+    fun reopenedEncoderReportsItsMedianWithoutAnotherReopen() {
+        for (ms in listOf(14L, 32L)) {
+            val check = SlowStartCheck(reportOnly = true, skip = 0, window = 3)
+            repeat(3) { assertFalse(check.add(ms * 1_000_000L)) }
+            assertTrue(check.done)
+            assertEquals(ms * 1_000_000L, check.medianNs)
+            assertFalse(check.add(99_000_000L))
+            assertEquals(ms * 1_000_000L, check.medianNs)
+        }
+    }
+
+    @Test
+    fun consentWaitDoesNotConsumeTheStartupSampleDeadline() {
+        var now = 0L
+        val check = SlowStartCheck(skip = 0, window = 3, clock = { now })
+        now = 10_000_000_000L
+        repeat(3) { assertFalse(check.add(14_000_000L)) }
+        assertEquals(14_000_000L, check.medianNs)
+    }
+
+    @Test
+    fun invalidTimestampsCannotFillTheWindowAndExpireOnce() {
+        var now = 0L
+        val check = SlowStartCheck(skip = 0, window = 3, clock = { now })
+        repeat(3) { assertFalse(check.add(0L)) }
+        assertFalse(check.done)
+        now = 5_000_000_000L
+        assertFalse(check.add(0L))
+        assertTrue(check.done)
+        assertEquals(null, check.medianNs)
+        assertFalse(check.add(25_000_000L))
+    }
+
 }

@@ -115,7 +115,7 @@ class StreamFlagsTest {
             setOf(
                 "start_level", "audio_regulator", "ra_audio_latency", "ra_swapchain",
                 "ra_no_smooth", "minimal_postprocess", "ra_poll", "unbuffered_input",
-                "encoder_fps", "overlay_autohide_v3",
+                "encoder_fps", "encoder_rate_hint", "overlay_autohide_v3", "ra_frame_delay", "ra_hard_sync", "ra_prediction",
             ),
             keys(StreamFlagGroup.TRY),
         )

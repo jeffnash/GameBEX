@@ -196,11 +196,11 @@ class StreamP2Test {
         for (raw in listOf(null, "", "0", "1", "-1", "9", "17", "64", "8.0", " 16", "bad")) {
             val samples = mutableListOf<String>()
             val options = RaExperimentOptions.sample(true, prop = { name -> samples += name; raw })
-            assertEquals(RaExperimentOptions(noSmooth = raw == "1", poll = if (raw == "1") 1 else 0, overlayAutohideV3 = raw == "1"), options)
-            assertEquals(listOf("ra_audio_latency", "ra_swapchain", "ra_no_smooth", "ra_poll", "overlay_autohide_v3"), samples)
+            assertEquals(RaExperimentOptions(noSmooth = raw == "1", poll = if (raw == "1") 1 else 0, overlayAutohideV3 = raw == "1", hardSync = raw == "1"), options)
+            assertEquals(listOf("ra_audio_latency", "ra_swapchain", "ra_no_smooth", "ra_poll", "overlay_autohide_v3", "ra_frame_delay", "ra_hard_sync", "ra_prediction"), samples)
         }
         assertEquals(RaExperimentOptions(), RaExperimentOptions.sample(true, prop = { "32" }))
-        assertEquals(RaExperimentOptions(swapchain = 2, poll = 2), RaExperimentOptions.sample(true, prop = { "2" }))
+        assertEquals(RaExperimentOptions(swapchain = 2, poll = 2, frameDelay = 2), RaExperimentOptions.sample(true, prop = { "2" }))
     }
 
     @Test
@@ -215,6 +215,7 @@ class StreamP2Test {
                     "ra_no_smooth" -> "1"
                     "ra_poll" -> "0"
                     "overlay_autohide_v3" -> "0"
+                    "ra_frame_delay", "ra_hard_sync", "ra_prediction" -> null
                     else -> error(name)
                 }
             })
@@ -236,10 +237,62 @@ class StreamP2Test {
                     }
                 }
             }
-            assertEquals(listOf("ra_audio_latency", "ra_swapchain", "ra_no_smooth", "ra_poll", "overlay_autohide_v3"), samples)
+            assertEquals(listOf("ra_audio_latency", "ra_swapchain", "ra_no_smooth", "ra_poll", "overlay_autohide_v3", "ra_frame_delay", "ra_hard_sync", "ra_prediction"), samples)
         }
         assertEquals("32", StreamRaConfig.overrides(true, diagnostics = false, experiments = RaExperimentOptions(audioLatency = 64))["audio_latency"])
         assertNull(StreamRaConfig.overrides(diagnostics = false, experiments = RaExperimentOptions(swapchain = 3))["video_max_swapchain_images"])
+    }
+
+    @Test
+    fun disabledLatencyOptionsOverrideInheritedRetroArchValues() {
+        val off = StreamRaConfig.overrides(diagnostics = false)
+        assertEquals("0", off["video_frame_delay"])
+        for (key in listOf("video_frame_delay_auto", "video_hard_sync", "run_ahead_enabled", "preemptive_frames_enable")) {
+            assertEquals("false", off[key])
+        }
+    }
+
+    @Test
+    fun playerTwoDisablesPredictionForHeavyAndUnknownCores() = runBlocking {
+        val p2 = StreamPlayer2Impl({ tmp }, dolphin(), hostPads = { emptyList() },
+            raExperiments = { RaExperimentOptions(prediction = RaPrediction.RUNAHEAD_1) }) { true }
+        for (folder in listOf("n64", "not-a-system")) {
+            val text = (p2.prepare(game(folder), Emu.RETROARCH) as P2Prep.RetroArchConfig).cfg.readText()
+            assertTrue(text.contains("run_ahead_enabled = \"false\""))
+            assertTrue(text.contains("preemptive_frames_enable = \"false\""))
+        }
+    }
+
+    @Test
+    fun latencyOptionsWriteOnlyTheirOwnKeysAndPredictOneFrameAtMost() {
+        val off = StreamRaConfig.overrides(diagnostics = false)
+        for (key in listOf("video_frame_delay", "video_frame_delay_auto", "video_hard_sync", "video_hard_sync_frames",
+                "run_ahead_enabled", "preemptive_frames_enable", "run_ahead_frames")) {
+            when (key) {
+                "video_frame_delay" -> assertEquals("0", off[key])
+                "video_hard_sync_frames", "run_ahead_frames" -> assertNull(off[key])
+                else -> assertEquals("false", off[key])
+            }
+        }
+        val delay4 = StreamRaConfig.overrides(diagnostics = false, experiments = RaExperimentOptions(frameDelay = 4))
+        assertEquals("4", delay4["video_frame_delay"])
+        assertEquals("false", delay4["video_frame_delay_auto"])
+        val auto = StreamRaConfig.overrides(diagnostics = false, experiments = RaExperimentOptions(frameDelay = RaExperimentOptions.FRAME_DELAY_AUTO))
+        assertEquals("true", auto["video_frame_delay_auto"])
+        assertEquals("0", StreamRaConfig.overrides(diagnostics = false, experiments = RaExperimentOptions(frameDelay = 7))["video_frame_delay"])
+        val sync = StreamRaConfig.overrides(diagnostics = false, experiments = RaExperimentOptions(hardSync = true))
+        assertEquals("true", sync["video_hard_sync"])
+        assertEquals("0", sync["video_hard_sync_frames"])
+        val runahead = StreamRaConfig.overrides(diagnostics = false, experiments = RaExperimentOptions(prediction = RaPrediction.RUNAHEAD_1), core = "gambatte")
+        assertEquals(listOf("true", "false", "1", "false"),
+            listOf("run_ahead_enabled", "preemptive_frames_enable", "run_ahead_frames", "run_ahead_secondary_instance").map { runahead[it] })
+        val preempt = StreamRaConfig.overrides(diagnostics = false, experiments = RaExperimentOptions(prediction = RaPrediction.PREEMPT_1), core = "genesis_plus_gx")
+        assertEquals(listOf("false", "true", "1"), listOf("run_ahead_enabled", "preemptive_frames_enable", "run_ahead_frames").map { preempt[it] })
+        val sampled = RaExperimentOptions.sample(true, prop = { name ->
+            mapOf("ra_frame_delay" to "auto", "ra_hard_sync" to "1", "ra_prediction" to "preempt1")[name]
+        })
+        assertEquals(RaExperimentOptions(frameDelay = RaExperimentOptions.FRAME_DELAY_AUTO, hardSync = true, prediction = RaPrediction.PREEMPT_1), sampled)
+        assertEquals(RaPrediction.OFF, RaExperimentOptions.sample(true, prop = { name -> if (name == "ra_prediction") "runahead2" else null }).prediction)
     }
 
     @Test
@@ -317,7 +370,7 @@ class StreamP2Test {
     }
 
     @Test
-    fun unsetExperimentConfigMatchesTheOriginalBytes() {
+    fun unsetExperimentConfigHasDeterministicLatencyValues() {
         val baseline = linkedMapOf(
             "input_poll_type_behavior" to "0",
             "input_overlay_enable" to "true",
@@ -362,6 +415,11 @@ class StreamP2Test {
                         put("audio_driver", "rsound")
                         put("audio_device", "127.0.0.1")
                     }
+                    put("video_frame_delay", "0")
+                    put("video_frame_delay_auto", "false")
+                    put("video_hard_sync", "false")
+                    put("run_ahead_enabled", "false")
+                    put("preemptive_frames_enable", "false")
                 }
                 assertEquals(expected.entries.toList(), StreamRaConfig.overrides(ready, false, hostPad, unset).entries.toList())
                 val base = GraphicsTuner.retroArchConfigText("/sdcard", resume = true).trimEnd('\n').split('\n')
@@ -560,4 +618,22 @@ class StreamP2Test {
         )
         assertEquals(listOf("GameSir-X5s"), pads.map { it.name })
     }
+    @Test
+    fun predictionIsRestrictedToCandidateCoresThroughTheWrittenSessionConfig() = runBlocking {
+        for (prediction in listOf(RaPrediction.RUNAHEAD_1, RaPrediction.PREEMPT_1)) {
+            val options = RaExperimentOptions(prediction = prediction)
+            for (core in listOf(null, "mupen64plus_next_gles3", "dolphin", "gambatte", "genesis_plus_gx", "snes9x")) {
+                val text = StreamRaConfig.cfgText(tmp.absolutePath, experiments = options, core = core)
+                val allowed = core in listOf("gambatte", "genesis_plus_gx", "snes9x")
+                assertTrue(text.contains("run_ahead_enabled = \"${allowed && prediction == RaPrediction.RUNAHEAD_1}\""))
+                assertTrue(text.contains("preemptive_frames_enable = \"${allowed && prediction == RaPrediction.PREEMPT_1}\""))
+            }
+        }
+        val p2 = StreamPlayer2Impl({ tmp }, dolphin(), hostPads = { emptyList() },
+            raExperiments = { RaExperimentOptions(prediction = RaPrediction.RUNAHEAD_1) }) { true }
+        val text = (p2.prepare(game("gb"), Emu.RETROARCH) as P2Prep.RetroArchConfig).cfg.readText()
+        assertTrue(text.contains("run_ahead_enabled = \"true\""))
+        assertTrue(text.contains("run_ahead_frames = \"1\""))
+    }
+
 }

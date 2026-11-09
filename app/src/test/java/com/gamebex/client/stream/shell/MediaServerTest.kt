@@ -41,16 +41,20 @@ class MediaServerTest {
     }
 
     private fun server(guest: String = "127.0.0.1", audio: Boolean = true, latencyControl: Boolean = false,
-        clock: () -> Long = System::nanoTime, logger: ((String) -> Unit)? = null, queueDeadlineMs: Int = 0): MediaServer {
+        clock: () -> Long = System::nanoTime, logger: ((String) -> Unit)? = null, queueDeadlineMs: Int = 0,
+        videoWriteTrace: Boolean = false, codecBitrate: Int? = null): MediaServer {
         val config = StreamConfig(token = token, guestAddress = guest, mediaPort = 0, inputPort = 0)
         val s = if (logger == null) MediaServer(config,
-            clock = clock, tickMs = 10L, queueDeadlineMs = queueDeadlineMs, latencyControl = latencyControl, videoWriteStallMs = 0)
+            clock = clock, tickMs = 10L, queueDeadlineMs = queueDeadlineMs, latencyControl = latencyControl, videoWriteStallMs = 0,
+            codecBitrate = codecBitrate)
         else MediaServer(config, clock = clock, tickMs = 10L, queueDeadlineMs = queueDeadlineMs,
-            latencyControl = latencyControl, videoWriteStallMs = 0, logger = logger)
+            latencyControl = latencyControl, videoWriteStallMs = 0, logger = logger, videoWriteTrace = videoWriteTrace,
+            codecBitrate = codecBitrate)
         servers += s
         s.open(0)
-        video.start(StreamCaps.LEVELS[0], StreamCaps.LEVELS[0].maxBitrate, s)
-        s.start(video, StreamCaps.LEVELS[0], StreamCaps.LEVELS[0].maxBitrate, audio)
+        val initialBitrate = codecBitrate ?: StreamCaps.LEVELS[0].maxBitrate
+        video.start(StreamCaps.LEVELS[0], initialBitrate, s)
+        s.start(video, StreamCaps.LEVELS[0], initialBitrate, audio)
         return s
     }
 
@@ -131,6 +135,24 @@ class MediaServerTest {
 
     private fun droppedIn(logs: List<String>): Long = logs.filter { it.startsWith("HOST_DROP ") }.sumOf {
         Regex(" count=(\\d+)").find(it)!!.groupValues[1].toLong()
+    }
+
+    @Test
+    fun videoWriteTraceRecordsCompletedAccessUnitWrites() {
+        val logs = CopyOnWriteArrayList<String>()
+        val s = server(audio = false, logger = { logs += it }, videoWriteTrace = true)
+        val c = Client(s.port)
+        c.hello()
+        c.next<MediaFrame.VideoConfig>()
+        video.emit(1, key = true)
+        val frame = c.next<MediaFrame.Video>()
+        waitFor("write trace") { logs.any { it.startsWith("VIDEO_WRITE ") } }
+        val trace = logs.single { it.startsWith("VIDEO_WRITE ") }
+        assertTrue(trace.contains("seq=${frame.seq}"))
+        assertTrue(trace.contains("key=true"))
+        assertTrue(trace.contains("auBytes=${frame.data.size}"))
+        assertTrue(trace.contains("beginNs="))
+        assertTrue(trace.contains("durationNs="))
     }
 
     @Test
@@ -500,6 +522,28 @@ class MediaServerTest {
         c.next<MediaFrame.Pong>()
         Thread.sleep(30)
         assertEquals(6_800_000, video.currentBitrate)
+    }
+
+    @Test
+    fun configuredCodecBitrateStaysFixedUnderDeliveryPressure() {
+        val now = java.util.concurrent.atomic.AtomicLong(1_000_000_000L)
+        val s = server(latencyControl = true, clock = now::get, codecBitrate = 2_000_000)
+        val c = Client(s.port)
+        c.hello()
+        c.next<MediaFrame.VideoConfig>()
+        val report = com.gamebex.client.stream.proto.DeliveryWire.Report(1L, 1, 1_000_000_000L,
+            500_000_000L, 1000L, 1, 31_000_000L, 0, 1)
+        c.send(MediaFrame.Delivery(report))
+        c.send(MediaFrame.Ping(1, 0L))
+        c.next<MediaFrame.Pong>()
+        Thread.sleep(30)
+        now.set(2_000_000_000L)
+        c.send(MediaFrame.Delivery(report.copy(seq = 2, endNs = 2_000_000_000L)))
+        c.send(MediaFrame.Ping(2, 0L))
+        c.next<MediaFrame.Pong>()
+        Thread.sleep(60)
+        assertEquals(2_000_000, video.currentBitrate)
+        assertEquals(2_000_000, s.stats().bitrate)
     }
 
     @Test

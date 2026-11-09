@@ -30,6 +30,7 @@ class StreamHostSession(
     private var video: VideoSource? = null
     private var audio: AudioSource? = null
     private var watchdog: Thread? = null
+    private var boost: LinkBoost = NoLinkBoost
     private val capture = CaptureRelay()
     @Volatile private var startedNs = 0L
     @Volatile private var lastPollNs = 0L
@@ -83,6 +84,7 @@ class StreamHostSession(
             audio = sound
             receiver.start()
             channel.start(source, level, level.maxBitrate, sound != null)
+            boost = components.linkBoost(effectiveConfig).also { runCatching { it.start() } }
             startedNs = clock()
             lastPollNs = startedNs
             startWatchdog()
@@ -163,6 +165,7 @@ class StreamHostSession(
         runCatching { media?.close() }
         runCatching { pad?.write(PadState.NEUTRAL) }
         runCatching { pad?.close() }
+        runCatching { boost.stop() }
         watchdog?.interrupt()
         runCatching { onStopped?.invoke() }
     }
@@ -173,6 +176,7 @@ class StreamHostSession(
                 while (!stopping.get()) {
                     Thread.sleep(watchdogTickMs)
                     val now = clock()
+                    runCatching { boost.refresh() }
                     if (appWatchdog && now - lastPollNs > StreamCaps.APP_SILENT_STOP_MS * 1_000_000L) {
                         stopInternal(null)
                         return@Thread

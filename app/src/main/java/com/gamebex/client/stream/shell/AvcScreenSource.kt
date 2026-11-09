@@ -31,8 +31,17 @@ class AvcScreenSource(
         fps = shellInt("encoder_fps", config?.encoderFps ?: 0, 0..50).takeIf { it == 50 } ?: 0,
         intraRefresh = StreamDebug.flag("encoder_intra_refresh"),
         keyframesOnRequest = shellFlag("keyframes_on_request", config?.keyframesOnRequest ?: false),
+        rateHint = shellInt("encoder_rate_hint", config?.encoderRateHint ?: -1, -1..960),
+        socModel = if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else "",
     ),
     private val cropOptions: StreamCropOptions = StreamCropOptions.resolve(config),
+    /** Debug `capture_gl=1`: route uncropped captures through the GL pass too (full-frame rect). */
+    private val captureGl: Boolean = StreamDebug.flag("capture_gl"),
+    private val partialOutputProbe: Boolean = StreamDebug.flag("partial_output"),
+    private val trace: CaptureTrace? = if (StreamDebug.flag("capture_trace")) CaptureTrace() else null,
+    /** Debug `venc_keys`: integer vendor encoder keys for experiments. */
+    private val vendorKeys: Map<String, Int> =
+        if (com.gamebex.client.BuildConfig.DEBUG) AvcEncoders.vendorKeys(StreamDebug.prop("venc_keys")) else emptyMap(),
 ) : VideoSource {
     private val lock = Any()
     private var codec: MediaCodec? = null
@@ -41,12 +50,17 @@ class AvcScreenSource(
     private var appTarget: CaptureTarget? = null
     private var drain: Thread? = null
     private var cropPass: StreamCropPass? = null
+    /** Capture size before the GL pass; output [level] may already be cropped. Guarded by [lock]. */
+    private var captureLevel: VideoLevel = StreamCaps.LEVELS[0]
     /** The rect the live crop pass cuts, or null when uncropped. Guarded by [lock]. */
     private var activeCropRect: CropRect? = null
     /** Current crop viewport: the config's portrait-time value until [updateCropViewport] re-pins it. */
     @Volatile private var cropViewportNow: String = cropOptions.viewport
     private var generation = 0
     private var restarts = 0
+    /** Set once per stream when the startup check re-opened a slow hinted encoder. Guarded by [lock]. */
+    private var slowReopened = false
+    private var slowCheck: SlowStartCheck? = null
     private val seq = AtomicInteger()
     private val invalidPts = AtomicInteger()
     @Volatile private var running = false
@@ -72,6 +86,7 @@ class AvcScreenSource(
             this.sink = sink
             running = true
             restarts = 0
+            slowReopened = false
             intraRefreshDisabled = false
             try {
                 openLocked(level, bitrate)
@@ -142,7 +157,7 @@ class AvcScreenSource(
      * level changes reuse the re-pinned viewport.
      */
     override fun updateCropViewport(viewport: String) {
-        var reopen = false
+        var reopenLevel: VideoLevel? = null
         synchronized(lock) {
             if (!running) return
             if (parseViewport(viewport) == null) {
@@ -152,7 +167,7 @@ class AvcScreenSource(
             cropViewportNow = viewport
             val pass = cropPass ?: return
             val current = activeCropRect ?: return
-            val lv = level
+            val lv = captureLevel
             val updated = cropOptions.copy(viewport = viewport)
             val (capW, capH) = streamCropCaptureSize(lv, updated)
             val rect = runCatching {
@@ -163,12 +178,12 @@ class AvcScreenSource(
                 return
             }
             if (streamCropEncodeSize(rect) != streamCropEncodeSize(current)) {
-                reopen = true
+                reopenLevel = lv
                 return@synchronized
             }
             val target = appTarget ?: return
             val input = surface ?: return
-            val replacement = runCatching { StreamCropPass(capW, capH, rect, input) }.getOrNull()
+            val replacement = runCatching { StreamCropPass(capW, capH, rect, input, trace) }.getOrNull()
             if (replacement == null) {
                 Log.w(TAG, "video crop keeps rect (EGL unavailable for the update)")
                 return
@@ -179,9 +194,9 @@ class AvcScreenSource(
             Log.i(TAG, "video crop re-pinned src=${capW}x${capH} rect=${rect.left},${rect.top} ${rect.width}x${rect.height} viewport=$viewport")
             runCatching { target.onSurface(replacement.inputSurface, capW, capH) }
         }
-        if (reopen) {
+        reopenLevel?.let {
             Log.i(TAG, "video crop re-opening the encoder for the landscape viewport")
-            changeLevel(level, bitrate)
+            changeLevel(it, bitrate)
         }
     }
 
@@ -206,10 +221,15 @@ class AvcScreenSource(
                     break
                 }
                 val input: Surface = try {
-                    c.configure(AvcEncoders.format(encodeLevel, bitrate, info, configuration), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                    val format = AvcEncoders.format(encodeLevel, bitrate, info, configuration)
+                    vendorKeys.forEach { (k, v) -> format.setInteger(k, v) }
+                    c.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
                     val s = c.createInputSurface()
                     try {
                         c.start()
+                        if (vendorKeys.isNotEmpty()) {
+                            Log.i(TAG, "ENCODER_EXPERIMENT venc_keys=$vendorKeys input=${runCatching { c.inputFormat }.getOrNull()}")
+                        }
                     } catch (t: Throwable) {
                         runCatching { s.release() }
                         throw t
@@ -226,6 +246,7 @@ class AvcScreenSource(
                 encoderName = info.name
                 captureApi = API_APP
                 this.bitrate = bitrate
+                captureLevel = level
                 generation += 1
                 val gen = generation
                 if (codecDiagnostics && !vendorDiscovered) {
@@ -236,30 +257,35 @@ class AvcScreenSource(
                         }
                     }.onFailure { Log.i(TAG, "CODEC_VENDOR_UNAVAILABLE codec=${c.name} reason=${it.javaClass.simpleName}") }
                     Log.i(TAG, "CODEC_CAPS ${catalog.joinToString { "${it.name}:${it.supportedLevelIds}" }}")
+                    runCatching {
+                        val caps = c.codecInfo.getCapabilitiesForType(AvcEncoders.MIME).encoderCapabilities
+                        Log.i(TAG, "CODEC_ENCODER complexityRange=${caps.complexityRange}")
+                    }
                     runCatching { Log.i(TAG, "CODEC_FORMAT configured=${c.inputFormat}") }
                 }
                 if (configuration.intraRefreshFallback) intraRefreshDisabled = true
                 if (options.fps != 0 || options.intraRefresh) {
                     Log.i(TAG, "ENCODER_EXPERIMENT codec=${info.name} requestedFps=${level.fps} configuredFps=${configuration.fps} intraRefreshPeriod=${configuration.intraRefreshPeriod} intraRefreshFallback=${configuration.intraRefreshFallback} periodicIdrS=${configuration.iFrameIntervalS}")
                 }
-                drain = Thread({ drainLoop(c, gen, encodeLevel, configuration) }, "gbx-video-drain").apply {
+                drain = Thread({ drainLoop(c, gen, encodeLevel, configuration, level) }, "gbx-video-drain").apply {
                     isDaemon = true
                     priority = Thread.MAX_PRIORITY
                     start()
                 }
-                Log.i(TAG, "video: ${info.name} ${encodeLevel.width}x${encodeLevel.height}@${configuration.fps} requestedFps=${encodeLevel.fps} ${bitrate}bps strict=${configuration.strict} software=${!info.hardware} via $captureApi")
+                Log.i(TAG, "video: ${info.name} ${encodeLevel.width}x${encodeLevel.height}@${configuration.fps} declaredFps=${configuration.declaredFps} requestedFps=${encodeLevel.fps} ${bitrate}bps strict=${configuration.strict} software=${!info.hardware} via $captureApi")
                 // Native path: the capture runs at the display size and the
                 // GL pass crops display-px 1:1 into the encoder (no
                 // 1604→1600 resampling smear); legacy captures at the level
                 // size, uncropped streams unchanged.
                 val (capW, capH) = if (cropRect != null) streamCropCaptureSize(level, effectiveCrop)
                 else level.width to level.height
-                val captureSurface = if (cropRect != null) {
+                val passRect = cropRect ?: if (captureGl && allowCrop) CropRect(0, 0, capW, capH) else null
+                val captureSurface = if (passRect != null) {
                     try {
-                        val pass = StreamCropPass(capW, capH, cropRect, input)
+                        val pass = StreamCropPass(capW, capH, passRect, input, trace)
                         cropPass = pass
                         activeCropRect = cropRect
-                        Log.i(TAG, "video crop src=${capW}x${capH} rect=${cropRect.left},${cropRect.top} ${cropRect.width}x${cropRect.height} encode=${encodeLevel.width}x${encodeLevel.height}")
+                        Log.i(TAG, "video crop src=${capW}x${capH} rect=${passRect.left},${passRect.top} ${passRect.width}x${passRect.height} encode=${encodeLevel.width}x${encodeLevel.height} trace=${trace != null}")
                         pass.inputSurface
                     } catch (t: Throwable) {
                         Log.w(TAG, "video crop disabled, EGL unavailable: ${t.javaClass.simpleName}: ${t.message}")
@@ -267,6 +293,12 @@ class AvcScreenSource(
                         return openLocked(level, bitrate, allowCrop = false)
                     }
                 } else input
+                slowCheck = if (configuration.declaredFps > configuration.fps || slowReopened) {
+                    SlowStartCheck(
+                        slowThresholdNs(cropPass != null, StreamDebug.int("encoder_slow_ms", 18, 1..100) * 1_000_000L),
+                        reportOnly = slowReopened,
+                    )
+                } else null
                 try {
                     target.onSurface(captureSurface, capW, capH)
                 } catch (t: Throwable) {
@@ -281,6 +313,8 @@ class AvcScreenSource(
 
     /** Stops capture and the encoder; returns the drain thread to join outside the lock. */
     private fun closeLocked(): Thread? {
+        slowCheck?.let { if (!it.done) Log.w(TAG, "encoder startup check incomplete: sample window not filled") }
+        slowCheck = null
         generation += 1
         if (surface != null) runCatching { appTarget?.onSurface(null, 0, 0) }
         runCatching { cropPass?.release() }
@@ -294,11 +328,13 @@ class AvcScreenSource(
         return drain.also { drain = null }
     }
 
-    private fun drainLoop(c: MediaCodec, gen: Int, requested: VideoLevel, configuration: AvcEncoders.Configuration) {
+    private fun drainLoop(c: MediaCodec, gen: Int, requested: VideoLevel, configuration: AvcEncoders.Configuration, captureLevel: VideoLevel) {
         val info = MediaCodec.BufferInfo()
         var configSent = false
         var actual = requested
         var epoch = 0L
+        var outputFrames = 0
+        var partialFrames = 0
         fun publish(csd: ByteArray) {
             synchronized(lock) {
                 if (!current(c, gen)) return
@@ -331,6 +367,10 @@ class AvcScreenSource(
                             if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
                                 if (!configSent) publish(data)
                             } else {
+                                if (partialOutputProbe) {
+                                    outputFrames++
+                                    if (info.flags and MediaCodec.BUFFER_FLAG_PARTIAL_FRAME != 0) partialFrames++
+                                }
                                 val key = info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
                                 if (key && !configSent) AnnexB.parameterSets(data)?.let { publish(it) }
                                 if (configSent) synchronized(lock) {
@@ -342,6 +382,7 @@ class AvcScreenSource(
                     }
                     index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                         val format = c.outputFormat
+                        if (trace != null) Log.i(TAG, "CAPTURE_TRACE output format $format")
                         val refreshPeriod = runCatching {
                             if (format.containsKey(MediaFormat.KEY_INTRA_REFRESH_PERIOD))
                                 format.getInteger(MediaFormat.KEY_INTRA_REFRESH_PERIOD) else null
@@ -370,14 +411,32 @@ class AvcScreenSource(
                 }
             }
         } catch (e: IllegalStateException) {
-            if (synchronized(lock) { current(c, gen) }) recover(c, gen, requested, e)
+            if (synchronized(lock) { current(c, gen) }) recover(c, gen, captureLevel, e)
+        } finally {
+            if (partialOutputProbe) Log.i(TAG, "ENCODER_PARTIAL frames=$outputFrames partial=$partialFrames")
         }
     }
 
     private fun deliver(data: ByteArray, info: MediaCodec.BufferInfo, dequeuedNs: Long, epoch: Long) {
         val out = sink ?: return
         val key = info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
+        trace?.onOutput(info.presentationTimeUs, dequeuedNs, data.size, key)
         val capture = captureNsForPts(info.presentationTimeUs, dequeuedNs)
+        slowCheck?.let { check ->
+            val reopen = check.add(if (capture == 0L) 0L else dequeuedNs - capture)
+            if (check.done) {
+                val median = check.medianNs
+                if (median == null) {
+                    Log.w(TAG, "encoder startup check unavailable: valid timestamps did not fill the window")
+                } else {
+                    val state = if (median > check.thresholdNs) { if (slowReopened) "still slow" else "slow" } else "fast"
+                    val stage = if (slowReopened) "after re-open" else "at startup"
+                    Log.i(TAG, "encoder $state $stage (median ${median / 1_000_000.0} ms)")
+                }
+                slowCheck = null
+            }
+            if (reopen) reopenSlow()
+        }
         if (capture == 0L) {
             val count = invalidPts.incrementAndGet()
             if (count == 1 || count % PTS_LOG_INTERVAL == 0) {
@@ -385,6 +444,20 @@ class AvcScreenSource(
             }
         }
         out.onFrame(EncodedFrame(seq.incrementAndGet(), key, capture, dequeuedNs, data, epoch))
+    }
+
+    /**
+     * The rate hint usually sets the encoder's fast clock, but some sessions start slow anyway
+     * (about 23 instead of 13 ms per frame on the MT6835); one re-open per stream fixes them.
+     * Called on the drain thread under [lock], so the re-open runs on its own thread.
+     */
+    private fun reopenSlow() {
+        slowCheck = null
+        slowReopened = true
+        val lv = captureLevel
+        val rate = bitrate
+        Log.i(TAG, "encoder started slow with the rate hint; re-opening once")
+        Thread({ changeLevel(lv, rate) }, "gbx-video-reopen").apply { isDaemon = true }.start()
     }
 
     /** One restart per failure, at most [MAX_RESTARTS] per stream; then the stream ends. */
@@ -428,6 +501,13 @@ class AvcScreenSource(
         private const val MAX_PTS_AGE_NS = 1_000_000_000L
         private const val PTS_LOG_INTERVAL = 120
 
+        /** Median capture→output above this on a hinted encoder means it kept its slow clock. */
+        internal const val SLOW_ENCODE_NS: Long = 18_000_000L
+        private const val GL_PASS_ALLOWANCE_NS: Long = 8_000_000L
+
+        internal fun slowThresholdNs(hasGlPass: Boolean, baseNs: Long = SLOW_ENCODE_NS): Long =
+            baseNs + if (hasGlPass) GL_PASS_ALLOWANCE_NS else 0L
+
         internal fun identityMatches(current: Any?, generation: Int, candidate: Any, candidateGeneration: Int): Boolean =
             current === candidate && generation == candidateGeneration
 
@@ -447,5 +527,44 @@ class AvcScreenSource(
             val ptsNs = ptsUs * 1_000L
             return if (ptsNs <= dequeuedNs && dequeuedNs - ptsNs <= MAX_PTS_AGE_NS) ptsNs else 0L
         }
+    }
+}
+
+/**
+ * Startup check for a rate-hinted encoder: the median capture→output time of
+ * frames [skip]+1 .. [skip]+[window]. [add] answers true once, when that median
+ * is above [thresholdNs]; it never answers again.
+ */
+internal class SlowStartCheck(
+    val thresholdNs: Long = AvcScreenSource.SLOW_ENCODE_NS,
+    private val skip: Int = 10,
+    private val window: Int = 60,
+    private val reportOnly: Boolean = false,
+    private val clock: () -> Long = System::nanoTime,
+) {
+    private val samples = LongArray(window)
+    private var startedNs: Long? = null
+    private var seen = 0
+    var done = false
+        private set
+    var medianNs: Long? = null
+        private set
+
+    fun add(ns: Long): Boolean {
+        if (done) return false
+        val now = clock()
+        val start = startedNs ?: now.also { startedNs = it }
+        if (now - start >= 5_000_000_000L) {
+            done = true
+            return false
+        }
+        if (ns <= 0L) return false
+        seen++
+        if (seen <= skip) return false
+        samples[seen - skip - 1] = ns
+        if (seen - skip < window) return false
+        done = true
+        medianNs = samples.sorted()[window / 2]
+        return !reportOnly && checkNotNull(medianNs) > thresholdNs
     }
 }

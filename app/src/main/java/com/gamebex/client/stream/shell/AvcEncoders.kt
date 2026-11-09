@@ -34,9 +34,35 @@ object AvcEncoders {
         val intraRefresh: Boolean = false,
     )
 
-    data class Options(val fps: Int = 0, val intraRefresh: Boolean = false, val keyframesOnRequest: Boolean = false) {
+    /** MediaTek encoders size their clock to KEY_FRAME_RATE, so a frame takes about 1/rate to come out. */
+    const val MTK_DECLARED_FPS: Int = 240
+
+    /** [Options.rateHint]: -1 uses measured hardware, 0 declares the real rate, positive values override it. */
+    const val RATE_HINT_AUTO: Int = -1
+
+    data class Options(
+        val fps: Int = 0,
+        val intraRefresh: Boolean = false,
+        val keyframesOnRequest: Boolean = false,
+        val rateHint: Int = RATE_HINT_AUTO,
+        val socModel: String = "",
+    ) {
         fun fpsFor(level: VideoLevel): Int = if (fps == 50 && level.fps == 60) 50 else level.fps
+
+        /**
+         * KEY_FRAME_RATE for [info] at the real cadence [fps]. On the MT6835 declaring 240 cut the
+         * capture-to-output time from about 23 to 13 ms at the same bitrate; KEY_MAX_FPS_TO_ENCODER
+         * keeps the input at [fps]. Never below [fps].
+         */
+        fun declaredFps(info: EncoderInfo, fps: Int): Int = when {
+            rateHint == 0 -> fps
+            rateHint > 0 -> maxOf(fps, rateHint)
+            isMediaTek(info.name) && socModel.uppercase().startsWith("MT6835") -> maxOf(fps, MTK_DECLARED_FPS)
+            else -> fps
+        }
     }
+
+    fun isMediaTek(name: String): Boolean = name.startsWith("c2.mtk.", ignoreCase = true) || name.startsWith("OMX.MTK.", ignoreCase = true)
 
     data class Configuration(
         val strict: Boolean,
@@ -44,7 +70,13 @@ object AvcEncoders {
         val intraRefreshPeriod: Int = 0,
         val intraRefreshFallback: Boolean = false,
         val keyframesOnRequest: Boolean = false,
+        /** KEY_FRAME_RATE: [fps] unless the vendor runs faster when told a higher rate. */
+        val declaredFps: Int = fps,
     ) {
+        /** KEY_I_FRAME_INTERVAL in declared-rate seconds, so the IDR spacing in real frames is unchanged. */
+        val declaredIFrameInterval: Float get() =
+            if (iFrameIntervalS <= 0 || declaredFps == fps) iFrameIntervalS.toFloat() else iFrameIntervalS * fps.toFloat() / declaredFps
+
         val iFrameIntervalS: Int get() = when {
             intraRefreshPeriod > 0 -> -1
             keyframesOnRequest -> StreamCaps.KEYFRAMES_ON_REQUEST_INTERVAL_S
@@ -58,11 +90,23 @@ object AvcEncoders {
 
     fun configurationAttempts(level: VideoLevel, info: EncoderInfo, options: Options): List<Configuration> {
         val fps = options.fpsFor(level)
+        val declared = options.declaredFps(info, fps)
         val periodic = listOf(true, false).map { Configuration(it, fps,
-            intraRefreshFallback = options.intraRefresh, keyframesOnRequest = options.keyframesOnRequest) }
-        if (!options.intraRefresh || !info.intraRefresh) return periodic
-        return listOf(true, false).map { Configuration(it, fps, fps * StreamCaps.I_FRAME_INTERVAL_S) } + periodic
+            intraRefreshFallback = options.intraRefresh, keyframesOnRequest = options.keyframesOnRequest, declaredFps = declared) }
+        val attempts = if (options.intraRefresh && info.intraRefresh) {
+            listOf(true, false).map { Configuration(it, fps, fps * StreamCaps.I_FRAME_INTERVAL_S, declaredFps = declared) } + periodic
+        } else periodic
+        return if (declared == fps) attempts else attempts + attempts.map { it.copy(declaredFps = fps) }
     }
+
+    /** Parses the debug `venc_keys` setting ("vendor.key=1;frame-rate=120") into integer format keys; malformed entries are skipped. */
+    internal fun vendorKeys(value: String?): Map<String, Int> =
+        value.orEmpty().split(';', ',').mapNotNull { entry ->
+            val parts = entry.split('=', limit = 2)
+            if (parts.size != 2) return@mapNotNull null
+            val name = parts[0].trim().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            parts[1].trim().toIntOrNull()?.let { name to it }
+        }.toMap()
 
     internal fun intraRefreshConfirmed(configuration: Configuration, reportedPeriod: Int?): Boolean =
         configuration.intraRefreshPeriod == 0 || (reportedPeriod != null && reportedPeriod > 0)
@@ -149,8 +193,12 @@ object AvcEncoders {
         MediaFormat.createVideoFormat(MIME, level.width, level.height).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
-            setInteger(MediaFormat.KEY_FRAME_RATE, configuration.fps)
-            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, configuration.iFrameIntervalS)
+            setInteger(MediaFormat.KEY_FRAME_RATE, configuration.declaredFps)
+            if (configuration.declaredFps == configuration.fps) {
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, configuration.iFrameIntervalS)
+            } else {
+                setFloat(MediaFormat.KEY_I_FRAME_INTERVAL, configuration.declaredIFrameInterval)
+            }
             if (configuration.intraRefreshPeriod > 0) {
                 setInteger(MediaFormat.KEY_INTRA_REFRESH_PERIOD, configuration.intraRefreshPeriod)
             }

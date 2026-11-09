@@ -9,6 +9,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,6 +39,7 @@ import com.gamebex.client.ui.GameBexTheme
 import kotlin.math.PI
 import kotlin.math.sin
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 
 /**
@@ -45,9 +49,15 @@ import kotlinx.coroutines.launch
  *   second (so the encoder always has motion), a 440 Hz tone plays with
  *   USAGE_GAME (so playback capture has something to take), and key and
  *   stick events from "GameBEX Player 2" are printed while this is in front.
- * - `--es mode watch --es token <32 hex> [--ei media 55441] [--ei input 55442]`:
- *   opens the real viewer on 127.0.0.1 in loopback mode (muted, ignores the
- *   virtual pad), then closes itself. The viewer itself is not exported.
+ * - `--es mode optical [--es guest <ipv4> --es token <32 hex> [--ei seconds 300]]`:
+ *   host content for camera timing. A white bar crosses between two green
+ *   edge lines once a second, placed by the vsync frame time; filming both
+ *   phones in one shot turns the bar gap into host→guest delay. With a guest,
+ *   it also streams to that phone through the real host path and flags.
+ * - `--es mode watch --es token <32 hex> [--es host <ipv4>] [--ei media 55441] [--ei input 55442]`:
+ *   opens the real viewer, then closes itself. On 127.0.0.1 (the default) it
+ *   runs in loopback mode (muted, ignores the virtual pad). The viewer itself
+ *   is not exported.
  * - `--es mode shizuku --es token <32 hex>`: the host app's real path. Binds the
  *   Stream UserService through Shizuku (StreamShellClient), probes, starts a
  *   stream for 127.0.0.1 at level 1, logs its status every 2 s for 60 s, then
@@ -69,7 +79,17 @@ class StreamLabActivity : ComponentActivity() {
             runShizukuCheck(intent.getStringExtra("token").orEmpty())
             return
         }
+        if (intent.getStringExtra("mode") == "probe") {
+            logFrontBufferSupport()
+            finish()
+            return
+        }
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (intent.getStringExtra("mode") == "optical") {
+            showOptical(intent)
+            if (intent.getBooleanExtra("idle_decoder", false)) openIdleDecoder()
+            return
+        }
         tone = startTone()
         setContent {
             GameBexTheme {
@@ -107,12 +127,14 @@ class StreamLabActivity : ComponentActivity() {
         when (intent.getStringExtra("mode")) {
             "watch" -> openViewer(intent)
             "shizuku" -> runShizukuCheck(intent.getStringExtra("token").orEmpty())
+            "optical" -> showOptical(intent)
         }
     }
 
     private fun openViewer(from: Intent) {
+        val host = from.getStringExtra("host") ?: "127.0.0.1"
         val endpoint = StreamEndpoint(
-            host = "127.0.0.1",
+            host = host,
             mediaPort = from.getIntExtra("media", StreamCaps.MEDIA_PORT),
             inputPort = from.getIntExtra("input", StreamCaps.INPUT_PORT),
             token = from.getStringExtra("token").orEmpty(),
@@ -121,7 +143,122 @@ class StreamLabActivity : ComponentActivity() {
             audio = true,
             hostName = "lab",
         )
-        startActivity(StreamGuestRuntime.intent(this, endpoint, loopback = true))
+        startActivity(StreamGuestRuntime.intent(this, endpoint, loopback = host == "127.0.0.1"))
+    }
+
+    /** `--es mode probe`: logs which front-buffer usages this phone's allocator accepts (`LAB front_buffer ...`). */
+    private fun logFrontBufferSupport() {
+        if (android.os.Build.VERSION.SDK_INT < 33) {
+            android.util.Log.i("GameBEXStream", "LAB front_buffer sdk=${android.os.Build.VERSION.SDK_INT} unsupported")
+            return
+        }
+        val front = android.hardware.HardwareBuffer.USAGE_FRONT_BUFFER
+        val gpu = android.hardware.HardwareBuffer.USAGE_GPU_COLOR_OUTPUT
+        val sampled = android.hardware.HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE
+        val overlay = android.hardware.HardwareBuffer.USAGE_COMPOSER_OVERLAY
+        listOf(
+            "front+gpu+overlay" to (front or gpu or overlay),
+            "front+gpu+sampled+overlay" to (front or gpu or sampled or overlay),
+            "front+gpu" to (front or gpu),
+            "gpu+overlay" to (gpu or overlay),
+        ).forEach { (name, usage) ->
+            val ok = runCatching {
+                android.hardware.HardwareBuffer.isSupported(1604, 720, android.hardware.HardwareBuffer.RGBA_8888, 1, usage)
+            }.getOrElse { false }
+            android.util.Log.i("GameBEXStream", "LAB front_buffer $name supported=$ok")
+        }
+    }
+
+    private var idleDecoder: android.media.MediaCodec? = null
+    private var idleReader: android.media.ImageReader? = null
+
+    /**
+     * `--ez idle_decoder true` with the optical pattern: a started hardware AVC decoder that renders
+     * nowhere visible, to tell whether the display pipeline reacts to a live decoder or to a video layer.
+     */
+    private fun openIdleDecoder() {
+        runCatching {
+            val reader = android.media.ImageReader.newInstance(1280, 576, android.graphics.ImageFormat.PRIVATE, 2)
+            val format = android.media.MediaFormat.createVideoFormat(android.media.MediaFormat.MIMETYPE_VIDEO_AVC, 1280, 576)
+            val codec = android.media.MediaCodec.createDecoderByType(android.media.MediaFormat.MIMETYPE_VIDEO_AVC)
+            codec.configure(format, reader.surface, null, 0)
+            codec.start()
+            idleReader = reader
+            idleDecoder = codec
+            android.util.Log.i("GameBEXStream", "LAB idle decoder ${codec.name} started")
+        }.onFailure { android.util.Log.w("GameBEXStream", "LAB idle decoder failed", it) }
+    }
+
+    private var opticalStream: kotlinx.coroutines.Job? = null
+
+    private fun showOptical(from: Intent) {
+        setContent {
+            var frame by remember { mutableLongStateOf(0L) }
+            LaunchedEffect(Unit) {
+                while (true) withFrameNanos { frame = it }
+            }
+            Canvas(Modifier.fillMaxSize()) {
+                drawRect(Color.Black)
+                val top = size.height * OPTICAL_BAND_TOP
+                val band = Size(OPTICAL_LINE_PX, size.height * (1 - 2 * OPTICAL_BAND_TOP))
+                val left = size.width * OPTICAL_MARGIN
+                val right = size.width * (1 - OPTICAL_MARGIN)
+                drawRect(OPTICAL_GREEN, Offset(left - OPTICAL_LINE_PX, top), band)
+                drawRect(OPTICAL_GREEN, Offset(right, top), band)
+                val phase = (frame % OPTICAL_SWEEP_NS) / OPTICAL_SWEEP_NS.toFloat()
+                drawRect(
+                    Color.White,
+                    Offset(left + phase * (right - left - OPTICAL_BAR_PX), top),
+                    band.copy(width = OPTICAL_BAR_PX, height = band.height * 2 / 3),
+                )
+                val slowPhase = (frame % (OPTICAL_SWEEP_NS * 8)) / (OPTICAL_SWEEP_NS * 8).toFloat()
+                drawRect(
+                    Color.White,
+                    Offset(left + slowPhase * (right - left - OPTICAL_BAR_PX), top + band.height * 2 / 3),
+                    band.copy(width = OPTICAL_BAR_PX, height = band.height / 3),
+                )
+            }
+        }
+        val guest = from.getStringExtra("guest") ?: return
+        val token = from.getStringExtra("token").orEmpty()
+        val seconds = from.getIntExtra("seconds", 300)
+        val previous = opticalStream
+        opticalStream = scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            // The previous run's stop must land before this run starts, not after.
+            previous?.cancelAndJoin()
+            fun say(line: String) = android.util.Log.i("GameBEXStream", "LAB $line")
+            val host = com.gamebex.client.stream.host.StreamShellClient.forApp(this@StreamLabActivity)
+            val config = com.gamebex.client.together.session.streamConfigForFlags(
+                token, guest, rsound = false,
+                hostFlag = com.gamebex.client.stream.StreamFlagPrefs(this@StreamLabActivity).lookup(),
+                startLevelOverride = com.gamebex.client.stream.StreamDebug.prop("start_level")?.toIntOrNull(),
+            )
+            say("config ${config.copy(token = "…")}")
+            val started = host.start(config)
+            say("start ${com.gamebex.client.stream.StreamJson.json.encodeToString(com.gamebex.client.stream.StreamStarted.serializer(), started)}")
+            if (!started.ok) return@launch
+            val service = Intent(this@StreamLabActivity, com.gamebex.client.together.platform.TogetherService::class.java)
+            try {
+                // The real host path: the Together foreground service, Android's share prompt
+                // (pick the app showing the pattern), then that single-app capture.
+                com.gamebex.client.together.platform.TogetherService.clearStopRequest()
+                startForegroundService(service.putExtra(com.gamebex.client.together.platform.TogetherService.EXTRA_TEXT, "Stream lab"))
+                kotlinx.coroutines.withTimeoutOrNull(5_000) {
+                    while (!com.gamebex.client.together.platform.TogetherService.promoted) kotlinx.coroutines.delay(50)
+                }
+                host.attachCapture()
+                say("capture attached")
+                repeat(seconds * 1_000 / StreamCaps.STATUS_POLL_MS.toInt()) {
+                    kotlinx.coroutines.delay(StreamCaps.STATUS_POLL_MS)
+                    val status = host.status()
+                    say("status ${status?.let { com.gamebex.client.stream.StreamJson.json.encodeToString(com.gamebex.client.stream.StreamStatus.serializer(), it) }}")
+                }
+            } finally {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { host.stop() }
+                stopService(service)
+                say("stopped")
+            }
+        }
     }
 
     /** RestrictedApi: the same lint false positive as MainActivity.dispatchKeyEvent. */
@@ -192,6 +329,8 @@ class StreamLabActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         scope.cancel()
+        idleDecoder?.let { runCatching { it.stop() }; runCatching { it.release() } }
+        idleReader?.close()
         tone?.let {
             runCatching { it.stop() }
             runCatching { it.release() }
@@ -201,6 +340,14 @@ class StreamLabActivity : ComponentActivity() {
 
     private companion object {
         const val REQUEST_SHIZUKU = 7314
+
+        /** One sweep a second: delays up to half a second read unambiguously. */
+        const val OPTICAL_SWEEP_NS = 1_000_000_000L
+        const val OPTICAL_MARGIN = 0.08f
+        const val OPTICAL_BAND_TOP = 0.2f
+        const val OPTICAL_LINE_PX = 10f
+        const val OPTICAL_BAR_PX = 36f
+        val OPTICAL_GREEN = Color(0xFF00FF00)
     }
 
     /** One second of 440 Hz stereo looping forever, so it keeps playing behind the viewer. */

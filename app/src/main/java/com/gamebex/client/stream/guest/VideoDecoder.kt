@@ -26,6 +26,7 @@ class VideoDecoder(
     private val codecDiag: Boolean = StreamDebug.flag("codec_diag"),
     private val decoderOverride: String? = if (BuildConfig.DEBUG) StreamDebug.prop("decoder") else null,
     private val vendorDiscovery: AtomicBoolean = AtomicBoolean(false),
+    private val formatKeys: Map<String, Int> = decoderFormatKeys(),
     private val onNeedKeyframe: () -> Unit,
 ) {
     private data class Released(val frame: DecoderFrames.Submitted, val releasedNs: Long, val generation: Long)
@@ -346,6 +347,7 @@ class VideoDecoder(
                 setInteger(MediaFormat.KEY_PRIORITY, 0)
             }
             if (attempt == 0) setInteger(KEY_VDEC_LOW_LATENCY, 1)
+            formatKeys.forEach { (key, value) -> setInteger(key, value) }
         }
 
     private fun candidates(w: Int, h: Int, fps: Int): List<DecoderCandidate> {
@@ -396,6 +398,11 @@ class VideoDecoder(
             .any { !it.isEncoder && it.supportedTypes.any { t -> t.equals(MIME, ignoreCase = true) } }
     }
 }
+
+internal fun decoderFormatKeys(
+    debug: Boolean = BuildConfig.DEBUG,
+    prop: () -> String? = { StreamDebug.prop("vdec_keys") },
+): Map<String, Int> = if (debug) com.gamebex.client.stream.shell.AvcEncoders.vendorKeys(prop()) else emptyMap()
 
 internal class DecoderRequest(csd: ByteArray, val width: Int, val height: Int, val codecEpoch: Long, val fps: Int = 60) {
     val csd = csd.copyOf()

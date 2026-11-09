@@ -270,10 +270,17 @@ internal fun streamCropEncodeLevel(level: VideoLevel, options: StreamCropOptions
  * preserving frame timestamps. All EGL state lives on that thread; the
  * constructor throws when EGL setup fails so the caller can fall back.
  */
-class StreamCropPass(srcW: Int, srcH: Int, rect: CropRect, private val out: Surface) {
+class StreamCropPass(
+    srcW: Int,
+    srcH: Int,
+    rect: CropRect,
+    private val out: Surface,
+    private val trace: CaptureTrace? = null,
+) {
     private val lock = Object()
     private var running = true
     private var frameAvailable = false
+    private var arrivedNs = 0L
     private var surfaceTexture: SurfaceTexture? = null
     val inputSurface: Surface
 
@@ -286,7 +293,13 @@ class StreamCropPass(srcW: Int, srcH: Int, rect: CropRect, private val out: Surf
             val texId = setup.genOesTexture()
             val st = SurfaceTexture(texId)
             st.setDefaultBufferSize(srcW, srcH)
-            st.setOnFrameAvailableListener { synchronized(lock) { frameAvailable = true; lock.notifyAll() } }
+            st.setOnFrameAvailableListener {
+                synchronized(lock) {
+                    frameAvailable = true
+                    if (trace != null) arrivedNs = System.nanoTime()
+                    lock.notifyAll()
+                }
+            }
             surfaceTexture = st
             inputSurface = Surface(st)
         } catch (t: Throwable) {
@@ -303,15 +316,20 @@ class StreamCropPass(srcW: Int, srcH: Int, rect: CropRect, private val out: Surf
                 val program = setup.buildProgram()
                 val stMatrix = FloatArray(16)
                 while (true) {
-                    synchronized(lock) {
+                    val arrived = synchronized(lock) {
                         while (running && !frameAvailable) lock.wait()
                         if (!running) return@Thread
                         frameAvailable = false
+                        arrivedNs
                     }
                     val st = synchronized(lock) { surfaceTexture } ?: return@Thread
                     st.updateTexImage()
                     st.getTransformMatrix(stMatrix)
                     setup.draw(program, stMatrix, u0, v0, u1, v1)
+                    if (trace != null) {
+                        GLES20.glFinish()
+                        trace.onDrawn(st.timestamp, arrived, System.nanoTime())
+                    }
                     EGLExt.eglPresentationTimeANDROID(setup.display, setup.surface, st.timestamp)
                     EGL14.eglSwapBuffers(setup.display, setup.surface)
                 }

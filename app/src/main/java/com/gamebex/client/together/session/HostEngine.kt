@@ -2157,6 +2157,11 @@ internal fun streamConfigForFlags(
     latencyCc = hostFlag("latency_cc") == "1",
     inputCs6 = hostFlag("input_cs6") == "1",
     encoderFps = hostFlag("encoder_fps")?.toIntOrNull()?.takeIf { it == 50 } ?: 0,
+    encoderRateHint = when (hostFlag("encoder_rate_hint")) {
+        "off", "0" -> 0
+        "240" -> 240
+        else -> -1
+    },
     keyframesOnRequest = StreamFlags.toggleOn("keyframes_on_request", hostFlag),
     crop = hostFlag("stream_crop") == "1",
     cropAspect = cropAspect,

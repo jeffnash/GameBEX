@@ -28,6 +28,7 @@ data class StreamConfig(
     val latencyCc: Boolean = false,
     val inputCs6: Boolean = false,
     val encoderFps: Int = 0,
+    val encoderRateHint: Int = -1,
     val keyframesOnRequest: Boolean = false,
     val crop: Boolean = false,
     val cropAspect: String = "4:3",

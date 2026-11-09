@@ -7,6 +7,7 @@ import com.gamebex.client.data.local.GameEntity
 import com.gamebex.client.launch.ControllerRegistry
 import com.gamebex.client.stream.P2Prep
 import com.gamebex.client.stream.StreamCaps
+import com.gamebex.client.stream.StreamEmus
 import com.gamebex.client.stream.StreamFlagPrefs
 import com.gamebex.client.stream.StreamFlags
 import com.gamebex.client.stream.StreamPlayer2
@@ -54,7 +55,7 @@ class StreamPlayer2Impl(
             } else null
             StreamRaConfig.write(externalBase(), rsoundReady, hasRealHostPad = hostPads().isNotEmpty(),
                 experiments = checkNotNull(raSnapshot), retroArchVersionCode = raVersionCode(),
-                overlayCfgPath = overlayPath, p2SlotMode = p2SlotMode)
+                overlayCfgPath = overlayPath, p2SlotMode = p2SlotMode, core = StreamEmus.raCore(game))
                 ?.let { P2Prep.RetroArchConfig(it) } ?: P2Prep.Failed(TogetherCopy.configUnwritable)
         }
         Emu.DOLPHIN -> when (val r = dolphin.apply()) {

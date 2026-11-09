@@ -23,6 +23,7 @@ object StreamRaConfig {
     const val FILE_NAME: String = "retroarch-stream.cfg"
     /** First RetroArch versionCode whose overlay auto-hide follows player 1's pad. */
     const val RETROARCH_V3_VERSION_CODE: Long = 1791174559L
+    private val PREDICTION_CORES = setOf("gambatte", "genesis_plus_gx", "snes9x")
 
     fun overrides(
         rsoundReady: Boolean = false,
@@ -39,6 +40,7 @@ object StreamRaConfig {
          * reservation still carries hat/analog.
          */
         p2SlotMode: P2SlotMode = P2SlotMode.OFF,
+        core: String? = null,
     ): LinkedHashMap<String, String> = LinkedHashMap<String, String>().apply {
         if (diagnostics) {
             put("log_verbosity", "true")
@@ -114,6 +116,40 @@ object StreamRaConfig {
         }
         if (experiments.swapchain == 2) put("video_max_swapchain_images", "2")
         if (experiments.noSmooth) put("video_smooth", "false")
+        put("video_frame_delay", "0")
+        put("video_frame_delay_auto", "false")
+        put("video_hard_sync", "false")
+        put("run_ahead_enabled", "false")
+        put("preemptive_frames_enable", "false")
+        when (experiments.frameDelay) {
+            RaExperimentOptions.FRAME_DELAY_AUTO -> {
+                put("video_frame_delay", "0")
+                put("video_frame_delay_auto", "true")
+            }
+            2, 4 -> {
+                put("video_frame_delay", experiments.frameDelay.toString())
+                put("video_frame_delay_auto", "false")
+            }
+        }
+        if (experiments.hardSync) {
+            put("video_hard_sync", "true")
+            put("video_hard_sync_frames", "0")
+        }
+        // At most one predicted frame, and never both mechanisms at once.
+        when (if (core in PREDICTION_CORES) experiments.prediction else RaPrediction.OFF) {
+            RaPrediction.RUNAHEAD_1 -> {
+                put("run_ahead_enabled", "true")
+                put("preemptive_frames_enable", "false")
+                put("run_ahead_frames", "1")
+                put("run_ahead_secondary_instance", "false")
+            }
+            RaPrediction.PREEMPT_1 -> {
+                put("run_ahead_enabled", "false")
+                put("preemptive_frames_enable", "true")
+                put("run_ahead_frames", "1")
+            }
+            RaPrediction.OFF -> Unit
+        }
     }
 
     /** The whole file: the managed config (with save-state resume, as a normal Play) plus [overrides]. */
@@ -125,9 +161,10 @@ object StreamRaConfig {
         retroArchVersionCode: Long = 0,
         overlayCfgPath: String? = null,
         p2SlotMode: P2SlotMode = P2SlotMode.OFF,
+        core: String? = null,
     ): String {
         val base = GraphicsTuner.retroArchConfigText(sharedRoot, resume = true).trimEnd('\n').split('\n')
-        val (merged, _) = RetroArchTuner.mergeConfig(base, overrides(rsoundReady, hasRealHostPad = hasRealHostPad, experiments = experiments, retroArchVersionCode = retroArchVersionCode, overlayCfgPath = overlayCfgPath, p2SlotMode = p2SlotMode))
+        val (merged, _) = RetroArchTuner.mergeConfig(base, overrides(rsoundReady, hasRealHostPad = hasRealHostPad, experiments = experiments, retroArchVersionCode = retroArchVersionCode, overlayCfgPath = overlayCfgPath, p2SlotMode = p2SlotMode, core = core))
         return merged.joinToString("\n") + "\n"
     }
 
@@ -142,11 +179,12 @@ object StreamRaConfig {
         retroArchVersionCode: Long = 0,
         overlayCfgPath: String? = null,
         p2SlotMode: P2SlotMode = P2SlotMode.OFF,
+        core: String? = null,
     ): File? = try {
         val file = fileUnder(base)
         val dir = file.parentFile ?: throw IOException("no parent for $file")
         if (!dir.isDirectory && !dir.mkdirs() && !dir.isDirectory) throw IOException("Couldn't create $dir")
-        file.writeText(cfgText(base.absolutePath, rsoundReady, hasRealHostPad, experiments, retroArchVersionCode, overlayCfgPath, p2SlotMode))
+        file.writeText(cfgText(base.absolutePath, rsoundReady, hasRealHostPad, experiments, retroArchVersionCode, overlayCfgPath, p2SlotMode, core))
         file
     } catch (_: IOException) {
         null
@@ -161,8 +199,14 @@ data class RaExperimentOptions(
     val noSmooth: Boolean = false,
     val poll: Int = 0,
     val overlayAutohideV3: Boolean = false,
+    /** video_frame_delay ms (2 or 4), [FRAME_DELAY_AUTO], or 0 to disable it. */
+    val frameDelay: Int = 0,
+    val hardSync: Boolean = false,
+    val prediction: RaPrediction = RaPrediction.OFF,
 ) {
     companion object {
+        const val FRAME_DELAY_AUTO: Int = -1
+
         fun sample(
             debug: Boolean = com.gamebex.client.BuildConfig.DEBUG,
             prop: (String) -> String? = StreamDebug::prop,
@@ -179,7 +223,22 @@ data class RaExperimentOptions(
             val noSmooth = pick("ra_no_smooth") == "1"
             val poll = pick("ra_poll")?.takeIf { it in setOf("0", "1", "2") }?.toInt() ?: 0
             val overlayAutohideV3 = pick("overlay_autohide_v3") == "1"
-            return RaExperimentOptions(latency, swapchain, noSmooth, poll, overlayAutohideV3)
+            val frameDelay = when (pick("ra_frame_delay")) {
+                "2" -> 2
+                "4" -> 4
+                "auto" -> FRAME_DELAY_AUTO
+                else -> 0
+            }
+            val hardSync = pick("ra_hard_sync") == "1"
+            val prediction = when (pick("ra_prediction")) {
+                "runahead1" -> RaPrediction.RUNAHEAD_1
+                "preempt1" -> RaPrediction.PREEMPT_1
+                else -> RaPrediction.OFF
+            }
+            return RaExperimentOptions(latency, swapchain, noSmooth, poll, overlayAutohideV3, frameDelay, hardSync, prediction)
         }
     }
 }
+
+/** One-frame prediction: RetroArch's run-ahead or its preemptive frames, never both. */
+enum class RaPrediction { OFF, RUNAHEAD_1, PREEMPT_1 }

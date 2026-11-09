@@ -217,6 +217,8 @@ interface ShellComponents {
     fun audioSource(config: StreamConfig): AudioSource? = audioSource()
 
     fun mediaChannel(config: StreamConfig): MediaChannel
+
+    fun linkBoost(config: StreamConfig): LinkBoost = NoLinkBoost
 }
 
 /** Components for a build or process where nothing can be captured. */

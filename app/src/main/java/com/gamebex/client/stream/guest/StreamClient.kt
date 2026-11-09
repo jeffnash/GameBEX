@@ -30,6 +30,8 @@ class StreamClient(
     private val connectTimeoutMs: Int = 3_000,
     private val attachId: Long = StreamToken.attachId(),
     private val onCounter: (String, Long) -> Unit = { _, _ -> },
+    private val quickAckFactory: com.gamebex.client.stream.shell.RSoundQuickAckFactory? =
+        if (com.gamebex.client.stream.StreamDebug.flag("video_quickack")) com.gamebex.client.stream.shell.AndroidRSoundQuickAckFactory else null,
     private val tickerFactory: (() -> Unit) -> AutoCloseable = { action ->
         val executor = Executors.newSingleThreadScheduledExecutor { runnable ->
             Thread(runnable, "gbx-stream-control-timer").apply { isDaemon = true }
@@ -144,6 +146,14 @@ class StreamClient(
     private fun session(): EndReason? {
         val s = Socket()
         var connection: Connection? = null
+        var quickAck: com.gamebex.client.stream.shell.RSoundQuickAck? = null
+        var quickAckFailed = false
+        fun rearmQuickAck() {
+            if (quickAck?.rearm() == false && !quickAckFailed) {
+                quickAckFailed = true
+                onCounter("video_quickack_unavailable", 1L)
+            }
+        }
         synchronized(stateLock) {
             if (closed) { s.close(); return EndReason.LEFT }
             connectingSocket = s
@@ -152,6 +162,14 @@ class StreamClient(
             s.tcpNoDelay = true
             StreamSockets.markVideo(s)
             s.connect(InetSocketAddress(endpoint.host, endpoint.mediaPort), connectTimeoutMs)
+            if (quickAckFactory != null) {
+                quickAck = runCatching { quickAckFactory?.create(s) }.getOrNull()
+                if (quickAck == null) {
+                    quickAckFailed = true
+                    onCounter("video_quickack_unavailable", 1L)
+                }
+                rearmQuickAck()
+            }
             s.soTimeout = READ_TIMEOUT_MS
             val input = DataInputStream(BufferedInputStream(s.getInputStream(), 64 * 1024))
             val output = s.getOutputStream()
@@ -179,6 +197,7 @@ class StreamClient(
             if (closed || current.get() !== c) { c.ticker?.close(); return EndReason.LEFT }
             while (!closed && current.get() === c) {
                 val frame = MediaFrames.read(input) ?: return null
+                rearmQuickAck()
                 if (closed || current.get() !== c) return EndReason.LEFT
                 val now = clock()
                 when (frame) {
@@ -205,6 +224,7 @@ class StreamClient(
             }
             return EndReason.LEFT
         } finally {
+            runCatching { quickAck?.close() }
             connection?.let { c ->
                 val leaving = synchronized(stateLock) {
                     current.compareAndSet(c, null)

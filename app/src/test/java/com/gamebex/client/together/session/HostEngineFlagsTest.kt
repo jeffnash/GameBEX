@@ -96,4 +96,15 @@ class HostEngineFlagsTest {
         assertEquals(2, streamConfigForFlags("tok", "10.0.0.2", true, flags, startLevelOverride = 9).level)
         assertEquals(1, streamConfigForFlags("tok", "10.0.0.2", true, emptyMap<String, String>()::get, startLevelOverride = 9).level)
     }
+    @Test fun encoderHintChoiceReachesTheShellConfig() {
+        for ((raw, want) in listOf("auto" to -1, "off" to 0, "240" to 240, "bad" to -1, "960" to -1)) {
+            assertEquals(want, cfg("encoder_rate_hint" to raw).encoderRateHint)
+        }
+        assertEquals(-1, cfg().encoderRateHint)
+        val config = cfg("encoder_rate_hint" to "240")
+        val json = com.gamebex.client.stream.StreamJson.json
+        assertEquals(240, json.decodeFromString<com.gamebex.client.stream.StreamConfig>(json.encodeToString(com.gamebex.client.stream.StreamConfig.serializer(), config)).encoderRateHint)
+        assertEquals(-1, json.decodeFromString<com.gamebex.client.stream.StreamConfig>("""{"token":"tok","guestAddress":"10.0.0.2"}""").encoderRateHint)
+    }
+
 }

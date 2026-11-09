@@ -106,6 +106,29 @@ class StreamClientTest {
     }
 
     @Test
+    fun quickAckRearmsBeforeDeliveryAndClosesWithTheConnection() {
+        val calls = Collections.synchronizedList(mutableListOf<String>())
+        val ack = object : com.gamebex.client.stream.shell.RSoundQuickAck {
+            override fun rearm(): Boolean { calls += "rearm"; return true }
+            override fun close() { calls += "close" }
+        }
+        val endpoint = StreamEndpoint("127.0.0.1", server.localPort, 0, token, 1600, 720, false, "J")
+        val c = StreamClient(endpoint, listener,
+            quickAckFactory = com.gamebex.client.stream.shell.RSoundQuickAckFactory { calls += "create"; ack })
+        clients += c
+        c.start()
+        val host = accept()
+        host.handshake()
+        await<StreamClient.State.Connected>()
+        host.send(MediaFrame.Info(1, 1280, 576, 4_000_000))
+        await<MediaFrame.Info>()
+        host.send(MediaFrame.Bye(StreamWire.BYE_STOPPING))
+        await<StreamClient.State.Ended>()
+        c.close()
+        assertEquals(listOf("create", "rearm", "rearm", "rearm", "close"), calls.toList())
+    }
+
+    @Test
     fun sendsTheTokenAndReportsConnected() {
         client()
         val host = accept()
