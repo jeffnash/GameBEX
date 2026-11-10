@@ -1,3 +1,5 @@
+<img src="docs/brand/gamebex-logo.svg" width="96" height="96" alt="GameBEX Pixel Heart logo">
+
 # GameBEX
 
 **Bring your ROM site. Bring player two.**

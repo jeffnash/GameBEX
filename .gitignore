@@ -21,8 +21,9 @@ docs/*
 tools/
 provision/
 screenshots/
-# ...except the README's app screenshots
+# Public images used by the README
 !docs/screenshots/
+!docs/brand/
 UI_SPEC.md
 
 # The website lives outside the repo; it's built locally and published to gh-pages
