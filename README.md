@@ -1,18 +1,41 @@
 # GameBEX
 
-An emulator frontend for Android phones in a controller grip.
+**Bring your ROM site. Bring player two.**
+
+Turn a compatible ROM site's catalog into a game library on your phone. Give
+[our prompt](https://jeffnash.github.io/GameBEX/#prompt) and the site's address to
+your coding agent. It builds a source plugin; you import it, browse, and press
+Play. GameBEX handles the download, disc prep, emulator setup, and launch.
+
+Then invite someone over. **Stream turns local multiplayer into two-phone
+co-op:** one phone runs the game, the other gets its picture and sound and sends
+player two's controls back. The joining phone only needs GameBEX, not its own
+game, emulator, or matching core. Both phones stay on the same Wi-Fi.
+
+We supply the prompt, not the ROMs. Bring a site you trust and games you legally
+own **and have the right to download**. Your source, your responsibility. At your
+own risk. ;)
 
 ![GameBEX Home screen](docs/screenshots/home.webp)
 
-GameBEX turns a phone in a controller grip into a console. It keeps your games in
-one controller-first library, picks the emulator for each of 54 systems, installs
-and sets up that emulator and your controller, and starts a game with one press.
-Two phones on the same Wi-Fi can play one game together.
+[Get the plugin prompt](https://jeffnash.github.io/GameBEX/#prompt) · [Download v1.0.0](https://github.com/jeffnash/GameBEX/releases/download/v1.0.0/GameBEX-1.0.0.apk) · [Play together](#play-together) · [Systems](#supported-systems) · [Build](#build-from-source) · [Docs](#docs) · [Legal](#legal)
 
-It ships with no games, no BIOS files and no catalog. Point it at your own game
-folders, or import a source plugin to browse and download from a site you choose.
+## Your site. Our prompt. Your coding agent.
 
-[Install](#install) · [Getting started](#getting-started) · [Play together](#play-together) · [Systems](#supported-systems) · [Build](#build-from-source) · [Docs](#docs) · [Legal](#legal)
+1. Open the [plugin prompt](https://jeffnash.github.io/GameBEX/#prompt) and enter
+   the ROM site's address.
+2. Paste the generated prompt into your coding agent. It reads the
+   [source format](docs/source-schema.md), checks the site's public pages, and
+   produces a `.source.json` file for you to inspect.
+3. Import it under **System → Device → Game sources → Import source**. The site's
+   catalog becomes browseable and searchable in GameBEX, with downloads and Play
+   on each game's page.
+
+Use the same prompt for different sites; each gets its own plugin. Popular doesn't
+mean compatible: support depends on how the site works, and account-only sites
+aren't supported. GameBEX ships no plugins, games, BIOS files, or catalog, and
+doesn't operate, endorse, or verify the sites you choose. Your own game folders
+work too, with no plugin required.
 
 ## What it does
 
@@ -42,14 +65,11 @@ emulators Android otherwise keeps it out of.
 
 ![Game page](docs/screenshots/game-page.webp)
 
-### Plugins bring a catalog (optional)
+### Your catalog, inside your library
 
-A source plugin is one data-only JSON file that tells GameBEX how to browse, search
-and download from one site. Once imported, that site's games show up in Discover
-next to the ones already on your phone, and Play downloads, prepares and starts
-them. Plugins can't run code, and your library never depends on one. A coding
-agent can write a plugin for you: the website has a prompt that walks it through
-the [schema](docs/source-schema.md).
+A source plugin is one data-only JSON file. Its games show up in Discover next to
+the ones already on your phone, and Play downloads, prepares, and starts them.
+Plugins can't run code, and removing one doesn't remove your downloaded games.
 
 | Discover | Downloads |
 | --- | --- |
@@ -57,9 +77,18 @@ the [schema](docs/source-schema.md).
 
 ## Play together
 
-Two phones on the same Wi-Fi play one game. Press **2P** on a game; the other phone
-gets an invite, downloads the game if it doesn't have it, copies the host's
-RetroArch core if its build differs, and both start together.
+**Couch co-op. Two phones. One game.** Press **2P** on a game and invite the other
+phone on your Wi-Fi. With **Stream**, the host runs the game and the other phone
+joins as player two. Only the host needs the game and its emulator.
+
+Stream works across supported systems for games and emulators with local
+two-player support, even without native netplay. Where a system already has
+netplay, choose **Use Stream instead** on the host screen. The host needs Android
+13+ and Shizuku; the joining phone needs Android 10+ and GameBEX.
+
+Native netplay, Game Boy link, and PSP ad hoc are here too. Those modes run the
+game on both phones; GameBEX gets missing games ready and matches RetroArch core
+builds before starting.
 
 ![Super Bomberman on two phones](docs/screenshots/together-2p.webp)
 
@@ -100,7 +129,7 @@ You need:
 
 Steps:
 
-1. Download the APK from [Releases](../../releases), or build it (below).
+1. Download [GameBEX-1.0.0.apk](https://github.com/jeffnash/GameBEX/releases/download/v1.0.0/GameBEX-1.0.0.apk), or build it (below).
 2. Allow the install when Android asks.
 3. Open GameBEX and grant **All files access**. Without it, SD card folders are skipped.
 4. Add games under `GameBEX/<system>/`, add your own folders in
@@ -155,7 +184,7 @@ export JAVA_HOME=~/jdk17 ANDROID_HOME=~/android-sdk
 ./gradlew :app:assembleRelease             # R8 + resource shrinking
 ```
 
-CI ([verify.yml](.github/workflows/verify.yml)) runs the unit tests, lint, and an
+CI ([verify.yml](.github/workflows/verify.yml)) runs the unit tests, lint, and a
 check that no site-specific catalog client lives in the app.
 
 ## Project layout
