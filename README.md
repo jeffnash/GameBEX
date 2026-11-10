@@ -12,6 +12,12 @@ co-op:** one phone runs the game, the other gets its picture and sound and sends
 player two's controls back. The joining phone only needs GameBEX, not its own
 game, emulator, or matching core. Both phones stay on the same Wi-Fi.
 
+**And the phone? About $30 at Walmart.** GameBEX was built, tested, and tuned on
+the prepaid [Moto G 2025](https://www.walmart.com/ip/14552506783). Our
+[one-command setup](scripts/moto-g-2025/README.md) removes carrier clutter and
+installs GameBEX and Shizuku. Add your controller and games; that's your handheld.
+Phone price and stock vary; the controller and microSD card are extra.
+
 We supply the prompt, not the ROMs. Bring a site you trust and games you legally
 own **and have the right to download**. Your source, your responsibility. At your
 own risk. ;)
@@ -36,6 +42,31 @@ mean compatible: support depends on how the site works, and account-only sites
 aren't supported. GameBEX ships no plugins, games, BIOS files, or catalog, and
 doesn't operate, endorse, or verify the sites you choose. Your own game folders
 work too, with no plugin required.
+
+## From Walmart box to GameBEX handheld
+
+The Moto G 2025 is the phone GameBEX was developed on, including its entry-level
+tuning and controller setup. It works as a Wi-Fi handheld without a mobile plan.
+
+Finish Android's first boot, enable **USB debugging**, connect the phone, and
+approve the computer first. Then, on a Linux or macOS computer with adb installed,
+run one command from this repository:
+
+```sh
+./scripts/moto-g-2025/setup.sh
+```
+
+The script asks before removing carrier apps, ad installers, and preloaded games,
+then installs GameBEX, sets its permissions, and installs and starts Shizuku.
+No root or unlocked bootloader needed.
+
+Preview it with `DRY_RUN=1`; `MAKE_HOME=1` also makes GameBEX the home screen.
+Afterward, pair your controller, allow GameBEX access to Shizuku, add your games
+or source plugin, and install the emulators you need from **System**. Shizuku
+needs restarting after a reboot.
+
+[Setup instructions and removal details](scripts/moto-g-2025/README.md) ·
+[The $30 handheld guide](https://jeffnash.github.io/GameBEX/docs/the-30-dollar-handheld/)
 
 ## What it does
 
