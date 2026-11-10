@@ -2,264 +2,211 @@
 
 # GameBEX
 
-**Turn your ROM site into a game library.**
+**Your ROM site as a game library. Stream multiplayer across consoles.**
 
-Browse a compatible ROM site with your controller, search its catalog, and
-download only the games you want to play. Our prompt and your coding agent make
-the source plugin; GameBEX handles downloads, disc prep, emulator setup, and
-launching. The catalog can be much bigger than the storage on your phone.
+Browse a compatible ROM site's catalog with your controller, choose a game, and
+download it when you want to play. GameBEX prepares its files, sets up its
+emulator, and launches it on Android. With **Stream**, a second phone can join a
+local two-player game; only the host needs the game and emulator.
 
-| What makes it useful | What you get | Start here |
-| --- | --- | --- |
-| **Browse a ROM site** | Our prompt + your coding agent builds a plugin for a compatible site. Browse, search, and download inside GameBEX. | [Get the prompt](https://jeffnash.github.io/GameBEX/#prompt) |
-| **Play on two phones** | Stream a supported local two-player game to another phone. The joining phone only needs GameBEX; the host runs the game and emulator. | [Play together](#play-together) |
-| **Works on a ~$30 phone** | Built and tuned on Walmart's prepaid Moto G 2025, with one-command software setup that removes carrier clutter and installs GameBEX and Shizuku. | [Set one up](#from-walmart-box-to-gamebex-handheld) |
-| **Less setup between games** | Downloads, archive prep, emulator installation, supported controller setup, and launch in one flow. Anything that still needs you is named. | [See what it handles](#setup-is-gamebexs-job) |
+**[Download v1.0.0](https://github.com/jeffnash/GameBEX/releases/download/v1.0.0/GameBEX-1.0.0.apk)** ·
+[Quick start](#quick-start) ·
+[Get the source plugin prompt](https://jeffnash.github.io/GameBEX/#prompt) ·
+[User guide](https://jeffnash.github.io/GameBEX/docs/getting-started/)
 
-**54 systems. Controller-first navigation. Local game folders work too.
-Free software under AGPL-3.0-or-later.**
+- **A catalog bigger than your phone.** Our prompt and your coding agent make a
+  plugin for a compatible ROM site. Browse and search it in GameBEX; download
+  the games you want, when you want them. Your existing game folders work too.
+- **Player two, across supported consoles.** Stream sends the host's picture and
+  sound to another phone and brings its controller back as player two. Co-op or
+  versus depends on the game and emulator supporting local multiplayer.
+- **A ~$30 phone can be the handheld.** Built and tuned on Walmart's prepaid
+  Moto G 2025. One setup command removes carrier clutter and installs GameBEX
+  and Shizuku, without root.
+- **Less setup between games.** Emulator installs, controller mapping, archive
+  extraction, disc preparation, and launch in one place. When a step needs you,
+  GameBEX says what to do. Navigate with a controller; touch works too.
 
-The phone is [about $30 at Walmart](https://www.walmart.com/ip/14552506783);
-price and stock vary, and the controller and microSD card are extra.
+| Browse your games | Play on two phones |
+| --- | --- |
+| ![GameBEX Home screen with recently played games](docs/screenshots/home.webp) | ![Super Bomberman running on two phones through RetroArch netplay](docs/screenshots/together-2p.webp) |
 
-We supply the prompt, not the ROMs. Only download games you legally own and have
-the right to download. Your source, your responsibility. At your own risk. ;)
+## Quick start
 
-![GameBEX Home screen](docs/screenshots/home.webp)
+You need a **64-bit ARM phone with Android 8.0+**; Android 11+ is recommended.
+GameBEX runs in landscape. A controller grip and microSD card are useful, but
+neither is required. Bring your own games or source plugin; none are included.
 
-[Download v1.0.0](https://github.com/jeffnash/GameBEX/releases/download/v1.0.0/GameBEX-1.0.0.apk) · [Install](#install) · [Systems](#supported-systems) · [Build](#build-from-source) · [Docs](#docs) · [Legal](#legal)
+1. Download the [v1.0.0 APK](https://github.com/jeffnash/GameBEX/releases/download/v1.0.0/GameBEX-1.0.0.apk)
+   on your phone and open it. Allow your browser or file manager to install apps
+   when Android asks. GameBEX isn't on the Play Store.
+2. Open GameBEX and grant **All files access** so it can read your game folders.
+3. Add your games: use `GameBEX/<system>/` on your microSD card, or add an
+   existing folder under **System → Device → Game folders**. To browse a ROM
+   site instead, [connect a source](#connect-a-rom-site).
+4. Open **System** and install the emulators you need. For automatic controller
+   setup in standalone emulators, enable [Shizuku](https://jeffnash.github.io/GameBEX/docs/controllers/#shizuku).
+5. Open a game and press **Play**. If it shows **Finish setup**, select it to
+   prepare the game; anything that needs your help is listed on the page.
+
+The hint strip along the bottom shows the controller buttons for each screen.
+No microSD card? GameBEX uses `Download/GameBEX/<system>/` in internal storage.
+See [folder names and file types](https://jeffnash.github.io/GameBEX/docs/systems/).
+
+[Release notes](https://github.com/jeffnash/GameBEX/releases/tag/v1.0.0) ·
+[APK SHA-256 checksum](https://github.com/jeffnash/GameBEX/releases/download/v1.0.0/GameBEX-1.0.0.apk.sha256) ·
+[Installation help](https://jeffnash.github.io/GameBEX/install/)
 
 ## Connect a ROM site
 
-1. Open the [plugin prompt](https://jeffnash.github.io/GameBEX/#prompt) and enter
-   the ROM site's address.
-2. Paste the generated prompt into your coding agent. It reads the
-   [source format](docs/source-schema.md), checks the site's public pages, and
-   produces a `.source.json` file for you to inspect.
-3. Import it under **System → Device → Game sources → Import source**. The site's
-   catalog becomes browseable and searchable in GameBEX, with downloads and Play
-   on each game's page.
+**Browse a site's catalog without leaving GameBEX.**
+A source plugin describes how to read a site's catalog and download pages.
+It's a data-only `.source.json` file, not executable code.
 
-Use the same prompt for different sites; each gets its own plugin. Support depends on how the site works; account-only sites aren't supported. GameBEX ships no plugins, games, BIOS files, or catalog, and
-doesn't operate, endorse, or verify the sites you choose. Your own game folders
-work too, with no plugin required.
+1. Open the [source plugin prompt](https://jeffnash.github.io/GameBEX/#prompt)
+   and enter the site's address.
+2. Paste the generated prompt into your coding agent. It uses the
+   [source format](docs/source-schema.md) and the site's public pages to write
+   a plugin. Check the result and the domains it accesses before importing it.
+3. On your phone, open **System → Device → Game sources → Import source**.
+   The catalog appears in **Discover**: browse, search, and choose a game to
+   download and play.
 
-## Play together
+Use the same prompt for different sites; each gets its own plugin. Compatibility
+depends on the site, and account-only sites aren't supported. A generated plugin
+can need changes when a site changes. Removing a plugin keeps downloaded games.
 
-**Couch co-op. Two phones. One game.** Press **2P** on a game and invite the other
-phone on your Wi-Fi. With **Stream**, the host runs the game and the other phone
-joins as player two. Only the host needs the game and its emulator.
+We supply the prompt, not the ROMs. Only download games you own and have the right
+to download. Your source, your responsibility. At your own risk. ;)
 
-Stream works across supported systems for games and emulators with local
-two-player support, even without native netplay. Where a system already has
-netplay, choose **Use Stream instead** on the host screen. The host needs Android
-13+ and Shizuku; the joining phone needs Android 10+ and GameBEX.
+[Importing and using plugins](https://jeffnash.github.io/GameBEX/docs/source-plugins/) ·
+[Writing a source](https://jeffnash.github.io/GameBEX/docs/sources/)
 
-Native netplay, Game Boy link, and PSP ad hoc are here too. Those modes run the
-game on both phones; GameBEX gets missing games ready and matches RetroArch core
-builds before starting.
+## Play together: Stream across consoles
 
-![Super Bomberman on two phones](docs/screenshots/together-2p.webp)
+**Two phones. One game. Co-op or versus, without needing built-in netplay.**
+Stream can share a game from any system GameBEX can launch. The host runs the
+game and emulator; the joining phone receives picture and sound and sends its
+controller input back. **Two-player control requires a game and emulator that
+support a second local controller.**
 
-| Host | Join | Start |
+| Requirement | Stream host | Joining phone |
 | --- | --- | --- |
-| ![Host screen with QR code](docs/screenshots/together-host.webp) | ![Invite on the other phone](docs/screenshots/together-invite.webp) | ![Both phones ready](docs/screenshots/together-lobby.webp) |
+| Android | 13+ | 10+ |
+| Install | GameBEX, the game's emulator, and [Shizuku](https://shizuku.rikka.app/) | GameBEX |
+| Game files | On the host | Not needed |
 
-| Mode | Systems |
-| --- | --- |
-| RetroArch netplay | SNES, NES, Genesis, Master System, Game Gear, Sega CD, SG-1000, TurboGrafx-16/CD, arcade and Neo Geo (FBNeo) |
-| Game Boy link | Game Boy, Game Boy Color (Gambatte's network link) |
-| PSP ad hoc | PSP (PPSSPP) |
-| Stream | Every system. Where a native mode above exists it stays the default and the host offers **Use Stream instead**. |
+1. Connect both phones to the **same Wi-Fi**, with the same GameBEX version.
+   Start Shizuku on the host and allow GameBEX access.
+2. On the host, open a game's page and press **2P**. Where a native mode is
+   offered, choose **Use Stream instead**.
+3. On the other phone, accept the invite, find the host in **Together**, or scan
+   its QR code. When both phones are ready, start from the host.
 
-The joining phone can also find the host under **System → Device → Play
-together**, scan its QR code, or type its address. Each phone shows a console name
-you can change. Everything stays on your local network.
+GameBEX also supports **RetroArch netplay**, **Game Boy link**, and **PSP ad hoc**.
+Those modes run the game on both phones and need their emulators and Shizuku
+on both. For RetroArch netplay, use the build GameBEX installs from **System**;
+the older 1.22.2 release crashes when player two connects.
 
-![Player 2 joins over RetroArch netplay](docs/screenshots/together-netplay.webp)
-
-RetroArch netplay needs a RetroArch built on or after 28 July 2026. The 1.22.2
-release crashes when the second phone connects, so GameBEX pins a tested nightly
-and asks older installs to update. Full guide:
-[Play together](https://jeffnash.github.io/GameBEX/docs/play-together/).
+[Session types, supported systems, and connection help](https://jeffnash.github.io/GameBEX/docs/play-together/)
 
 ## From Walmart box to GameBEX handheld
 
-The Moto G 2025 is the phone GameBEX was developed on, including its entry-level
-tuning and controller setup. It works as a Wi-Fi handheld without a mobile plan.
+GameBEX was developed on the prepaid **Moto G 2025**, available for
+[about $30 at Walmart](https://www.walmart.com/ip/14552506783). It works as a
+Wi-Fi handheld without a mobile plan. Price and stock vary; the controller and
+microSD card cost extra. Performance still depends on the game and emulator.
 
-Finish Android's first boot, enable **USB debugging**, connect the phone, and
-approve the computer first. Then, on a Linux or macOS computer with adb installed,
-run one command from this repository:
+Finish Android's first boot, enable **USB debugging**, and connect and authorize
+your Linux or macOS computer with adb installed. From a checkout of this
+repository, run:
 
 ```sh
 ./scripts/moto-g-2025/setup.sh
 ```
 
-The script asks before removing carrier apps, ad installers, and preloaded games,
-then installs GameBEX, sets its permissions, and installs and starts Shizuku.
-No root or unlocked bootloader needed.
+It asks before removing carrier apps, ad installers, and preloaded games, then
+installs GameBEX, grants its permissions, and installs and starts Shizuku.
+No root or unlocked bootloader needed. Preview with
+`DRY_RUN=1 ./scripts/moto-g-2025/setup.sh`.
 
-Preview it with `DRY_RUN=1`; `MAKE_HOME=1` also makes GameBEX the home screen.
-Afterward, pair your controller, allow GameBEX access to Shizuku, add your games
-or source plugin, and install the emulators you need from **System**. Shizuku
-needs restarting after a reboot.
+Afterward, pair your controller, allow GameBEX access to Shizuku, and add games
+or a source plugin. Shizuku needs restarting after a reboot.
 
-[Setup instructions and removal details](scripts/moto-g-2025/README.md) ·
+[Setup instructions, options, and undo](scripts/moto-g-2025/README.md) ·
 [The $30 handheld guide](https://jeffnash.github.io/GameBEX/docs/the-30-dollar-handheld/)
-
-## What it does
-
-### One library for every system
-
-GameBEX scans its own `GameBEX/<system>/` folders on the SD card (or internal
-storage) and any folders you add, including ES-DE-style layouts. Home shows what
-you're playing and what's new; Library lists everything with filters, favorites
-and each game's status.
-
-![Library](docs/screenshots/library.webp)
-
-### Setup is GameBEX's job
-
-Each system has a route: a RetroArch core or a standalone emulator. GameBEX
-installs the emulator from a pinned, hash-checked build, fetches the RetroArch core
-when it's missing, and tunes settings to your phone. Disc images are extracted and
-checked before they boot, missing BIOS files are verified by MD5 when you ask for
-them, and anything that still needs you says exactly what.
-
-![System](docs/screenshots/system.webp)
-
-Controllers are set up in every emulator it launches: button mapping, touch
-controls hidden, and Xbox, Nintendo or PlayStation button labels throughout.
-[Shizuku](https://shizuku.rikka.app/) (optional) lets it configure the standalone
-emulators Android otherwise keeps it out of.
-
-![Game page](docs/screenshots/game-page.webp)
-
-### Your catalog, inside your library
-
-A source plugin is one data-only JSON file. Its games show up in Discover next to
-the ones already on your phone, and Play downloads, prepares, and starts them.
-Plugins can't run code, and removing one doesn't remove your downloaded games.
-
-| Discover | Downloads |
-| --- | --- |
-| ![Discover](docs/screenshots/discover.webp) | ![Downloads](docs/screenshots/downloads.webp) |
-
-## Install
-
-GameBEX isn't on the Play Store; you sideload the APK.
-
-You need:
-
-- Android 8.0 or newer (Android 11+ recommended), on a 64-bit ARM phone
-- Landscape only (there's no portrait layout)
-- A controller (D-pad plus A/B/X/Y); touch works too
-- A microSD card is strongly recommended for disc images
-- Optional: [Shizuku](https://shizuku.rikka.app/) for the full controller setup;
-  required for Play together
-
-Steps:
-
-1. Download [GameBEX-1.0.0.apk](https://github.com/jeffnash/GameBEX/releases/download/v1.0.0/GameBEX-1.0.0.apk), or build it (below).
-2. Allow the install when Android asks.
-3. Open GameBEX and grant **All files access**. Without it, SD card folders are skipped.
-4. Add games under `GameBEX/<system>/`, add your own folders in
-   **System → Device → Game folders**, or import a plugin in
-   **System → Device → Game sources**.
-5. Install the emulators your games need from **System**.
-
-## Getting started
-
-- The rail on the left has Home, Library, Discover, Downloads and System; the strip
-  along the bottom always shows what each button does.
-- Open a game and press **A**. If something's missing, the button becomes
-  **Finish setup** and tells you what it will do.
-- **System** lists each system's readiness, with the next thing to fix first.
-
-![Game sources](docs/screenshots/sources.webp)
 
 ## Supported systems
 
-54 systems, most of them in RetroArch.
+GameBEX has emulator support for **54 systems** and recognizes 81 in the library,
+including consoles, handhelds, arcade, and older computers. It uses third-party
+emulators: RetroArch for many systems, Dolphin for GameCube and Wii, PPSSPP for
+PSP, and others such as NetherSX2,
+Vita3K, ScummVM, and J2ME Loader. Where alternatives exist, you can choose per game.
 
-| Systems | Runs in |
+Recognizing a system doesn't guarantee it can run: some still lack an Android
+emulator, and Vita games need importing inside Vita3K. The
+[systems guide](https://jeffnash.github.io/GameBEX/docs/systems/) lists playable
+systems, missing support, folder names, and file types.
+
+**v1.0.0 known issue:** Wii and GameCube games may need controllers mapped once
+inside the emulator; automatic setup is coming in an update.
+
+## Help and documentation
+
+| You want to… | Start here |
 | --- | --- |
-| SNES, NES, Game Boy/Color, GBA, Genesis, Master System, Game Gear, Sega CD, 32X, TurboGrafx-16/CD, and more | RetroArch (Snes9x, Mesen, Gambatte, mGBA, Genesis Plus GX, PicoDrive, Beetle PCE) |
-| PlayStation, Saturn, Dreamcast, NAOMI, 3DO, Neo Geo CD, PC-FX | RetroArch (Beetle PSX, Beetle Saturn, Flycast, Opera, NeoCD, Beetle PC-FX) |
-| Nintendo 64, Nintendo DS, Nintendo 3DS | RetroArch (Mupen64Plus-Next, melonDS, Citra) |
-| GameCube, Wii | Dolphin (or the RetroArch Dolphin core) |
-| PSP | PPSSPP (or the RetroArch PPSSPP core) |
-| Arcade (MAME sets), Neo Geo (zips stay zipped) | RetroArch (FBNeo) |
-| MS-DOS, Windows 3.x | RetroArch (DOSBox Pure) |
-| PlayStation 2 | NetherSX2 (or ARMSX2) |
-| PS Vita | Vita3K |
-| ScummVM games, J2ME games | ScummVM, J2ME Loader |
-| OUYA | installed as an Android app |
+| Set up games, folders, or controllers | [Getting started](https://jeffnash.github.io/GameBEX/docs/getting-started/) · [Controllers](https://jeffnash.github.io/GameBEX/docs/controllers/) |
+| Sort out archives, disc images, or BIOS requirements | [Formats and disc prep](https://jeffnash.github.io/GameBEX/docs/formats/) |
+| Get past an error | [Troubleshooting](https://jeffnash.github.io/GameBEX/docs/troubleshooting/) |
+| Report a bug or suggest a change | [GitHub issues](https://github.com/jeffnash/GameBEX/issues) |
 
-Where a standalone emulator exists (melonDS, Azahar, MAME4droid),
-you can switch a game to it. GameCube and Wii default to Dolphin;
-PSP defaults to PPSSPP.
+For a bug report, include the GameBEX version, phone model and Android version,
+emulator version, and steps to reproduce it. Jeff Nash and contributors maintain
+the project here on GitHub.
 
-Folder names and file types for every system:
-[PlatformRegistry.kt](app/src/main/java/com/gamebex/client/data/PlatformRegistry.kt)
-and the [systems docs](https://jeffnash.github.io/GameBEX/docs/systems/).
+## Build and contribute
 
-## Build from source
-
-Requirements: JDK 17 and the Android SDK.
+Install **JDK 17** and the **Android SDK**. Set `JAVA_HOME` and `ANDROID_HOME`
+to their locations, then build:
 
 ```sh
-export JAVA_HOME=~/jdk17 ANDROID_HOME=~/android-sdk
-./gradlew :app:testDebugUnitTest :source-runtime:test :app:assembleDebug :app:lintDebug
-./gradlew :app:connectedDebugAndroidTest   # instrumented tests, on an emulator
-./gradlew :app:assembleRelease             # R8 + resource shrinking
+git clone https://github.com/jeffnash/GameBEX.git
+cd GameBEX
+./gradlew :app:assembleDebug
 ```
 
-CI ([verify.yml](.github/workflows/verify.yml)) runs the unit tests, lint, and a
-check that no site-specific catalog client lives in the app.
+The APK is at `app/build/outputs/apk/debug/app-debug.apk`. To run the checks:
 
-## Project layout
+```sh
+./gradlew :app:testDebugUnitTest :source-runtime:test :app:lintDebug
+./gradlew :app:connectedDebugAndroidTest  # requires an Android emulator
+```
 
-- `app/`: the Android app (UI, library scanner, disc prep, download engine, emulator
-  routing, Play together)
-- `source-runtime/`: the pure-JVM source-plugin interpreter and its policy checks
-- `docs/`: architecture, formats, the source schema and legal notices
+The [verify workflow](.github/workflows/verify.yml) runs unit tests, lint, and
+checks that site-specific catalog clients stay out of the app.
+`./gradlew :app:assembleRelease` builds a release APK; signing requires your own
+`GAMEBEX_RELEASE_KEYSTORE` and `GAMEBEX_RELEASE_PASSWORD_FILE`.
 
-## Docs
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before sending a pull request.
+The Android app is in `app/`; the JVM source-plugin interpreter is in
+`source-runtime/`. Start with [the architecture](docs/architecture.md),
+[file formats](docs/FORMATS.md), or [the source schema](docs/source-schema.md).
 
-- Website and user guide: https://jeffnash.github.io/GameBEX/
-- [Getting started](https://jeffnash.github.io/GameBEX/docs/getting-started/),
-  [Controllers](https://jeffnash.github.io/GameBEX/docs/controllers/),
-  [Play together](https://jeffnash.github.io/GameBEX/docs/play-together/),
-  [Source plugins](https://jeffnash.github.io/GameBEX/docs/source-plugins/),
-  [Troubleshooting](https://jeffnash.github.io/GameBEX/docs/troubleshooting/)
-- [docs/architecture.md](docs/architecture.md): how the modules fit together (start here)
-- [docs/FORMATS.md](docs/FORMATS.md): formats and disc prep
-- [docs/source-schema.md](docs/source-schema.md): the source plugin language
-- [CONTRIBUTING.md](CONTRIBUTING.md): contribution rules
-
-## Legal
-
-GameBEX ships no games, no BIOS or firmware, no artwork and no ROM catalog. It's an
-open-source frontend and library manager; emulation is done by third-party cores and
-apps (RetroArch, Dolphin, PPSSPP and others), each under its own license. Only play
-games and firmware you legally own. Source plugins are third-party files you choose
-to import; this project doesn't operate, endorse or verify any of them, or the sites
-they connect to. GameBEX isn't affiliated with Sony, Sega or Nintendo.
-
-Screenshots show games from the author's own library.
-
-Full notices: [docs/LEGAL.md](docs/LEGAL.md). Rights-holders with a concern can open
-an issue.
-
-## License
+## License and legal
 
 Copyright © 2026 Jeff Nash and GameBEX contributors.
+Free software under **AGPL-3.0-or-later**; see the full [LICENSE](LICENSE).
+You can use, study, share, and change it. When you distribute a modified version
+or offer it for use over a network, provide its source as the license requires.
+The GameBEX name and logo are not covered by that license; see
+[TRADEMARK.md](TRADEMARK.md).
 
-GameBEX is free software under the [GNU Affero General Public License v3.0 or later](LICENSE).
-You can use, study, share and change it. If you share a changed version, or let people
-use one over a network, you have to offer them its full source under the same license
-and keep the copyright and license notices.
+GameBEX includes no games, BIOS, firmware, game artwork, ROM catalog, or source
+plugins. Emulation is provided by third-party software under its own licenses.
+Only use games and firmware you legally own and have the right to use. The
+project doesn't operate, endorse, or verify the sites or plugins you choose.
+GameBEX isn't affiliated with Sony, Sega, or Nintendo. Screenshots show games
+from the author's own library.
 
-The license covers the code, not the GameBEX name or logo. See [TRADEMARK.md](TRADEMARK.md).
+[Full legal and third-party notices](docs/LEGAL.md)
