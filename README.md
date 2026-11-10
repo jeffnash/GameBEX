@@ -2,16 +2,18 @@
 
 # GameBEX
 
-**Bring your ROM site. Bring player two.**
+**Turn your ROM site into a game library.**
 
-GameBEX brings your chosen ROM source, game setup, and two-phone co-op into one
-Android handheld.
+Browse a compatible ROM site with your controller, search its catalog, and
+download only the games you want to play. Our prompt and your coding agent make
+the source plugin; GameBEX handles downloads, disc prep, emulator setup, and
+launching. The catalog can be much bigger than the storage on your phone.
 
 | What makes it useful | What you get | Start here |
 | --- | --- | --- |
-| **Your ROM source** | Our prompt + your coding agent builds a plugin for a compatible site. Browse, search, and download inside GameBEX. | [Get the prompt](https://jeffnash.github.io/GameBEX/#prompt) |
-| **Your player two** | Stream a supported local two-player game to another phone. The joining phone only needs GameBEX; the host runs the game and emulator. | [Play together](#play-together) |
-| **Your ~$30 handheld** | Built and tuned on Walmart's prepaid Moto G 2025, with one-command software setup that removes carrier clutter and installs GameBEX and Shizuku. | [Set one up](#from-walmart-box-to-gamebex-handheld) |
+| **Browse a ROM site** | Our prompt + your coding agent builds a plugin for a compatible site. Browse, search, and download inside GameBEX. | [Get the prompt](https://jeffnash.github.io/GameBEX/#prompt) |
+| **Play on two phones** | Stream a supported local two-player game to another phone. The joining phone only needs GameBEX; the host runs the game and emulator. | [Play together](#play-together) |
+| **Works on a ~$30 phone** | Built and tuned on Walmart's prepaid Moto G 2025, with one-command software setup that removes carrier clutter and installs GameBEX and Shizuku. | [Set one up](#from-walmart-box-to-gamebex-handheld) |
 | **Less setup between games** | Downloads, archive prep, emulator installation, supported controller setup, and launch in one flow. Anything that still needs you is named. | [See what it handles](#setup-is-gamebexs-job) |
 
 **54 systems. Controller-first navigation. Local game folders work too.
@@ -27,7 +29,7 @@ the right to download. Your source, your responsibility. At your own risk. ;)
 
 [Download v1.0.0](https://github.com/jeffnash/GameBEX/releases/download/v1.0.0/GameBEX-1.0.0.apk) · [Install](#install) · [Systems](#supported-systems) · [Build](#build-from-source) · [Docs](#docs) · [Legal](#legal)
 
-## Your site. Our prompt. Your coding agent.
+## Connect a ROM site
 
 1. Open the [plugin prompt](https://jeffnash.github.io/GameBEX/#prompt) and enter
    the ROM site's address.
@@ -38,9 +40,7 @@ the right to download. Your source, your responsibility. At your own risk. ;)
    catalog becomes browseable and searchable in GameBEX, with downloads and Play
    on each game's page.
 
-Use the same prompt for different sites; each gets its own plugin. Popular doesn't
-mean compatible: support depends on how the site works, and account-only sites
-aren't supported. GameBEX ships no plugins, games, BIOS files, or catalog, and
+Use the same prompt for different sites; each gets its own plugin. Support depends on how the site works; account-only sites aren't supported. GameBEX ships no plugins, games, BIOS files, or catalog, and
 doesn't operate, endorse, or verify the sites you choose. Your own game folders
 work too, with no plugin required.
 
