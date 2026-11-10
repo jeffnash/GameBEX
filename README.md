@@ -2,29 +2,28 @@
 
 **Bring your ROM site. Bring player two.**
 
-Turn a compatible ROM site's catalog into a game library on your phone. Give
-[our prompt](https://jeffnash.github.io/GameBEX/#prompt) and the site's address to
-your coding agent. It builds a source plugin; you import it, browse, and press
-Play. GameBEX handles the download, disc prep, emulator setup, and launch.
+GameBEX brings your chosen ROM source, game setup, and two-phone co-op into one
+Android handheld.
 
-Then invite someone over. **Stream turns local multiplayer into two-phone
-co-op:** one phone runs the game, the other gets its picture and sound and sends
-player two's controls back. The joining phone only needs GameBEX, not its own
-game, emulator, or matching core. Both phones stay on the same Wi-Fi.
+| What makes it useful | What you get | Start here |
+| --- | --- | --- |
+| **Your ROM source** | Our prompt + your coding agent builds a plugin for a compatible site. Browse, search, and download inside GameBEX. | [Get the prompt](https://jeffnash.github.io/GameBEX/#prompt) |
+| **Your player two** | Stream a supported local two-player game to another phone. The joining phone only needs GameBEX; the host runs the game and emulator. | [Play together](#play-together) |
+| **Your ~$30 handheld** | Built and tuned on Walmart's prepaid Moto G 2025, with one-command software setup that removes carrier clutter and installs GameBEX and Shizuku. | [Set one up](#from-walmart-box-to-gamebex-handheld) |
+| **Less setup between games** | Downloads, archive prep, emulator installation, supported controller setup, and launch in one flow. Anything that still needs you is named. | [See what it handles](#setup-is-gamebexs-job) |
 
-**And the phone? About $30 at Walmart.** GameBEX was built, tested, and tuned on
-the prepaid [Moto G 2025](https://www.walmart.com/ip/14552506783). Our
-[one-command setup](scripts/moto-g-2025/README.md) removes carrier clutter and
-installs GameBEX and Shizuku. Add your controller and games; that's your handheld.
-Phone price and stock vary; the controller and microSD card are extra.
+**54 systems. Controller-first navigation. Local game folders work too.
+Free software under AGPL-3.0-or-later.**
 
-We supply the prompt, not the ROMs. Bring a site you trust and games you legally
-own **and have the right to download**. Your source, your responsibility. At your
-own risk. ;)
+The phone is [about $30 at Walmart](https://www.walmart.com/ip/14552506783);
+price and stock vary, and the controller and microSD card are extra.
+
+We supply the prompt, not the ROMs. Only download games you legally own and have
+the right to download. Your source, your responsibility. At your own risk. ;)
 
 ![GameBEX Home screen](docs/screenshots/home.webp)
 
-[Get the plugin prompt](https://jeffnash.github.io/GameBEX/#prompt) · [Download v1.0.0](https://github.com/jeffnash/GameBEX/releases/download/v1.0.0/GameBEX-1.0.0.apk) · [Play together](#play-together) · [Systems](#supported-systems) · [Build](#build-from-source) · [Docs](#docs) · [Legal](#legal)
+[Download v1.0.0](https://github.com/jeffnash/GameBEX/releases/download/v1.0.0/GameBEX-1.0.0.apk) · [Install](#install) · [Systems](#supported-systems) · [Build](#build-from-source) · [Docs](#docs) · [Legal](#legal)
 
 ## Your site. Our prompt. Your coding agent.
 
@@ -42,6 +41,45 @@ mean compatible: support depends on how the site works, and account-only sites
 aren't supported. GameBEX ships no plugins, games, BIOS files, or catalog, and
 doesn't operate, endorse, or verify the sites you choose. Your own game folders
 work too, with no plugin required.
+
+## Play together
+
+**Couch co-op. Two phones. One game.** Press **2P** on a game and invite the other
+phone on your Wi-Fi. With **Stream**, the host runs the game and the other phone
+joins as player two. Only the host needs the game and its emulator.
+
+Stream works across supported systems for games and emulators with local
+two-player support, even without native netplay. Where a system already has
+netplay, choose **Use Stream instead** on the host screen. The host needs Android
+13+ and Shizuku; the joining phone needs Android 10+ and GameBEX.
+
+Native netplay, Game Boy link, and PSP ad hoc are here too. Those modes run the
+game on both phones; GameBEX gets missing games ready and matches RetroArch core
+builds before starting.
+
+![Super Bomberman on two phones](docs/screenshots/together-2p.webp)
+
+| Host | Join | Start |
+| --- | --- | --- |
+| ![Host screen with QR code](docs/screenshots/together-host.webp) | ![Invite on the other phone](docs/screenshots/together-invite.webp) | ![Both phones ready](docs/screenshots/together-lobby.webp) |
+
+| Mode | Systems |
+| --- | --- |
+| RetroArch netplay | SNES, NES, Genesis, Master System, Game Gear, Sega CD, SG-1000, TurboGrafx-16/CD, arcade and Neo Geo (FBNeo) |
+| Game Boy link | Game Boy, Game Boy Color (Gambatte's network link) |
+| PSP ad hoc | PSP (PPSSPP) |
+| Stream | Every system. Where a native mode above exists it stays the default and the host offers **Use Stream instead**. |
+
+The joining phone can also find the host under **System → Device → Play
+together**, scan its QR code, or type its address. Each phone shows a console name
+you can change. Everything stays on your local network.
+
+![Player 2 joins over RetroArch netplay](docs/screenshots/together-netplay.webp)
+
+RetroArch netplay needs a RetroArch built on or after 28 July 2026. The 1.22.2
+release crashes when the second phone connects, so GameBEX pins a tested nightly
+and asks older installs to update. Full guide:
+[Play together](https://jeffnash.github.io/GameBEX/docs/play-together/).
 
 ## From Walmart box to GameBEX handheld
 
@@ -105,45 +143,6 @@ Plugins can't run code, and removing one doesn't remove your downloaded games.
 | Discover | Downloads |
 | --- | --- |
 | ![Discover](docs/screenshots/discover.webp) | ![Downloads](docs/screenshots/downloads.webp) |
-
-## Play together
-
-**Couch co-op. Two phones. One game.** Press **2P** on a game and invite the other
-phone on your Wi-Fi. With **Stream**, the host runs the game and the other phone
-joins as player two. Only the host needs the game and its emulator.
-
-Stream works across supported systems for games and emulators with local
-two-player support, even without native netplay. Where a system already has
-netplay, choose **Use Stream instead** on the host screen. The host needs Android
-13+ and Shizuku; the joining phone needs Android 10+ and GameBEX.
-
-Native netplay, Game Boy link, and PSP ad hoc are here too. Those modes run the
-game on both phones; GameBEX gets missing games ready and matches RetroArch core
-builds before starting.
-
-![Super Bomberman on two phones](docs/screenshots/together-2p.webp)
-
-| Host | Join | Start |
-| --- | --- | --- |
-| ![Host screen with QR code](docs/screenshots/together-host.webp) | ![Invite on the other phone](docs/screenshots/together-invite.webp) | ![Both phones ready](docs/screenshots/together-lobby.webp) |
-
-| Mode | Systems |
-| --- | --- |
-| RetroArch netplay | SNES, NES, Genesis, Master System, Game Gear, Sega CD, SG-1000, TurboGrafx-16/CD, arcade and Neo Geo (FBNeo) |
-| Game Boy link | Game Boy, Game Boy Color (Gambatte's network link) |
-| PSP ad hoc | PSP (PPSSPP) |
-| Stream | Every system. Where a native mode above exists it stays the default and the host offers **Use Stream instead**. |
-
-The joining phone can also find the host under **System → Device → Play
-together**, scan its QR code, or type its address. Each phone shows a console name
-you can change. Everything stays on your local network.
-
-![Player 2 joins over RetroArch netplay](docs/screenshots/together-netplay.webp)
-
-RetroArch netplay needs a RetroArch built on or after 28 July 2026. The 1.22.2
-release crashes when the second phone connects, so GameBEX pins a tested nightly
-and asks older installs to update. Full guide:
-[Play together](https://jeffnash.github.io/GameBEX/docs/play-together/).
 
 ## Install
 
